@@ -681,18 +681,26 @@ pub fn perform_random_turn(state: &mut GameState) -> bool {
         state.heroe_take_counter = 0;
         return false;
     }
-    let target_color = state.board.polygons.get(&chosen_target).unwrap().color.clone();
-    let chosen_piece_tmp = chosen_piece.clone();     // Binding helper since apply_move drops it
     
-    let piece_type = state.board.pieces[&chosen_piece_tmp].piece_type.clone();
-    let was_returned = state.board.pieces[&chosen_piece_tmp].position == "returned";
+    let captured = apply_move(state, &chosen_piece, &chosen_target);
+    state.moves_this_turn += 1;
+    let goddess_captured = captured.contains(&PieceType::Goddess);
+    
+    apply_move_turnover(state, &chosen_piece, &chosen_target, goddess_captured, captured.is_empty())
+}
+
+/// Abstracted Turnover Application explicitly processing sequence breaking & logic formally after an active application.
+pub fn apply_move_turnover(state: &mut GameState, chosen_piece: &str, chosen_target: &str, goddess_captured: bool, captured_is_empty: bool) -> bool {
+    let target_color = state.board.polygons.get(chosen_target).unwrap().color.clone();
+    let current_turn = state.turn;
+    let chosen_color = state.color_chosen.get(&current_turn).unwrap().clone();
+    
+    let piece_type = state.board.pieces[chosen_piece].piece_type.clone();
+    let was_returned = state.board.pieces[chosen_piece].position == "returned";
     let is_heroe = piece_type == PieceType::Heroe;
     let is_chainable = piece_type == PieceType::Soldier || piece_type == PieceType::Berserker;
     
-    let captured = apply_move(state, &chosen_piece_tmp, &chosen_target);
-    state.moves_this_turn += 1;
-    
-    // Explicit condition evaluating formal sequence breaking checks
+    // Explicit condition evaluating formal sequence breaking checks natively
     if target_color == chosen_color {
         if was_returned {
             state.turn_counter += 1;
@@ -701,12 +709,14 @@ pub fn perform_random_turn(state: &mut GameState) -> bool {
             state.is_new_turn = true;
             state.locked_sequence_piece = None;
             state.heroe_take_counter = 0;
-        } else if is_heroe && !captured.is_empty() && state.heroe_take_counter == 0 {
+        } else if is_heroe && !captured_is_empty && state.heroe_take_counter == 0 {
             state.heroe_take_counter += 1;
-            state.locked_sequence_piece = Some(chosen_piece_tmp.clone());
+            state.locked_sequence_piece = Some(chosen_piece.to_string());
         } else if is_chainable {
-            state.locked_sequence_piece = Some(chosen_piece_tmp.clone());
+            // JS specifically allows Soldier/Berserker to land on chosen_color AND lock their sequence dynamically tracking it natively (even after a capture).
+            state.locked_sequence_piece = Some(chosen_piece.to_string());
         } else {
+            // Any other piece hitting chosen_color instantly breaks the turn
             state.turn_counter += 1;
             state.turn = state.get_enemy_side();
             state.color_chosen.clear();
@@ -715,15 +725,16 @@ pub fn perform_random_turn(state: &mut GameState) -> bool {
             state.heroe_take_counter = 0;
         }
     } else {
-        if is_heroe && !captured.is_empty() && state.heroe_take_counter == 0 && !was_returned {
+        // Did NOT land on the Chosen Color.
+        if is_heroe && !captured_is_empty && state.heroe_take_counter == 0 && !was_returned {
             state.heroe_take_counter += 1;
-            state.locked_sequence_piece = Some(chosen_piece_tmp.clone());
-        } else if is_chainable && !was_returned {
-            state.locked_sequence_piece = Some(chosen_piece_tmp.clone());
+            state.locked_sequence_piece = Some(chosen_piece.to_string());
         } else {
+            // If any piece (including Solders/Berserkers) lands on a non-chosen color, it simply ends its own sequence locking natively.
+            // IT DOES NOT END THE TURN automatically. The Active Player is free to select another piece on the original chosen_color!
             state.locked_sequence_piece = None;
         }
     }
     
-    captured.contains(&PieceType::Goddess)
+    goddess_captured
 }

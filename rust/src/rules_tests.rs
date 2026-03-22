@@ -384,4 +384,35 @@ mod tests {
         // Heroe is exhausted mathematically natively mirroring limits accurately entirely!
         assert_eq!(moves.len(), 0);
     }
+
+    // TEST 10: Soldiers/Berserkers landing on NON-chosen colors formally break their personal sequences WITHOUT immediately killing the collective team Turn!
+    #[test]
+    fn test_soldier_chain_stops_on_non_chosen_color_without_turn_ending() {
+        let mut board = create_mock_board();
+        add_poly(&mut board, "p1", "white", vec!["p2"]);
+        add_poly(&mut board, "p2", "yellow", vec!["p1", "p3"]); // non-chosen color
+        add_poly(&mut board, "p3", "black", vec!["p2"]);
+        add_poly(&mut board, "p4", "orange", vec!["p3"]);
+        
+        add_piece(&mut board, "w_soldier", "p1", Side::White, PieceType::Soldier);
+        add_piece(&mut board, "b_soldier", "p2", Side::Black, PieceType::Soldier);
+        add_piece(&mut board, "w_goddess", "p4", Side::White, PieceType::Goddess); // An active White piece on the true chosen_color!
+        
+        let mut gs = GameState::new(board);
+        gs.turn = Side::White;
+        gs.color_chosen.insert(Side::White, "orange".to_string()); // White's chosen color for the active turn is 'orange'
+        gs.is_new_turn = false; // The engine natively clears this flag right after a color is selected at the start of a turn!
+        
+        // Simulating the AI randomly picking White's Soldier to capture Black's Soldier on 'yellow' (which is NOT 'orange').
+        let captured = crate::engine::apply_move(&mut gs, "w_soldier", "p2");
+        let goddess_captured = captured.contains(&PieceType::Goddess);
+        let _ended_turn_early = crate::engine::apply_move_turnover(&mut gs, "w_soldier", "p2", goddess_captured, captured.is_empty());
+        
+        // Assertions: 
+        // 1. The Soldier's personal chaining lock IS totally broken off natively because it landed on yellow!
+        assert_eq!(gs.locked_sequence_piece, None);
+        // 2. The overarching turn itself DID NOT organically end natively! White still has the right to move `w_goddess` on orange!
+        assert_eq!(gs.turn, Side::White);
+        assert!(!gs.is_new_turn);
+    }
 }
