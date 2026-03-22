@@ -1120,12 +1120,19 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
         myButtonSetupRandomly.setAttributeNS(null, 'id', 'myButtonSetupRandomly');
         myButtonSetupRandomly.setAttributeNS(null, 'class', 'myButtonSetupRandomly button');    
         let myRect = dom.window.document.createElementNS(ns, 'rect');
-        myRect.setAttributeNS(null, 'x', 850); 
-        myRect.setAttributeNS(null, 'y', 440); 
-        myRect.setAttributeNS(null, 'width', 25); 
-        myRect.setAttributeNS(null, 'height', 25); 
-        myRect.setAttributeNS(null, 'style', 'fill:grey;stroke:black;stroke-width:1;');
-        myButtonSetupRandomly.appendChild(myRect);        
+        myRect.setAttributeNS(null, 'x', 770); 
+        myRect.setAttributeNS(null, 'y', 70); 
+        myRect.setAttributeNS(null, 'width', 90); 
+        myRect.setAttributeNS(null, 'height', 20); 
+        myRect.setAttributeNS(null, 'style', 'fill:#dddddd;stroke:black;stroke-width:1;');
+        myButtonSetupRandomly.appendChild(myRect);
+        
+        let myLabel = dom.window.document.createElementNS(ns, 'text');
+        myLabel.setAttributeNS(null, 'x', 815);
+        myLabel.setAttributeNS(null, 'y', 84);
+        myLabel.setAttributeNS(null, 'style', 'text-anchor:center;font-family:Arial;font-size:9px;fill:black;text-anchor:middle;pointer-events:none;font-weight:bold;');
+        myLabel.textContent = 'Random Setup';
+        myButtonSetupRandomly.appendChild(myLabel);
         svg.appendChild(myButtonSetupRandomly);
     }
 
@@ -1135,12 +1142,19 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
         myButtonNewBoardRequested.setAttributeNS(null, 'id', 'myButtonNewBoardRequested');
         myButtonNewBoardRequested.setAttributeNS(null, 'class', 'myButtonNewBoardRequested button');    
         let myRect = dom.window.document.createElementNS(ns, 'rect');
-        myRect.setAttributeNS(null, 'x', 850); 
+        myRect.setAttributeNS(null, 'x', 770); 
         myRect.setAttributeNS(null, 'y', 10); 
-        myRect.setAttributeNS(null, 'width', 25); 
-        myRect.setAttributeNS(null, 'height', 25); 
-        myRect.setAttributeNS(null, 'style', 'fill:grey;stroke:black;stroke-width:1;');
+        myRect.setAttributeNS(null, 'width', 90); 
+        myRect.setAttributeNS(null, 'height', 20); 
+        myRect.setAttributeNS(null, 'style', 'fill:#dddddd;stroke:black;stroke-width:1;');
         myButtonNewBoardRequested.appendChild(myRect);
+
+        let myLabel2 = dom.window.document.createElementNS(ns, 'text');
+        myLabel2.setAttributeNS(null, 'x', 815);
+        myLabel2.setAttributeNS(null, 'y', 24);
+        myLabel2.setAttributeNS(null, 'style', 'text-anchor:center;font-family:Arial;font-size:10px;fill:black;text-anchor:middle;pointer-events:none;font-weight:bold;');
+        myLabel2.textContent = 'Switch Board';
+        myButtonNewBoardRequested.appendChild(myLabel2);
         svg.appendChild(myButtonNewBoardRequested);
     }
 
@@ -1150,12 +1164,19 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
         myButton5.setAttributeNS(null, 'id', 'myButton5');
         myButton5.setAttributeNS(null, 'class', 'myButton5 button');    
         let myRect = dom.window.document.createElementNS(ns, 'rect');
-        myRect.setAttributeNS(null, 'x', 850); 
-        myRect.setAttributeNS(null, 'y', 50); 
-        myRect.setAttributeNS(null, 'width', 25); 
-        myRect.setAttributeNS(null, 'height', 25); 
-        myRect.setAttributeNS(null, 'style', 'fill:blue;stroke:black;stroke-width:1;');
+        myRect.setAttributeNS(null, 'x', 770); 
+        myRect.setAttributeNS(null, 'y', 40); 
+        myRect.setAttributeNS(null, 'width', 90); 
+        myRect.setAttributeNS(null, 'height', 20); 
+        myRect.setAttributeNS(null, 'style', 'fill:#dddddd;stroke:black;stroke-width:1;');
         myButton5.appendChild(myRect);
+
+        let myLabel3 = dom.window.document.createElementNS(ns, 'text');
+        myLabel3.setAttributeNS(null, 'x', 815);
+        myLabel3.setAttributeNS(null, 'y', 54);
+        myLabel3.setAttributeNS(null, 'style', 'text-anchor:center;font-family:Arial;font-size:10px;fill:black;text-anchor:middle;pointer-events:none;font-weight:bold;');
+        myLabel3.textContent = 'Flip Board';
+        myButton5.appendChild(myLabel3);
         svg.appendChild(myButton5);
     }
 

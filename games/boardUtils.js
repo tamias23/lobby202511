@@ -55,7 +55,7 @@ export function removePieceFromGame(id) {
 
   let howManyAlreadyReturned = 0;
   for (const id2 in board.allPieces) {
-    if (board.allPieces[id2].type === board.allPieces[id].type && board.allPieces[id2].color === board.allPieces[id].color && board.allPieces[id2].position === 'returned') {
+    if (board.allPieces[id2].type === board.allPieces[id].type && board.allPieces[id2].side === board.allPieces[id].side && board.allPieces[id2].position === 'returned') {
       howManyAlreadyReturned = howManyAlreadyReturned + 1;
     }
   }
@@ -120,7 +120,7 @@ export function removePieceFromGame(id) {
 export function removeAdjacent(idPoly, color) {
   for (let k of board.allPolygons[idPoly].neighbors) {
     if (board.allPolygons[k].isIn !== 'empty') {
-      if (board.allPieces[board.allPolygons[k].isIn].color !== color && board.allPieces[board.allPolygons[k].isIn].type !== 'trifoxes') {
+      if (board.allPieces[board.allPolygons[k].isIn].side !== color && board.allPieces[board.allPolygons[k].isIn].type !== 'trifoxes') {
         removePieceFromGame(board.allPolygons[k].isIn);
       }
     }
@@ -128,12 +128,12 @@ export function removeAdjacent(idPoly, color) {
 }
 
 export function removeConnex(idPoly) {
-  let targetColor = board.allPieces[board.allPolygons[idPoly].isIn].color;
+  let targetSide = board.allPieces[board.allPolygons[idPoly].isIn].side;
   let toBeChecked = [idPoly];
 
   let popped = toBeChecked.pop();
   if (board.allPolygons[popped].isIn !== 'empty') {
-    if (board.allPieces[board.allPolygons[popped].isIn].color === targetColor && board.allPieces[board.allPolygons[popped].isIn].type !== 'trifoxes') {
+    if (board.allPieces[board.allPolygons[popped].isIn].side === targetSide && board.allPieces[board.allPolygons[popped].isIn].type !== 'trifoxes') {
       for (let k of board.allPolygons[popped].neighbors){
         toBeChecked.push(k);
       }
@@ -144,7 +144,7 @@ export function removeConnex(idPoly) {
   while(toBeChecked.length > 0) {
     popped = toBeChecked.pop();
     if (board.allPolygons[popped].isIn !== 'empty') {
-      if (board.allPieces[board.allPolygons[popped].isIn].color === targetColor && board.allPieces[board.allPolygons[popped].isIn].type !== 'trifoxes') {
+      if (board.allPieces[board.allPolygons[popped].isIn].side === targetSide && board.allPieces[board.allPolygons[popped].isIn].type !== 'trifoxes') {
         removePieceFromGame(board.allPolygons[popped].isIn);
       }
     }

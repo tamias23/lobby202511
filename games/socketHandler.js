@@ -110,7 +110,7 @@ export function playAction(typeOfMessage, message) {
         setPieceToPoly(message.mySelectPieceId, message.draggedOn);
 
         if(board.allPieces[mySelectPieceId].type == 'bishop'){
-          removeAdjacent(boardstate.draggedOn, board.allPieces[mySelectPieceId].color);
+          removeAdjacent(boardstate.draggedOn, board.allPieces[mySelectPieceId].side);
         }
 
         if (board.allPolygons[boardstate.draggedOn].color === boardstate.colorChosen){

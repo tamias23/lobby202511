@@ -23,9 +23,9 @@ describe('Rules: Siren and Ghoul', () => {
     };
 
     board.allPieces = {
-      'white_siren_0': { position: 'poly_1', color: 'white', type: 'siren', canMove: 1 },
-      'yellow_soldier_0': { position: 'poly_2', color: 'yellow', type: 'soldier', canMove: 1 },
-      'yellow_ghoul_0': { position: 'poly_10', color: 'yellow', type: 'ghoul', canMove: 1 },
+      'white_siren_0': { position: 'poly_1', side: 'white', type: 'siren', canMove: 1 },
+      'yellow_soldier_0': { position: 'poly_2', side: 'yellow', type: 'soldier', canMove: 1 },
+      'yellow_ghoul_0': { position: 'poly_10', side: 'yellow', type: 'ghoul', canMove: 1 },
     };
   });
 

@@ -8,11 +8,11 @@ jest.mock('../games/boardUtils.js', () => ({
   iterTransforms: jest.fn(() => []),
   getFloatValue: jest.fn(() => 0),
   getDistanceBetweenKeyframes: jest.fn(() => 0),
-  removeAdjacent: jest.fn((idPoly, color) => {
+  removeAdjacent: jest.fn((idPoly, side) => {
     // simplified mock that just calls the mocked removePieceFromGame
     const { board } = require('../games/state.js');
     for (const p of board.allPolygons[idPoly].neighbors) {
-      if (board.allPolygons[p].isIn !== 'empty' && board.allPieces[board.allPolygons[p].isIn].color !== color && board.allPieces[board.allPolygons[p].isIn].type !== 'trifoxes') {
+      if (board.allPolygons[p].isIn !== 'empty' && board.allPieces[board.allPolygons[p].isIn].side !== side && board.allPieces[board.allPolygons[p].isIn].type !== 'trifoxes') {
         require('../games/boardUtils.js').removePieceFromGame(board.allPolygons[p].isIn);
       }
     }
@@ -35,9 +35,9 @@ describe('Rules: The Bishop', () => {
     };
 
     board.allPieces = {
-      'white_bishop_0': { position: 'poly_1', color: 'white', type: 'bishop', canMove: 1 },
-      'yellow_soldier_0': { position: 'poly_5', color: 'yellow', type: 'soldier', canMove: 1 },
-      'white_soldier_0': { position: 'poly_3', color: 'white', type: 'soldier', canMove: 1 }
+      'white_bishop_0': { position: 'poly_1', side: 'white', type: 'bishop', canMove: 1 },
+      'yellow_soldier_0': { position: 'poly_5', side: 'yellow', type: 'soldier', canMove: 1 },
+      'white_soldier_0': { position: 'poly_3', side: 'white', type: 'soldier', canMove: 1 }
     };
     
     board.allPolygons['poly_5'].isIn = 'yellow_soldier_0';

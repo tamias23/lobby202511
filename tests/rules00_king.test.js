@@ -17,7 +17,7 @@ describe('Rules: The King', () => {
     };
 
     board.allPieces = {
-      'white_king_0': { position: 'poly_1', color: 'white', type: 'king', canMove: 1 }
+      'white_king_0': { position: 'poly_1', side: 'white', type: 'king', canMove: 1 }
     };
 
     boardstate.kingHasTakenCounter = 0;

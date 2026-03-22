@@ -18,9 +18,9 @@ beforeEach(() => {
   };
   
   board.allPieces = {
-    'white_soldier_0': { position: 'poly_1', color: 'white', type: 'soldier' },
-    'yellow_soldier_0': { position: 'poly_2', color: 'yellow', type: 'soldier' },
-    'white_siren_0': { position: 'returned', color: 'white', type: 'siren'}
+    'white_soldier_0': { position: 'poly_1', side: 'white', type: 'soldier' },
+    'yellow_soldier_0': { position: 'poly_2', side: 'yellow', type: 'soldier' },
+    'white_siren_0': { position: 'returned', side: 'white', type: 'siren'}
   };
 });
 

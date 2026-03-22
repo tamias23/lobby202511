@@ -61,10 +61,10 @@ function mouseDownAfterSetupIsDone(evt) {
     state.selectedElement = evt.target.parentNode;
 
     if (
-      (state.colorChosen != 'noColor' && (state.selectedElement.id in board.allPieces) && board.allPieces[state.selectedElement.id].position === 'returned' && state.whoseTurnItIs === board.allPieces[state.selectedElement.id].color) || 
+      (state.colorChosen != 'noColor' && (state.selectedElement.id in board.allPieces) && board.allPieces[state.selectedElement.id].position === 'returned' && state.whoseTurnItIs === board.allPieces[state.selectedElement.id].side) || 
       (
         board.allPieces[state.selectedElement.id].canMove && 
-        state.whoseTurnItIs === board.allPieces[state.selectedElement.id].color && 
+        state.whoseTurnItIs === board.allPieces[state.selectedElement.id].side && 
         state.colorChosen !== 'noColor' && 
         board.allPieces[state.selectedElement.id].position !== 'returned' && 
         (
@@ -184,6 +184,10 @@ function mouseUpAfterSetupIsDone(evt) {
 
     if (state.draggedOn !== '' && 'center' in board.allPolygons[state.draggedOn]){
       const possibleTargets = getListOfPossibleTargets(board, state, mySelectPieceId);
+      console.log('DROP ATTEMPT:', mySelectPieceId, 'to', state.draggedOn, 'Targets:', possibleTargets);
+      console.log('DESTINATION is empty?', board.allPolygons[state.draggedOn].isIn);
+      console.log('possibleTargets includes draggedOn?', possibleTargets.includes(state.draggedOn));
+      
       if (board.allPolygons[state.draggedOn].isIn == 'empty' && possibleTargets.includes(state.draggedOn)){
         let thisIsTheEndOfTurn = false;
         if (board.allPieces[mySelectPieceId].position === 'returned'){
@@ -203,11 +207,13 @@ function mouseUpAfterSetupIsDone(evt) {
             let e = document.getElementById(mySelectPieceId);
             e.setAttributeNS(null, 'transform', board.allPieces[mySelectPieceId].initialTransform);
           } else {
+            console.log('Reverting piece locally because it failed all legalMove checks!');
             setPieceToPoly(mySelectPieceId, board.allPieces[mySelectPieceId].position);
           }
         }
       }
     } else {
+      console.log('Failed draggedOn center condition:', state.draggedOn);
       if (state.draggedOn === ''){
         if (board.allPieces[mySelectPieceId].position !== 'returned') {
           setPieceToPoly(mySelectPieceId, board.allPieces[mySelectPieceId].position);

@@ -25,108 +25,108 @@ export function getPolysClose(board, selectedPieceId, d) {
   return toBeReturned;
 }
 
-export function countReturnedPieceColor(board, pieceType, pieceColor) {
+export function countReturnedPieceSide(board, pieceType, pieceSide) {
   let myCount = 0;
   for (const id in board.allPieces) {
-    if(board.allPieces[id].type === pieceType && board.allPieces[id].color === pieceColor && board.allPieces[id].position === 'returned') {
+    if(board.allPieces[id].type === pieceType && board.allPieces[id].side === pieceSide && board.allPieces[id].position === 'returned') {
       myCount = myCount + 1;
     }
   }
   return myCount;
 }  
 
-export function getListOfPolysClosest(board, boardstate, pieceColor) {
+export function getListOfPolysClosest(board, boardstate, pieceSide) {
   let toBeReturned = [];
   
-  if (board.allPieces[pieceColor + '_goddess_0'].position === 'returned') {
-    let allPossibilities = boardstate.possibleSetupGoddessKings[pieceColor];
+  if (board.allPieces[pieceSide + '_goddess_0'].position === 'returned') {
+    let allPossibilities = boardstate.possibleSetupGoddessKings[pieceSide];
     let thisIsPossible = [];
     for (const ap of allPossibilities) {
       const places = ap.split(' ');
       thisIsPossible.push(places[0]);
     }
     toBeReturned = [...new Set(thisIsPossible)];
-  } else if (board.allPieces[pieceColor + '_trifoxes_0'].position === 'returned') {
-    toBeReturned = getPolysClose(board, pieceColor + '_goddess_0', 1);
-  } else if (board.allPieces[pieceColor + '_trifoxes_1'].position === 'returned') {
-    toBeReturned = getPolysClose(board, pieceColor + '_goddess_0', 1);
-  } else if (board.allPieces[pieceColor + '_king_0'].position === 'returned' && board.allPieces[pieceColor + '_king_1'].position === 'returned') {
-    let allPossibilities = boardstate.possibleSetupGoddessKings[pieceColor];
+  } else if (board.allPieces[pieceSide + '_trifoxes_0'].position === 'returned') {
+    toBeReturned = getPolysClose(board, pieceSide + '_goddess_0', 1);
+  } else if (board.allPieces[pieceSide + '_trifoxes_1'].position === 'returned') {
+    toBeReturned = getPolysClose(board, pieceSide + '_goddess_0', 1);
+  } else if (board.allPieces[pieceSide + '_king_0'].position === 'returned' && board.allPieces[pieceSide + '_king_1'].position === 'returned') {
+    let allPossibilities = boardstate.possibleSetupGoddessKings[pieceSide];
     let thisIsPossible = [];
     for (const ap of allPossibilities) {
       const places = ap.split(' ');
-      if (places[0] === board.allPieces[pieceColor + '_goddess_0'].position){
+      if (places[0] === board.allPieces[pieceSide + '_goddess_0'].position){
         thisIsPossible.push(places[1]);
       }
     }
     toBeReturned = [...new Set(thisIsPossible)];
-  } else if (board.allPieces[pieceColor + '_king_0'].position === 'returned' && board.allPieces[pieceColor + '_king_1'].position !== 'returned') {
-    let allPossibilities = boardstate.possibleSetupGoddessKings[pieceColor];
+  } else if (board.allPieces[pieceSide + '_king_0'].position === 'returned' && board.allPieces[pieceSide + '_king_1'].position !== 'returned') {
+    let allPossibilities = boardstate.possibleSetupGoddessKings[pieceSide];
     let thisIsPossible = [];
     for (const ap of allPossibilities) {
       const places = ap.split(' ');
-      if (places[1] === board.allPieces[pieceColor + '_king_1'].position){
+      if (places[1] === board.allPieces[pieceSide + '_king_1'].position){
         thisIsPossible.push(places[2]);
       }
     }
     toBeReturned = [...new Set(thisIsPossible)];
-  } else if (board.allPieces[pieceColor + '_king_1'].position === 'returned' && board.allPieces[pieceColor + '_king_0'].position !== 'returned') {
-    let allPossibilities = boardstate.possibleSetupGoddessKings[pieceColor];
+  } else if (board.allPieces[pieceSide + '_king_1'].position === 'returned' && board.allPieces[pieceSide + '_king_0'].position !== 'returned') {
+    let allPossibilities = boardstate.possibleSetupGoddessKings[pieceSide];
     let thisIsPossible = [];
     for (const ap of allPossibilities) {
       const places = ap.split(' ');
-      if (places[1] === board.allPieces[pieceColor + '_king_0'].position){
+      if (places[1] === board.allPieces[pieceSide + '_king_0'].position){
         thisIsPossible.push(places[2]);
       }
     }
     toBeReturned = [...new Set(thisIsPossible)];
   } else if(
     (
-      board.allPieces[pieceColor + '_bishop_0'].position !== 'returned' ||
-      board.allPieces[pieceColor + '_bishop_1'].position !== 'returned' ||
-      board.allPieces[pieceColor + '_bishop_2'].position !== 'returned' ||
-      board.allPieces[pieceColor + '_bishop_3'].position !== 'returned' 
+      board.allPieces[pieceSide + '_bishop_0'].position !== 'returned' ||
+      board.allPieces[pieceSide + '_bishop_1'].position !== 'returned' ||
+      board.allPieces[pieceSide + '_bishop_2'].position !== 'returned' ||
+      board.allPieces[pieceSide + '_bishop_3'].position !== 'returned' 
     ) &&
     (
-      board.allPieces[pieceColor + '_bishop_0'].position === 'returned' ||
-      board.allPieces[pieceColor + '_bishop_1'].position === 'returned' ||
-      board.allPieces[pieceColor + '_bishop_2'].position === 'returned' ||
-      board.allPieces[pieceColor + '_bishop_3'].position === 'returned' 
+      board.allPieces[pieceSide + '_bishop_0'].position === 'returned' ||
+      board.allPieces[pieceSide + '_bishop_1'].position === 'returned' ||
+      board.allPieces[pieceSide + '_bishop_2'].position === 'returned' ||
+      board.allPieces[pieceSide + '_bishop_3'].position === 'returned' 
     )
   ) {
     let allColors = [];
     for (let i=0;i<4;i++) {
-      if(board.allPieces[pieceColor + '_bishop_' + i].position !== 'returned'){
-        allColors.push(board.allPolygons[board.allPieces[pieceColor + '_bishop_' + i].position].color);
+      if(board.allPieces[pieceSide + '_bishop_' + i].position !== 'returned'){
+        allColors.push(board.allPolygons[board.allPieces[pieceSide + '_bishop_' + i].position].color);
       }
     }
 
     let n = 1;
     while(toBeReturned.length == 0){
-      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceColor + '_goddess_0', n));
-      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceColor + '_king_0', n));
-      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceColor + '_king_1', n));
+      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_goddess_0', n));
+      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_king_0', n));
+      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_king_1', n));
       toBeReturned = toBeReturned.filter(x => board.allPolygons[x].isIn === 'empty');
       toBeReturned = toBeReturned.filter(x => !allColors.includes(board.allPolygons[x].color));
       n = n + 1;
       if (n == 15) break;
     }
-  } else if(countReturnedPieceColor(board, 'soldier', pieceColor) > 0 && countReturnedPieceColor(board, 'soldier', pieceColor) < 6) {
+  } else if(countReturnedPieceSide(board, 'soldier', pieceSide) > 0 && countReturnedPieceSide(board, 'soldier', pieceSide) < 6) {
     let allColors = {'orange' : 0, 'grey' : 0, 'blue' : 0, 'green' : 0};
 
-    allColors[board.allPolygons[board.allPieces[pieceColor + '_trifoxes_0'].position].color] = allColors[board.allPolygons[board.allPieces[pieceColor + '_trifoxes_0'].position].color] + 1;
-    allColors[board.allPolygons[board.allPieces[pieceColor + '_trifoxes_1'].position].color] = allColors[board.allPolygons[board.allPieces[pieceColor + '_trifoxes_1'].position].color] + 1
+    allColors[board.allPolygons[board.allPieces[pieceSide + '_trifoxes_0'].position].color] = allColors[board.allPolygons[board.allPieces[pieceSide + '_trifoxes_0'].position].color] + 1;
+    allColors[board.allPolygons[board.allPieces[pieceSide + '_trifoxes_1'].position].color] = allColors[board.allPolygons[board.allPieces[pieceSide + '_trifoxes_1'].position].color] + 1
     for (let i=0;i<6;i++) {
-      if(board.allPieces[pieceColor + '_soldier_' + i].position !== 'returned'){
-        allColors[board.allPolygons[board.allPieces[pieceColor + '_soldier_' + i].position].color] = allColors[board.allPolygons[board.allPieces[pieceColor + '_soldier_' + i].position].color] + 1;
+      if(board.allPieces[pieceSide + '_soldier_' + i].position !== 'returned'){
+        allColors[board.allPolygons[board.allPieces[pieceSide + '_soldier_' + i].position].color] = allColors[board.allPolygons[board.allPieces[pieceSide + '_soldier_' + i].position].color] + 1;
       }
     }
 
     let n = 1;
     while(toBeReturned.length == 0){
-      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceColor + '_goddess_0', n));
-      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceColor + '_king_0', n));
-      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceColor + '_king_1', n));
+      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_goddess_0', n));
+      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_king_0', n));
+      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_king_1', n));
       toBeReturned = toBeReturned.filter(x => board.allPolygons[x].isIn === 'empty');
       toBeReturned = toBeReturned.filter(x => allColors[board.allPolygons[x].color] < 2);
       n = n + 1;
@@ -135,9 +135,9 @@ export function getListOfPolysClosest(board, boardstate, pieceColor) {
   } else {
     let n = 1;
     while(toBeReturned.length == 0){
-      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceColor + '_goddess_0', n));
-      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceColor + '_king_0', n));
-      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceColor + '_king_1', n));
+      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_goddess_0', n));
+      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_king_0', n));
+      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_king_1', n));
       toBeReturned = toBeReturned.filter(x => board.allPolygons[x].isIn === 'empty');
       n = n + 1;
       if (n == 15) break;
@@ -150,7 +150,7 @@ export function getMoveSoldier(board, boardstate, selectedPieceId) {
   let toBeReturned = [];
   let forbidden = [];
   let selectedPoly = board.allPieces[selectedPieceId].position;
-  let soldierColor = board.allPieces[selectedPieceId].color;
+  let soldierSide = board.allPieces[selectedPieceId].side;
 
   for (const n1 of board.allPolygons[selectedPoly].neighbors){
     toBeReturned.push(n1);
@@ -161,7 +161,7 @@ export function getMoveSoldier(board, boardstate, selectedPieceId) {
     added = 0;
     for (const n of toBeReturned){
       if (board.allPolygons[n].isIn !== 'empty'){
-        if(board.allPieces[board.allPolygons[n].isIn].color === soldierColor){
+        if(board.allPieces[board.allPolygons[n].isIn].side === soldierSide){
           for (const n1 of board.allPolygons[n].neighbors){
             if (!toBeReturned.includes(n1) && !forbidden.includes(n1)){
               toBeReturned.push(n1);
@@ -170,7 +170,7 @@ export function getMoveSoldier(board, boardstate, selectedPieceId) {
           }
         } else {
           if (
-            board.allPieces[board.allPolygons[n].isIn].color !== board.allPieces[selectedPieceId].color && 
+            board.allPieces[board.allPolygons[n].isIn].side !== board.allPieces[selectedPieceId].side && 
             (board.allPieces[board.allPolygons[n].isIn].type === 'trifoxes')
           ) {
             forbidden.push(n);
@@ -182,7 +182,7 @@ export function getMoveSoldier(board, boardstate, selectedPieceId) {
           for (const n2 of board.allPolygons[n].neighbors){
             if (
               board.allPolygons[n2].isIn !== 'empty' && 
-              board.allPieces[board.allPolygons[n2].isIn].color !== board.allPieces[selectedPieceId].color && 
+              board.allPieces[board.allPolygons[n2].isIn].side !== board.allPieces[selectedPieceId].side && 
               board.allPieces[board.allPolygons[n2].isIn].type === 'siren'
               ){
               nbSirenNeighbor = nbSirenNeighbor + 1;
@@ -203,7 +203,7 @@ export function getMoveSoldier(board, boardstate, selectedPieceId) {
     for (const n of toBeReturned){
     if (
       board.allPolygons[n].isIn !== 'empty' && 
-      board.allPieces[board.allPolygons[n].isIn].color !== soldierColor && 
+      board.allPieces[board.allPolygons[n].isIn].side !== soldierSide && 
       (board.allPieces[board.allPolygons[n].isIn].type === 'trifoxes')
       ){
         forbidden.push(n);
@@ -231,7 +231,7 @@ export function getMoveGhoul(board, boardstate, selectedPieceId) {
       for (const n2 of board.allPolygons[n1].neighbors){
         if (
           board.allPolygons[n2].isIn !== 'empty' && 
-          board.allPieces[board.allPolygons[n2].isIn].color !== board.allPieces[selectedPieceId].color && 
+          board.allPieces[board.allPolygons[n2].isIn].side !== board.allPieces[selectedPieceId].side && 
           board.allPieces[board.allPolygons[n2].isIn].type === 'siren'
           ){
           nbSirenNeighbor = nbSirenNeighbor + 1;
@@ -245,7 +245,7 @@ export function getMoveGhoul(board, boardstate, selectedPieceId) {
             for (const n3 of board.allPolygons[n2].neighbors){
               if (
                 board.allPolygons[n3].isIn !== 'empty' && 
-                board.allPieces[board.allPolygons[n3].isIn].color !== board.allPieces[selectedPieceId].color && 
+                board.allPieces[board.allPolygons[n3].isIn].side !== board.allPieces[selectedPieceId].side && 
                 board.allPieces[board.allPolygons[n3].isIn].type === 'siren'
                 ){
                 nbSirenNeighbor2 = nbSirenNeighbor2 + 1;
@@ -259,7 +259,7 @@ export function getMoveGhoul(board, boardstate, selectedPieceId) {
           }
         }
       }
-    } else if (board.allPieces[board.allPolygons[n1].isIn].color != board.allPieces[selectedPieceId].color){
+    } else if (board.allPieces[board.allPolygons[n1].isIn].side != board.allPieces[selectedPieceId].side){
       toBeReturned.push(n1);
     }
   }
@@ -369,14 +369,14 @@ export function getListOfPossibleTargetsForSetup(board, boardstate, selectedPiec
 
   if (board.allPieces[selectedPieceId].position === 'returned') {
     let pieceType = board.allPieces[selectedPieceId].type;
-    let pieceColor = board.allPieces[selectedPieceId].color;
+    let pieceSide = board.allPieces[selectedPieceId].side;
     const myIndexType = inputOrder.indexOf(pieceType);
     let howManyPiecesHaveToBeSetBefore = 0;
     for (let i=0;i<myIndexType;i++) {
-      howManyPiecesHaveToBeSetBefore = howManyPiecesHaveToBeSetBefore + countReturnedPieceColor(board, inputOrder[i], pieceColor);
+      howManyPiecesHaveToBeSetBefore = howManyPiecesHaveToBeSetBefore + countReturnedPieceSide(board, inputOrder[i], pieceSide);
     }
     if(howManyPiecesHaveToBeSetBefore == 0){
-      toBeReturned = getListOfPolysClosest(board, boardstate, pieceColor);
+      toBeReturned = getListOfPolysClosest(board, boardstate, pieceSide);
     }
   }
 
@@ -396,7 +396,7 @@ export function getListOfPossibleTargets(board, boardstate, selectedPieceId) {
         if (board.allPolygons[p].color === boardstate.colorChosen && board.allPolygons[p].isIn === 'empty'){
           let howManyNeighbors = 0;
           for (let k of board.allPolygons[p].neighbors){
-            if (board.allPolygons[k].isIn !== 'empty' && board.allPieces[board.allPolygons[k].isIn].color !== board.allPieces[selectedPieceId].color){
+            if (board.allPolygons[k].isIn !== 'empty' && board.allPieces[board.allPolygons[k].isIn].side !== board.allPieces[selectedPieceId].side){
               howManyNeighbors = howManyNeighbors + 1;
             }
           }
@@ -408,9 +408,9 @@ export function getListOfPossibleTargets(board, boardstate, selectedPieceId) {
 
         //if(board.allPieces[selectedPieceId].type !== 'bishop'){
         if(!['bishop', 'mage'].includes(board.allPieces[selectedPieceId].type)){
-          let mage0 = board.allPieces[selectedPieceId].color + '_mage_0';
-          let mage1 = board.allPieces[selectedPieceId].color + '_mage_1';
-          let mage2 = board.allPieces[selectedPieceId].color + '_mage_2';
+          let mage0 = board.allPieces[selectedPieceId].side + '_mage_0';
+          let mage1 = board.allPieces[selectedPieceId].side + '_mage_1';
+          let mage2 = board.allPieces[selectedPieceId].side + '_mage_2';
           if (mage0 in board.allPieces && board.allPieces[mage0].position != 'returned'){
             toBeReturned = toBeReturned.concat(board.allPolygons[board.allPieces[mage0].position].neighbors.filter(x => board.allPolygons[x].isIn === 'empty'));
           }
@@ -421,9 +421,9 @@ export function getListOfPossibleTargets(board, boardstate, selectedPieceId) {
             toBeReturned = toBeReturned.concat(board.allPolygons[board.allPieces[mage2].position].neighbors.filter(x => board.allPolygons[x].isIn === 'empty'));
           }
         } else {
-          let mage0 = board.allPieces[selectedPieceId].color + '_mage_0';
-          let mage1 = board.allPieces[selectedPieceId].color + '_mage_1';
-          let mage2 = board.allPieces[selectedPieceId].color + '_mage_2';
+          let mage0 = board.allPieces[selectedPieceId].side + '_mage_0';
+          let mage1 = board.allPieces[selectedPieceId].side + '_mage_1';
+          let mage2 = board.allPieces[selectedPieceId].side + '_mage_2';
           let candidatePositions = [];
           if (mage0 in board.allPieces && board.allPieces[mage0].position != 'returned'){
             candidatePositions = candidatePositions.concat(board.allPolygons[board.allPieces[mage0].position].neighbors.filter(x => board.allPolygons[x].isIn === 'empty'));
@@ -438,7 +438,7 @@ export function getListOfPossibleTargets(board, boardstate, selectedPieceId) {
           for(const p7 of candidatePositions){
             let howManyNeighbors = 0;
             for (let k of board.allPolygons[p7].neighbors){
-              if (board.allPolygons[k].isIn !== 'empty' && board.allPieces[board.allPolygons[k].isIn].color !== board.allPieces[selectedPieceId].color){
+              if (board.allPolygons[k].isIn !== 'empty' && board.allPieces[board.allPolygons[k].isIn].side !== board.allPieces[selectedPieceId].side){
                 howManyNeighbors = howManyNeighbors + 1;
               }
             }

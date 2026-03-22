@@ -22,14 +22,14 @@ describe('Rules: General and Supplementary Mechanics', () => {
     };
 
     board.allPieces = {
-      'white_goddess_0': { position: 'returned', color: 'white', type: 'goddess', canMove: 1 },
-      'white_king_0': { position: 'returned', color: 'white', type: 'king', canMove: 1 },
+      'white_goddess_0': { position: 'returned', side: 'white', type: 'goddess', canMove: 1 },
+      'white_king_0': { position: 'returned', side: 'white', type: 'king', canMove: 1 },
       
-      'white_soldier_0': { position: 'returned', color: 'white', type: 'soldier', canMove: 1 },
-      'white_mage_0': { position: 'poly_8', color: 'white', type: 'mage', canMove: 1 },
+      'white_soldier_0': { position: 'returned', side: 'white', type: 'soldier', canMove: 1 },
+      'white_mage_0': { position: 'poly_8', side: 'white', type: 'mage', canMove: 1 },
       
-      'white_bishop_0': { position: 'returned', color: 'white', type: 'bishop', canMove: 1 },
-      'yellow_soldier_0': { position: 'poly_9', color: 'yellow', type: 'soldier', canMove: 1 }
+      'white_bishop_0': { position: 'returned', side: 'white', type: 'bishop', canMove: 1 },
+      'yellow_soldier_0': { position: 'poly_9', side: 'yellow', type: 'soldier', canMove: 1 }
     };
   });
 

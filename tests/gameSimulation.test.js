@@ -24,7 +24,7 @@ describe('7-Turn Game Simulation with Rotations', () => {
         'poly_1': { center: [0, 0], centerRotated: [100, 100], neighbors: [], neighbours: [], isIn: 'empty' }
       },
       allPieces: {
-        'white_king_0': { position: 'poly_1', color: 'white', type: 'king', canMove: 1, centerTransform: [0, 0] }
+        'white_king_0': { position: 'poly_1', side: 'white', type: 'king', canMove: 1, centerTransform: [0, 0] }
       }
     };
     setBoard(mockBoard);

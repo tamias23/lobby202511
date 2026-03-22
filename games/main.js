@@ -52,7 +52,7 @@ function afterLoadingData(_board) {
   Array.from(document.getElementsByClassName('draggable')).forEach(element => {
     if (!board.allPieces.hasOwnProperty(element.id)) {
       board.allPieces[element.id] = {
-        color : element.id.split('_')[0],
+        side : element.id.split('_')[0],
         id : element.id,
         initialTransform : '',
         position : 'returned',
@@ -133,7 +133,7 @@ function afterLoadingData(_board) {
     } else {
       let howManyPiecesSetW = 0;
       for (const id in board.allPieces){
-        if(board.allPieces[id].position === 'returned' && board.allPieces[id].color === 'white'){
+        if(board.allPieces[id].position === 'returned' && board.allPieces[id].side === 'white'){
           howManyPiecesSetW++;
         }
       }
@@ -143,7 +143,7 @@ function afterLoadingData(_board) {
       
       let howManyPiecesSetY = 0;
       for (const id in board.allPieces){
-        if(board.allPieces[id].position === 'returned' && board.allPieces[id].color === 'yellow'){
+        if(board.allPieces[id].position === 'returned' && board.allPieces[id].side === 'yellow'){
           howManyPiecesSetY++;
         }
       }
@@ -264,27 +264,27 @@ function setUpIdentifyGoddessKingsPositions() {
   let color_Edges = {'white' : board.topEdgepolys, 'yellow' : board.bottomEdgepolys};
 
   for (let i=0;i<300;i++) {
-    for (const color of ['white', 'yellow']) {
+    for (const side of ['white', 'yellow']) {
       let goddessAndKingsKO = 1;
       while (goddessAndKingsKO) {
         let alreadyOccupied_temp = [];
-        let randomPoly = color_Edges[color][Math.floor(Math.random() * color_Edges[color].length)];
+        let randomPoly = color_Edges[side][Math.floor(Math.random() * color_Edges[side].length)];
         alreadyOccupied_temp.push(randomPoly);
-        setPieceToPolyFake(color + '_goddess_0', randomPoly);
+        setPieceToPolyFake(side + '_goddess_0', randomPoly);
         
-        randomPoly = color_Edges[color][Math.floor(Math.random() * color_Edges[color].length)];
+        randomPoly = color_Edges[side][Math.floor(Math.random() * color_Edges[side].length)];
         while(alreadyOccupied_temp.includes(randomPoly)){
-          randomPoly = color_Edges[color][Math.floor(Math.random() * color_Edges[color].length)];
+          randomPoly = color_Edges[side][Math.floor(Math.random() * color_Edges[side].length)];
         }
         alreadyOccupied_temp.push(randomPoly);
-        setPieceToPolyFake(color + '_king_0', randomPoly);
+        setPieceToPolyFake(side + '_king_0', randomPoly);
 
-        randomPoly = color_Edges[color][Math.floor(Math.random() * color_Edges[color].length)];
+        randomPoly = color_Edges[side][Math.floor(Math.random() * color_Edges[side].length)];
         while(alreadyOccupied_temp.includes(randomPoly)){
-          randomPoly = color_Edges[color][Math.floor(Math.random() * color_Edges[color].length)];
+          randomPoly = color_Edges[side][Math.floor(Math.random() * color_Edges[side].length)];
         }
         alreadyOccupied_temp.push(randomPoly);
-        setPieceToPolyFake(color + '_king_1', randomPoly);
+        setPieceToPolyFake(side + '_king_1', randomPoly);
 
         goddessAndKingsKO = 0;
         
@@ -307,32 +307,32 @@ function setUpIdentifyGoddessKingsPositions() {
           return [...new Set(toBeReturned)];
         };
 
-        if (getPolysCloseLocal(color + '_king_0', higherP).includes(board.allPieces[color + '_king_1'].position)) {
+        if (getPolysCloseLocal(side + '_king_0', higherP).includes(board.allPieces[side + '_king_1'].position)) {
           goddessAndKingsKO = 1;
         }
-        else if (getPolysCloseLocal(color + '_goddess_0', lowerP).includes(board.allPieces[color + '_king_0'].position)){
+        else if (getPolysCloseLocal(side + '_goddess_0', lowerP).includes(board.allPieces[side + '_king_0'].position)){
           goddessAndKingsKO = 1;
         }
-        else if (!getPolysCloseLocal(color + '_goddess_0', higherP).includes(board.allPieces[color + '_king_0'].position)) {
+        else if (!getPolysCloseLocal(side + '_goddess_0', higherP).includes(board.allPieces[side + '_king_0'].position)) {
           goddessAndKingsKO = 1;
         }
-        else if (getPolysCloseLocal(color + '_goddess_0', lowerP).includes(board.allPieces[color + '_king_1'].position)){
+        else if (getPolysCloseLocal(side + '_goddess_0', lowerP).includes(board.allPieces[side + '_king_1'].position)){
           goddessAndKingsKO = 1;
         }
-        else if (!getPolysCloseLocal(color + '_goddess_0', higherP).includes(board.allPieces[color + '_king_1'].position)) {
+        else if (!getPolysCloseLocal(side + '_goddess_0', higherP).includes(board.allPieces[side + '_king_1'].position)) {
           goddessAndKingsKO = 1;
         }
 
         if(goddessAndKingsKO){
-          for (const id of [color + '_goddess_0', color + '_king_0', color + '_king_1']){
+          for (const id of [side + '_goddess_0', side + '_king_0', side + '_king_1']){
             if (board.allPieces[id].position !== 'returned') {
               board.allPolygons[board.allPieces[id].position].isIn = 'empty';
               board.allPieces[id].position = 'returned';
             }
           }
         } else {
-          boardstate.possibleSetupGoddessKings[color].push(board.allPieces[color + '_goddess_0'].position + ' ' + board.allPieces[color + '_king_0'].position + ' '+ board.allPieces[color + '_king_1'].position);
-          for (const id of [color + '_goddess_0', color + '_king_0', color + '_king_1']){
+          boardstate.possibleSetupGoddessKings[side].push(board.allPieces[side + '_goddess_0'].position + ' ' + board.allPieces[side + '_king_0'].position + ' '+ board.allPieces[side + '_king_1'].position);
+          for (const id of [side + '_goddess_0', side + '_king_0', side + '_king_1']){
             if (board.allPieces[id].position !== 'returned') {
               board.allPolygons[board.allPieces[id].position].isIn = 'empty';
               board.allPieces[id].position = 'returned';
@@ -343,8 +343,8 @@ function setUpIdentifyGoddessKingsPositions() {
     }
   }
 
-  for (const color of ['white', 'yellow']) {
-    for (const id of [color + '_goddess_0', color + '_king_0', color + '_king_1']){
+  for (const side of ['white', 'yellow']) {
+    for (const id of [side + '_goddess_0', side + '_king_0', side + '_king_1']){
       if (board.allPieces[id].position !== 'returned') {
         board.allPolygons[board.allPieces[id].position].isIn = 'empty';
         board.allPieces[id].position = 'returned';

@@ -12,11 +12,11 @@ jest.mock('../games/boardUtils.js', () => ({
     const { board } = require('../games/state.js');
     let target = board.allPolygons[idPoly].isIn;
     if (target === 'empty') return;
-    let targetColor = board.allPieces[target].color;
+    let targetSide = board.allPieces[target].side;
     require('../games/boardUtils.js').removePieceFromGame(target);
     for (let currentPoly of board.allPolygons[idPoly].neighbors) {
       let currentPiece = board.allPolygons[currentPoly].isIn;
-      if (currentPiece !== 'empty' && board.allPieces[currentPiece].color === targetColor && board.allPieces[currentPiece].type !== 'trifoxes') {
+      if (currentPiece !== 'empty' && board.allPieces[currentPiece].side === targetSide && board.allPieces[currentPiece].type !== 'trifoxes') {
         require('../games/boardUtils.js').removePieceFromGame(currentPiece);
       }
     }
@@ -41,11 +41,11 @@ describe('Rules: The Mage', () => {
     };
 
     board.allPieces = {
-      'white_mage_0': { position: 'poly_1', color: 'white', type: 'mage', canMove: 1 },
-      'yellow_soldier_0': { position: 'poly_5', color: 'yellow', type: 'soldier', canMove: 1 },
-      'yellow_soldier_1': { position: 'poly_6', color: 'yellow', type: 'soldier', canMove: 1 },
-      'yellow_trifoxes_0': { position: 'poly_9', color: 'yellow', type: 'trifoxes', canMove: 1 },
-      'white_soldier_0': { position: 'poly_8', color: 'white', type: 'soldier', canMove: 1 },
+      'white_mage_0': { position: 'poly_1', side: 'white', type: 'mage', canMove: 1 },
+      'yellow_soldier_0': { position: 'poly_5', side: 'yellow', type: 'soldier', canMove: 1 },
+      'yellow_soldier_1': { position: 'poly_6', side: 'yellow', type: 'soldier', canMove: 1 },
+      'yellow_trifoxes_0': { position: 'poly_9', side: 'yellow', type: 'trifoxes', canMove: 1 },
+      'white_soldier_0': { position: 'poly_8', side: 'white', type: 'soldier', canMove: 1 },
     };
   });
 

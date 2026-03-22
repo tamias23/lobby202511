@@ -38,16 +38,16 @@ describe('Integration: Complex Movement Rules', () => {
     };
     
     board.allPieces = {
-      'white_king_0': { position: 'poly_1', color: 'white', type: 'king', canMove: 1 },
-      'white_goddess_0': { position: 'poly_1', color: 'white', type: 'goddess', canMove: 1 },
-      'white_bishop_0': { position: 'poly_1', color: 'white', type: 'bishop', canMove: 1 },
-      'white_siren_0': { position: 'poly_1', color: 'white', type: 'siren', canMove: 1 },
-      'white_ghoul_0': { position: 'poly_1', color: 'white', type: 'ghoul', canMove: 1 },
-      'white_soldier_0': { position: 'poly_1', color: 'white', type: 'soldier', canMove: 1 },
-      'white_trifoxes_0': { position: 'poly_1', color: 'white', type: 'trifoxes', canMove: 1 },
-      'white_mage_0': { position: 'poly_1', color: 'white', type: 'mage', canMove: 1 },
+      'white_king_0': { position: 'poly_1', side: 'white', type: 'king', canMove: 1 },
+      'white_goddess_0': { position: 'poly_1', side: 'white', type: 'goddess', canMove: 1 },
+      'white_bishop_0': { position: 'poly_1', side: 'white', type: 'bishop', canMove: 1 },
+      'white_siren_0': { position: 'poly_1', side: 'white', type: 'siren', canMove: 1 },
+      'white_ghoul_0': { position: 'poly_1', side: 'white', type: 'ghoul', canMove: 1 },
+      'white_soldier_0': { position: 'poly_1', side: 'white', type: 'soldier', canMove: 1 },
+      'white_trifoxes_0': { position: 'poly_1', side: 'white', type: 'trifoxes', canMove: 1 },
+      'white_mage_0': { position: 'poly_1', side: 'white', type: 'mage', canMove: 1 },
       
-      'yellow_soldier_0': { position: 'returned', color: 'yellow', type: 'soldier', canMove: 1 },
+      'yellow_soldier_0': { position: 'returned', side: 'yellow', type: 'soldier', canMove: 1 },
     };
   });
 

@@ -57,12 +57,12 @@ function setPiecesAsGameBegins(){
   
   gameState.board.allPieces = {};
 
-  for (const color of ['white', 'yellow']){
+  for (const side of ['white', 'yellow']){
     for (const [k, v] of Object.entries(allPiecesDict)) {
       for (let i = 0 ; i < v ; i++){
-        let id = color + '_' + k + '_' + i;
+        let id = side + '_' + k + '_' + i;
         gameState.board.allPieces[id] = {
-          color : color,
+          side : side,
           id : id,
           position : 'returned',
           canMove : 1,
@@ -140,43 +140,43 @@ function placeGoddessAndKings(lowerP = 3, higherP = 6) {
 
   let color_Edges = {'white' : gameState.board.topEdgepolys, 'yellow' : gameState.board.bottomEdgepolys};
 
-  for (const color of ['white', 'yellow']) {
+  for (const side of ['white', 'yellow']) {
     let goddessAndKingsKO = 1;
     while (goddessAndKingsKO) {
       let alreadyOccupied_temp = [];
       
-      let randomPoly = getRandomElement(color_Edges[color]);
+      let randomPoly = getRandomElement(color_Edges[side]);
       alreadyOccupied_temp.push(randomPoly);
-      setPieceToPoly(color + '_goddess_0', randomPoly);
+      setPieceToPoly(side + '_goddess_0', randomPoly);
       
-      randomPoly = getRandomElement(color_Edges[color]);
+      randomPoly = getRandomElement(color_Edges[side]);
       while(alreadyOccupied_temp.includes(randomPoly)){
-        randomPoly = getRandomElement(color_Edges[color]);
+        randomPoly = getRandomElement(color_Edges[side]);
       }
       alreadyOccupied_temp.push(randomPoly);
-      setPieceToPoly(color + '_king_0', randomPoly);
+      setPieceToPoly(side + '_king_0', randomPoly);
 
-      randomPoly = getRandomElement(color_Edges[color]);
+      randomPoly = getRandomElement(color_Edges[side]);
       while(alreadyOccupied_temp.includes(randomPoly)){
-        randomPoly = getRandomElement(color_Edges[color]);
+        randomPoly = getRandomElement(color_Edges[side]);
       }
       alreadyOccupied_temp.push(randomPoly);
-      setPieceToPoly(color + '_king_1', randomPoly);
+      setPieceToPoly(side + '_king_1', randomPoly);
 
       goddessAndKingsKO = 0;
       
-      if (getPolysClose(color + '_king_0', higherP).includes(gameState.board.allPieces[color + '_king_1'].position)) {
+      if (getPolysClose(side + '_king_0', higherP).includes(gameState.board.allPieces[side + '_king_1'].position)) {
         goddessAndKingsKO = 1;
       }
-      if (getPolysClose(color + '_goddess_0', lowerP).includes(gameState.board.allPieces[color + '_king_0'].position) || !getPolysClose(color + '_goddess_0', higherP).includes(gameState.board.allPieces[color + '_king_0'].position)) {
+      if (getPolysClose(side + '_goddess_0', lowerP).includes(gameState.board.allPieces[side + '_king_0'].position) || !getPolysClose(side + '_goddess_0', higherP).includes(gameState.board.allPieces[side + '_king_0'].position)) {
         goddessAndKingsKO = 1;
       }
-      if (getPolysClose(color + '_goddess_0', lowerP).includes(gameState.board.allPieces[color + '_king_1'].position) || !getPolysClose(color + '_goddess_0', higherP).includes(gameState.board.allPieces[color + '_king_1'].position)) {
+      if (getPolysClose(side + '_goddess_0', lowerP).includes(gameState.board.allPieces[side + '_king_1'].position) || !getPolysClose(side + '_goddess_0', higherP).includes(gameState.board.allPieces[side + '_king_1'].position)) {
         goddessAndKingsKO = 1;
       }
 
       if(goddessAndKingsKO){
-        for (const id of [color + '_goddess_0', color + '_king_0', color + '_king_1']){
+        for (const id of [side + '_goddess_0', side + '_king_0', side + '_king_1']){
           if (gameState.board.allPieces[id].position !== 'returned') {
             gameState.board.allPolygons[gameState.board.allPieces[id].position].isIn = 'empty';
             gameState.board.allPieces[id].position = 'returned';
@@ -203,28 +203,28 @@ function setUpRandomly() {
 
   //====================================================================================================
 
-  for (const color of ['white', 'yellow']) {
-    let set1_goddess = getPolysClose(color + '_goddess_0', 1);
+  for (const side of ['white', 'yellow']) {
+    let set1_goddess = getPolysClose(side + '_goddess_0', 1);
     if (set1_goddess.length < 2) {
-      set1_goddess = getPolysClose(color + '_goddess_0', 2);
+      set1_goddess = getPolysClose(side + '_goddess_0', 2);
     }
 
-    let set1 = getPolysClose(color + '_king_0', 1);
-    set1 = set1.concat(getPolysClose(color + '_king_1', 1));
-    set1 = set1.concat(getPolysClose(color + '_goddess_0', 1));
+    let set1 = getPolysClose(side + '_king_0', 1);
+    set1 = set1.concat(getPolysClose(side + '_king_1', 1));
+    set1 = set1.concat(getPolysClose(side + '_goddess_0', 1));
 
-    let set2 = getPolysClose(color + '_king_0', 2);
-    set2 = set2.concat(getPolysClose(color + '_goddess_0', 2));
-    set2 = set2.concat(getPolysClose(color + '_king_1', 2)).filter(x => set1.indexOf(x) === -1);
+    let set2 = getPolysClose(side + '_king_0', 2);
+    set2 = set2.concat(getPolysClose(side + '_goddess_0', 2));
+    set2 = set2.concat(getPolysClose(side + '_king_1', 2)).filter(x => set1.indexOf(x) === -1);
 
 
-    let set3 = getPolysClose(color + '_king_0', 3);
-    set3 = set3.concat(getPolysClose(color + '_goddess_0', 3));
-    set3 = set3.concat(getPolysClose(color + '_king_1', 3)).filter(x => set2.indexOf(x) === -1);
+    let set3 = getPolysClose(side + '_king_0', 3);
+    set3 = set3.concat(getPolysClose(side + '_goddess_0', 3));
+    set3 = set3.concat(getPolysClose(side + '_king_1', 3)).filter(x => set2.indexOf(x) === -1);
 
-    let set4 = getPolysClose(color + '_king_0', 4);
-    set4 = set4.concat(getPolysClose(color + '_goddess_0', 4));
-    set4 = set4.concat(getPolysClose(color + '_king_1', 4)).filter(x => set3.indexOf(x) === -1);
+    let set4 = getPolysClose(side + '_king_0', 4);
+    set4 = set4.concat(getPolysClose(side + '_goddess_0', 4));
+    set4 = set4.concat(getPolysClose(side + '_king_1', 4)).filter(x => set3.indexOf(x) === -1);
 
     set1_goddess = shuffleArray([...new Set(set1_goddess)]);
     set1 = shuffleArray([...new Set(set1)]);
@@ -240,7 +240,7 @@ function setUpRandomly() {
         while (gameState.board.allPolygons[set1_goddess[k]].isIn != 'empty'){
           k = k + 1;
         }
-        setPieceToPoly(color + '_trifoxes_' + i, set1_goddess[k]);
+        setPieceToPoly(side + '_trifoxes_' + i, set1_goddess[k]);
       }
     }
 
@@ -279,8 +279,8 @@ function setUpRandomly() {
       }
       let compteurBishop = 0;
       for (const c of colorFound){
-        bishopToColor[color + '_bishop_' + compteurBishop] = c;
-        allPiecesToBeSet.push(color + '_bishop_' + compteurBishop);
+        bishopToColor[side + '_bishop_' + compteurBishop] = c;
+        allPiecesToBeSet.push(side + '_bishop_' + compteurBishop);
         compteurBishop = compteurBishop + 1;
       }
     }
@@ -288,10 +288,10 @@ function setUpRandomly() {
 
 
     for (let i = 0; i < allPiecesDict['ghoul']; i++) {
-      allPiecesToBeSet.push(color + '_ghoul_' + i);
+      allPiecesToBeSet.push(side + '_ghoul_' + i);
     }
     for (let i = 0; i < allPiecesDict['siren']; i++) {
-      allPiecesToBeSet.push(color + '_siren_' + i);
+      allPiecesToBeSet.push(side + '_siren_' + i);
     }
     //console.log(allPiecesToBeSet.length + ' ' + allPiecesToBeSet);
     //console.log(setAll.length + ' ' + setAll);
@@ -304,8 +304,8 @@ function setUpRandomly() {
     }
 
     for (let i = 0; i < allPiecesDict['trifoxes']; i++) {
-      //console.log('||||||||||||| ' + JSON.stringify(gameState.board.allPieces[color + '_trifoxes_' + i]));
-      let c = gameState.board.allPolygons[gameState.board.allPieces[color + '_trifoxes_' + i].position].color;
+      //console.log('||||||||||||| ' + JSON.stringify(gameState.board.allPieces[side + '_trifoxes_' + i]));
+      let c = gameState.board.allPolygons[gameState.board.allPieces[side + '_trifoxes_' + i].position].color;
       trifoxesColorNumber[c] = trifoxesColorNumber[c] + 1;
     }
     //console.log('------------ ' + JSON.stringify(trifoxesColorNumber));

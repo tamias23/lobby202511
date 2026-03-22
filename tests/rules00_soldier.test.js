@@ -23,11 +23,11 @@ describe('Rules: Soldier and Trifoxes', () => {
     };
 
     board.allPieces = {
-      'white_soldier_0': { position: 'poly_1', color: 'white', type: 'soldier', canMove: 1 },
-      'white_soldier_1': { position: 'poly_2', color: 'white', type: 'soldier', canMove: 1 },
-      'white_goddess_0': { position: 'poly_3', color: 'white', type: 'goddess', canMove: 1 },
+      'white_soldier_0': { position: 'poly_1', side: 'white', type: 'soldier', canMove: 1 },
+      'white_soldier_1': { position: 'poly_2', side: 'white', type: 'soldier', canMove: 1 },
+      'white_goddess_0': { position: 'poly_3', side: 'white', type: 'goddess', canMove: 1 },
       
-      'yellow_trifoxes_0': { position: 'poly_13', color: 'yellow', type: 'trifoxes', canMove: 1 },
+      'yellow_trifoxes_0': { position: 'poly_13', side: 'yellow', type: 'trifoxes', canMove: 1 },
     };
   });
 

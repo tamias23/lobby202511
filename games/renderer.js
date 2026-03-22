@@ -23,7 +23,7 @@ export const renderer = {
           store.addCircle('circle_' + key);
           e.appendChild(myCircle);
         } else {
-          if (board.allPieces[board.allPolygons[key].isIn].color !== board.allPieces[state.piece].color && board.allPieces[board.allPolygons[key].isIn].type != 'trifoxes') {
+          if (board.allPieces[board.allPolygons[key].isIn].side !== board.allPieces[state.piece].side && board.allPieces[board.allPolygons[key].isIn].type != 'trifoxes') {
             if (
               board.allPieces[state.piece].type === 'king' ||
               board.allPieces[state.piece].type === 'goddess' ||

@@ -34,7 +34,7 @@ export function setSirensNeighbors() {
     if (board.allPieces[id].type === 'siren' && board.allPieces[id].position !== 'returned') {
       for (let k of board.allPolygons[board.allPieces[id].position].neighbors){
         if (board.allPolygons[k].isIn !== 'empty'){
-          if (board.allPieces[board.allPolygons[k].isIn].color !== board.allPieces[id].color) {
+          if (board.allPieces[board.allPolygons[k].isIn].side !== board.allPieces[id].side) {
             board.allPieces[board.allPolygons[k].isIn].canMove = 0;
           }
         }

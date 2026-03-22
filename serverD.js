@@ -242,14 +242,14 @@ ioGame.on('connection', (socket) => {
         case 'legalMoveA':
           // console.log('### legalMoveA myMessage = ' + JSON.stringify(myMessage))
           // console.log(myMessage['legalMoveA'].mySelectPieceId, '=>', myMessage['legalMoveA'].draggedOn);
-          //gameUtils.legalMoveA(myMessage['legalMoveA'].mySelectPieceId, myMessage['legalMoveA'].draggedOn);
+          // gameUtils.legalMoveA(myMessage['legalMoveA'].mySelectPieceId, myMessage['legalMoveA'].draggedOn);
           clockUtils.correctDelayAndBronstein(gameState, myMessage['timeInfo']);
           break;
 
         case 'legalMoveB':
           // console.log('### legalMoveB myMessage = ' + JSON.stringify(myMessage))
           // console.log(myMessage['legalMoveB'].mySelectPieceId, '=>', myMessage['legalMoveB'].draggedOn);
-          //gameUtils.legalMoveB(myMessage['legalMoveB'].mySelectPieceId, myMessage['legalMoveB'].draggedOn);
+          // gameUtils.legalMoveB(myMessage['legalMoveB'].mySelectPieceId, myMessage['legalMoveB'].draggedOn);
           clockUtils.correctDelayAndBronstein(gameState, myMessage['timeInfo']);
           break;
 

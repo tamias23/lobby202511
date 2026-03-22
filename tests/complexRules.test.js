@@ -16,9 +16,9 @@ beforeEach(() => {
   };
   
   board.allPieces = {
-    'white_king_0': { position: 'poly_1', color: 'white', type: 'king', canMove: 1 },
-    'yellow_soldier_0': { position: 'poly_2', color: 'yellow', type: 'soldier', canMove: 1 },
-    'white_siren_0': { position: 'poly_3', color: 'white', type: 'siren', canMove: 1 }
+    'white_king_0': { position: 'poly_1', side: 'white', type: 'king', canMove: 1 },
+    'yellow_soldier_0': { position: 'poly_2', side: 'yellow', type: 'soldier', canMove: 1 },
+    'white_siren_0': { position: 'poly_3', side: 'white', type: 'siren', canMove: 1 }
   };
 });
 

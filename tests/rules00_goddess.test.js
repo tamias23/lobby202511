@@ -18,7 +18,7 @@ describe('Rules: The Goddess', () => {
     };
 
     board.allPieces = {
-      'white_goddess_0': { position: 'poly_1', color: 'white', type: 'goddess', canMove: 1 }
+      'white_goddess_0': { position: 'poly_1', side: 'white', type: 'goddess', canMove: 1 }
     };
   });
 
