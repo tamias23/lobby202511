@@ -10,6 +10,8 @@ pub struct GameState {
     pub turn_counter: u32,
     pub is_new_turn: bool,
     pub moves_this_turn: u32,
+    pub locked_sequence_piece: Option<String>,
+    pub heroe_take_counter: u32,
 }
 
 impl GameState {
@@ -28,6 +30,8 @@ impl GameState {
             turn_counter: 0,
             is_new_turn: true,
             moves_this_turn: 0,
+            locked_sequence_piece: None,
+            heroe_take_counter: 0,
         }
     }
 
@@ -43,10 +47,12 @@ impl GameState {
         self.occupancy.get(poly).map(|id| self.board.pieces[id].piece_type.clone())
     }
 
-    pub fn get_neighbors(&self, poly: &str) -> Vec<String> {
-        self.board.polygons.get(poly)
-            .map(|p| if !p.neighbors.is_empty() { p.neighbors.clone() } else { p.neighbours.clone() })
-            .unwrap_or_default()
+    pub fn get_jump_neighbors(&self, poly: &str) -> Vec<String> {
+        self.board.polygons.get(poly).map(|p| p.neighbours.clone()).unwrap_or_default()
+    }
+
+    pub fn get_slide_neighbors(&self, poly: &str) -> Vec<String> {
+        self.board.polygons.get(poly).map(|p| p.neighbors.clone()).unwrap_or_default()
     }
 
     pub fn get_enemy_side(&self) -> Side {
@@ -54,29 +60,41 @@ impl GameState {
     }
 }
 
-// Implement movement physics for distances
-pub fn get_polys_within_distance(board: &BoardMap, start: &str, max_dist: usize) -> HashSet<String> {
+pub fn get_polys_within_distance_jump(board: &BoardMap, start: &str, max_dist: usize) -> HashSet<String> {
     let mut visited = HashSet::new();
     visited.insert(start.to_string());
-    
     let mut current_layer = vec![start.to_string()];
-    
     for _ in 0..max_dist {
         let mut next_layer = Vec::new();
         for poly in &current_layer {
             if let Some(p) = board.polygons.get(poly) {
-                let neighbors = if !p.neighbors.is_empty() { &p.neighbors } else { &p.neighbours };
-                for neighbor in neighbors {
-                    if visited.insert(neighbor.clone()) {
-                        next_layer.push(neighbor.clone());
-                    }
+                for neighbor in &p.neighbours {
+                    if visited.insert(neighbor.clone()) { next_layer.push(neighbor.clone()); }
                 }
             }
         }
         current_layer = next_layer;
     }
-    
-    visited.remove(start); // Remove origin
+    visited.remove(start);
+    visited
+}
+
+pub fn get_polys_within_distance_slide(board: &BoardMap, start: &str, max_dist: usize) -> HashSet<String> {
+    let mut visited = HashSet::new();
+    visited.insert(start.to_string());
+    let mut current_layer = vec![start.to_string()];
+    for _ in 0..max_dist {
+        let mut next_layer = Vec::new();
+        for poly in &current_layer {
+            if let Some(p) = board.polygons.get(poly) {
+                for neighbor in &p.neighbors {
+                    if visited.insert(neighbor.clone()) { next_layer.push(neighbor.clone()); }
+                }
+            }
+        }
+        current_layer = next_layer;
+    }
+    visited.remove(start);
     visited
 }
 
@@ -88,6 +106,13 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
 
     if piece.position == "graveyard" {
         return vec![]; // Dead
+    }
+
+    // Sequence locking enforcement
+    if let Some(locked_id) = &state.locked_sequence_piece {
+        if locked_id != piece_id {
+            return vec![]; // Frozen mathematically preventing interactions explicitly
+        }
     }
 
     if piece.position == "returned" {
@@ -108,7 +133,7 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
                     valid = true;
                 } else {
                     for m_poly in &friendly_mages_polys {
-                        if state.get_neighbors(m_poly).contains(poly_id) {
+                        if state.get_jump_neighbors(m_poly).contains(poly_id) || state.get_slide_neighbors(m_poly).contains(poly_id) {
                             valid = true;
                             break;
                         }
@@ -118,7 +143,7 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
                 if valid {
                     if piece.piece_type == PieceType::Bishop || piece.piece_type == PieceType::Mage {
                         let mut enemy_adj = false;
-                        for n in state.get_neighbors(poly_id) {
+                        for n in state.get_jump_neighbors(poly_id).into_iter().chain(state.get_slide_neighbors(poly_id).into_iter()) {
                             if let Some(s) = state.get_occupant_side(&n) {
                                 if s != piece.side { enemy_adj = true; break; }
                             }
@@ -136,9 +161,9 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
 
     let start = &piece.position;
     
-    // Siren Pin check
+    // Siren Pin check - Siren pin evaluates using jump_neighbors explicitly
     if piece.position != "returned" && piece.position != "graveyard" {
-        for n in state.get_neighbors(start) {
+        for n in state.get_jump_neighbors(start) {
             if let Some(s) = state.get_occupant_side(&n) {
                 if s != piece.side && state.get_occupant_type(&n) == Some(PieceType::Siren) {
                     return vec![]; // Pinned!
@@ -151,11 +176,11 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
 
     match piece.piece_type {
         PieceType::Goddess => {
-            targets = get_polys_within_distance(&state.board, start, 2);
+            targets = get_polys_within_distance_jump(&state.board, start, 2);
         },
         PieceType::Mage => {
             let start_color = &state.board.polygons[start].color;
-            for t in get_polys_within_distance(&state.board, start, 3) {
+            for t in get_polys_within_distance_jump(&state.board, start, 3) {
                 if state.board.polygons[&t].color != *start_color {
                     targets.insert(t);
                 }
@@ -163,17 +188,19 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
         },
         PieceType::Bishop => {
             let start_color = &state.board.polygons[start].color;
-            for t in get_polys_within_distance(&state.board, start, 4) {
+            for t in get_polys_within_distance_jump(&state.board, start, 4) {
                 if state.board.polygons[&t].color == *start_color {
                     targets.insert(t);
                 }
             }
         },
         PieceType::Heroe => {
-            targets = get_polys_within_distance(&state.board, start, 3);
+            if state.heroe_take_counter < 2 {
+                targets = get_polys_within_distance_jump(&state.board, start, 3);
+            }
         },
         PieceType::Siren => {
-            targets = get_polys_within_distance(&state.board, start, 2);
+            targets = get_polys_within_distance_jump(&state.board, start, 2);
         },
         PieceType::Soldier | PieceType::Berserker => {
             // Simplified soldier movement: 1 step, or chain over friendly pieces & empty matching-color polys
@@ -184,15 +211,15 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
             let chosen_color = state.color_chosen.get(&state.turn).cloned();
             
             while let Some(current) = explore.pop() {
-                for n in state.get_neighbors(&current) {
+                for n in state.get_slide_neighbors(&current) {
                     if state.is_occupied(&n) {
                         if state.get_occupant_side(&n) == Some(piece.side) && state.get_occupant_type(&n) != Some(PieceType::Berserker) {
                             if friendly_hops.insert(n.clone()) { explore.push(n.clone()); }
                         }
                     } else if Some(state.board.polygons[&n].color.clone()) == chosen_color {
-                        // Empty polygon matching chosen color. Ensure it isn't blocked by Siren.
+                        // Empty polygon matching chosen color. Ensure it isn't blocked by Siren (evaluating jump topology).
                         let mut siren_pinned = false;
-                        for nn in state.get_neighbors(&n) {
+                        for nn in state.get_jump_neighbors(&n) {
                             if let Some(s) = state.get_occupant_side(&nn) {
                                 if s != piece.side && state.get_occupant_type(&nn) == Some(PieceType::Siren) {
                                     siren_pinned = true; break;
@@ -209,7 +236,7 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
             }
             
             for hop in friendly_hops {
-                for n in state.get_neighbors(&hop) {
+                for n in state.get_slide_neighbors(&hop) {
                     targets.insert(n);
                 }
             }
@@ -222,13 +249,13 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
             visited.insert(start.clone());
 
             while let Some((curr, depth)) = explore.pop() {
-                for n in state.get_neighbors(&curr) {
+                for n in state.get_slide_neighbors(&curr) {
                     targets.insert(n.clone());
                     if depth < 2 {
                         if !state.is_occupied(&n) {
                             if Some(state.board.polygons[&n].color.clone()) != chosen_color {
                                 let mut siren_pinned = false;
-                                for nn in state.get_neighbors(&n) {
+                                for nn in state.get_jump_neighbors(&n) {
                                     if let Some(s) = state.get_occupant_side(&nn) {
                                         if s != piece.side && state.get_occupant_type(&nn) == Some(PieceType::Siren) {
                                             siren_pinned = true; break;
@@ -253,6 +280,9 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
         if t == start || state.get_occupant_side(t) == Some(piece.side.clone()) { return false; }
         if state.get_occupant_type(t) == Some(PieceType::Berserker) {
             return false;
+        }
+        if piece.piece_type == PieceType::Siren {
+            if state.is_occupied(t) { return false; } // Forbid completely capturing enemies directly for Siren
         }
         true
     }).collect()
@@ -279,7 +309,7 @@ pub fn apply_move(state: &mut GameState, piece_id: &str, target_poly: &str) -> V
     // Process AoE Capabilities
     if piece_type == PieceType::Bishop {
         // Destroy all adjacent enemy pieces except Berserker
-        for n in state.get_neighbors(target_poly) {
+        for n in state.get_jump_neighbors(target_poly).into_iter().chain(state.get_slide_neighbors(target_poly).into_iter()) {
             if let Some(target_id) = state.occupancy.get(&n).cloned() {
                 let neighbor_piece = state.board.pieces.get(&target_id).unwrap();
                 if neighbor_piece.side != piece_side && neighbor_piece.piece_type != PieceType::Berserker {
@@ -293,7 +323,7 @@ pub fn apply_move(state: &mut GameState, piece_id: &str, target_poly: &str) -> V
     } else if piece_type == PieceType::Mage && !captured_types.is_empty() {
         // Destroy ALL adjacent pieces matching the SAME TEAM as the defender except Berserker.
         let target_side = if piece_side == Side::White { Side::Black } else { Side::White };
-        for n in state.get_neighbors(target_poly) {
+        for n in state.get_jump_neighbors(target_poly).into_iter().chain(state.get_slide_neighbors(target_poly).into_iter()) {
             if let Some(target_id) = state.occupancy.get(&n).cloned() {
                 let neighbor_piece = state.board.pieces.get(&target_id).unwrap();
                 if neighbor_piece.side == target_side && neighbor_piece.piece_type != PieceType::Berserker {
@@ -426,11 +456,11 @@ pub fn setup_random_board(state: &mut GameState) {
             h0_poly = p_edges[1].clone();
             h1_poly = p_edges[2].clone();
             
-            let h0_near_6 = get_polys_within_distance(&state.board, &h0_poly, 6);
+            let h0_near_6 = get_polys_within_distance_jump(&state.board, &h0_poly, 6);
             if h0_near_6.contains(&h1_poly) { continue; }
             
-            let g_near_3 = get_polys_within_distance(&state.board, &g_poly, 3);
-            let g_near_6 = get_polys_within_distance(&state.board, &g_poly, 6);
+            let g_near_3 = get_polys_within_distance_jump(&state.board, &g_poly, 3);
+            let g_near_6 = get_polys_within_distance_jump(&state.board, &g_poly, 6);
             
             if g_near_3.contains(&h0_poly) || !g_near_6.contains(&h0_poly) { continue; }
             if g_near_3.contains(&h1_poly) || !g_near_6.contains(&h1_poly) { continue; }
@@ -452,9 +482,9 @@ pub fn setup_random_board(state: &mut GameState) {
         }
 
         // B. Protectors (Berserkers)
-        let mut set1_goddess: Vec<String> = get_polys_within_distance(&state.board, &g_poly, 1).into_iter().collect();
+        let mut set1_goddess: Vec<String> = get_polys_within_distance_jump(&state.board, &g_poly, 1).into_iter().collect();
         if set1_goddess.len() < berserker_ids.len() {
-            set1_goddess = get_polys_within_distance(&state.board, &g_poly, 2).into_iter().collect();
+            set1_goddess = get_polys_within_distance_jump(&state.board, &g_poly, 2).into_iter().collect();
         }
         set1_goddess.shuffle(&mut rng);
         
@@ -471,12 +501,12 @@ pub fn setup_random_board(state: &mut GameState) {
         }
         
         // Generate Sets up to 4 dist
-        let set1: Vec<String> = get_polys_within_distance(&state.board, &g_poly, 1).union(&get_polys_within_distance(&state.board, &h0_poly, 1)).cloned().collect::<HashSet<_>>().union(&get_polys_within_distance(&state.board, &h1_poly, 1)).cloned().collect();
-        let set2: Vec<String> = get_polys_within_distance(&state.board, &g_poly, 2).union(&get_polys_within_distance(&state.board, &h0_poly, 2)).cloned().collect::<HashSet<_>>().union(&get_polys_within_distance(&state.board, &h1_poly, 2)).cloned().collect();
-        let set3: Vec<String> = get_polys_within_distance(&state.board, &g_poly, 3).union(&get_polys_within_distance(&state.board, &h0_poly, 3)).cloned().collect::<HashSet<_>>().union(&get_polys_within_distance(&state.board, &h1_poly, 3)).cloned().collect();
-        let set4: Vec<String> = get_polys_within_distance(&state.board, &g_poly, 4).union(&get_polys_within_distance(&state.board, &h0_poly, 4)).cloned().collect::<HashSet<_>>().union(&get_polys_within_distance(&state.board, &h1_poly, 4)).cloned().collect();
+        let set1: Vec<String> = get_polys_within_distance_jump(&state.board, &g_poly, 1).union(&get_polys_within_distance_jump(&state.board, &h0_poly, 1)).cloned().collect::<HashSet<_>>().union(&get_polys_within_distance_jump(&state.board, &h1_poly, 1)).cloned().collect();
+        let set2: Vec<String> = get_polys_within_distance_jump(&state.board, &g_poly, 2).union(&get_polys_within_distance_jump(&state.board, &h0_poly, 2)).cloned().collect::<HashSet<_>>().union(&get_polys_within_distance_jump(&state.board, &h1_poly, 2)).cloned().collect();
+        let set3: Vec<String> = get_polys_within_distance_jump(&state.board, &g_poly, 3).union(&get_polys_within_distance_jump(&state.board, &h0_poly, 3)).cloned().collect::<HashSet<_>>().union(&get_polys_within_distance_jump(&state.board, &h1_poly, 3)).cloned().collect();
+        let set4: Vec<String> = get_polys_within_distance_jump(&state.board, &g_poly, 4).union(&get_polys_within_distance_jump(&state.board, &h0_poly, 4)).cloned().collect::<HashSet<_>>().union(&get_polys_within_distance_jump(&state.board, &h1_poly, 4)).cloned().collect();
 
-        let mut set_all = Vec::new();
+        let mut set_all: Vec<String> = Vec::new();
         for s in vec![set1, set2, set3, set4] {
             let mut shuf = s.clone();
             shuf.shuffle(&mut rng);
@@ -550,10 +580,12 @@ pub fn setup_random_board(state: &mut GameState) {
 /// Executes a completely random physically legal turn. Returns `true` if a Goddess was taken.
 pub fn perform_random_turn(state: &mut GameState) -> bool {
     let mut rng = rand::rng();
-    let current_turn = state.turn;
     
     if state.is_new_turn {
         state.moves_this_turn = 0;
+        
+        let current_turn = state.turn;
+
         let mut color_set = HashSet::new();
         for p in state.board.polygons.values() {
             color_set.insert(p.color.clone());
@@ -588,15 +620,23 @@ pub fn perform_random_turn(state: &mut GameState) -> bool {
             // Unplayable turn; skip sequentially to force the simulation forward organically
             state.turn_counter += 1;
             state.turn = state.get_enemy_side();
+            state.color_chosen.clear();
             state.is_new_turn = true;
+            state.locked_sequence_piece = None;
+            state.heroe_take_counter = 0;
             return false;
         }
         
         let chosen = valid_colors.into_iter().choose(&mut rng).unwrap();
         state.color_chosen.insert(current_turn, chosen.clone());
         state.is_new_turn = false;
+        
+        // Force the engine to explicitly broadcast the UI palette update immediately before
+        // computing the actual physical layout movement tick on the next synchronous frame!
+        return false;
     }
 
+    let current_turn = state.turn;
     let chosen_color = state.color_chosen.get(&current_turn).unwrap().clone();
     
     let mut all_moves = Vec::new();
@@ -622,25 +662,68 @@ pub fn perform_random_turn(state: &mut GameState) -> bool {
         // AI optimally depleted all combinatoric pathways. Forcing break sequence!
         state.turn_counter += 1;
         state.turn = state.get_enemy_side();
+        state.color_chosen.clear();
         state.is_new_turn = true;
+        state.locked_sequence_piece = None;
+        state.heroe_take_counter = 0;
         return false;
+    }
+    
+    if let Some(locked_id) = &state.locked_sequence_piece {
+        all_moves.push((locked_id.clone(), "PASS_TURN".to_string()));
     }
 
     let (chosen_piece, chosen_target) = all_moves.into_iter().choose(&mut rng).unwrap();
+    if chosen_target == "PASS_TURN" {
+        state.turn_counter += 1;
+        state.turn = state.get_enemy_side();
+        state.color_chosen.clear();
+        state.is_new_turn = true;
+        state.locked_sequence_piece = None;
+        state.heroe_take_counter = 0;
+        return false;
+    }
     let target_color = state.board.polygons.get(&chosen_target).unwrap().color.clone();
     let chosen_piece_tmp = chosen_piece.clone();     // Binding helper since apply_move drops it
-    let is_heroe = state.board.pieces[&chosen_piece_tmp].piece_type == PieceType::Heroe;
+    
+    let piece_type = state.board.pieces[&chosen_piece_tmp].piece_type.clone();
+    let was_returned = state.board.pieces[&chosen_piece_tmp].position == "returned";
+    let is_heroe = piece_type == PieceType::Heroe;
+    let is_chainable = piece_type == PieceType::Soldier || piece_type == PieceType::Berserker || piece_type == PieceType::Ghoul;
+    
     let captured = apply_move(state, &chosen_piece_tmp, &chosen_target);
     state.moves_this_turn += 1;
     
     // Explicit condition evaluating formal sequence breaking checks
     if target_color == chosen_color {
-        if is_heroe && !captured.is_empty() {
-            // Heroe capture grants additional action sequence! Ignore explicit turnover.
+        if was_returned {
+            state.turn_counter += 1;
+            state.turn = state.get_enemy_side();
+            state.color_chosen.clear();
+            state.is_new_turn = true;
+            state.locked_sequence_piece = None;
+            state.heroe_take_counter = 0;
+        } else if is_heroe && !captured.is_empty() && state.heroe_take_counter == 0 {
+            state.heroe_take_counter += 1;
+            state.locked_sequence_piece = Some(chosen_piece_tmp.clone());
+        } else if is_chainable {
+            state.locked_sequence_piece = Some(chosen_piece_tmp.clone());
         } else {
             state.turn_counter += 1;
             state.turn = state.get_enemy_side();
+            state.color_chosen.clear();
             state.is_new_turn = true;
+            state.locked_sequence_piece = None;
+            state.heroe_take_counter = 0;
+        }
+    } else {
+        if is_heroe && !captured.is_empty() && state.heroe_take_counter == 0 && !was_returned {
+            state.heroe_take_counter += 1;
+            state.locked_sequence_piece = Some(chosen_piece_tmp.clone());
+        } else if is_chainable && !was_returned {
+            state.locked_sequence_piece = Some(chosen_piece_tmp.clone());
+        } else {
+            state.locked_sequence_piece = None;
         }
     }
     

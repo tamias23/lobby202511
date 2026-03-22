@@ -3,6 +3,9 @@ pub mod parser;
 pub mod engine;
 pub mod server;
 
+#[cfg(test)]
+pub mod rules_tests;
+
 #[tokio::main]
 async fn main() {
     let args: Vec<String> = std::env::args().collect();

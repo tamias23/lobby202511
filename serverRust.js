@@ -21,8 +21,8 @@ const randomFile = files[Math.floor(Math.random() * files.length)];
 const boardPath = path.join(dataDir, randomFile);
 
 // Configure delay via CLI argument or default to 1300ms
-const delay = process.argv[2] || "1300";
-const maxTurns = process.argv[3] || "100";
+const delay = process.argv[2] || "4000";
+const maxTurns = process.argv[3] || "200";
 
 console.log('==============================================');
 console.log('🚀 Launching Native Rust Backend Simulator...');
