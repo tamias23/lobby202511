@@ -671,7 +671,15 @@ pub fn perform_random_turn(state: &mut GameState) -> bool {
         all_moves.push((locked_id.clone(), "PASS_TURN".to_string()));
     }
 
-    let (chosen_piece, chosen_target) = all_moves.into_iter().choose(&mut rng).unwrap();
+    // Group moves by piece to prevent combinatorial explosion skew from 'returned' deployments!
+    let mut moves_by_piece: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+    for (p, t) in all_moves {
+        moves_by_piece.entry(p).or_default().push(t);
+    }
+    
+    let chosen_piece = moves_by_piece.keys().choose(&mut rng).unwrap().clone();
+    let chosen_target = moves_by_piece[&chosen_piece].iter().choose(&mut rng).unwrap().clone();
+    
     if chosen_target == "PASS_TURN" {
         state.turn_counter += 1;
         state.turn = state.get_enemy_side();
@@ -682,21 +690,21 @@ pub fn perform_random_turn(state: &mut GameState) -> bool {
         return false;
     }
     
+    let was_returned = state.board.pieces[&chosen_piece].position == "returned";
     let captured = apply_move(state, &chosen_piece, &chosen_target);
     state.moves_this_turn += 1;
     let goddess_captured = captured.contains(&PieceType::Goddess);
     
-    apply_move_turnover(state, &chosen_piece, &chosen_target, goddess_captured, captured.is_empty())
+    apply_move_turnover(state, &chosen_piece, &chosen_target, goddess_captured, captured.is_empty(), was_returned)
 }
 
 /// Abstracted Turnover Application explicitly processing sequence breaking & logic formally after an active application.
-pub fn apply_move_turnover(state: &mut GameState, chosen_piece: &str, chosen_target: &str, goddess_captured: bool, captured_is_empty: bool) -> bool {
+pub fn apply_move_turnover(state: &mut GameState, chosen_piece: &str, chosen_target: &str, goddess_captured: bool, captured_is_empty: bool, was_returned: bool) -> bool {
     let target_color = state.board.polygons.get(chosen_target).unwrap().color.clone();
     let current_turn = state.turn;
     let chosen_color = state.color_chosen.get(&current_turn).unwrap().clone();
     
     let piece_type = state.board.pieces[chosen_piece].piece_type.clone();
-    let was_returned = state.board.pieces[chosen_piece].position == "returned";
     let is_heroe = piece_type == PieceType::Heroe;
     let is_chainable = piece_type == PieceType::Soldier || piece_type == PieceType::Berserker;
     

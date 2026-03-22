@@ -406,7 +406,7 @@ mod tests {
         // Simulating the AI randomly picking White's Soldier to capture Black's Soldier on 'yellow' (which is NOT 'orange').
         let captured = crate::engine::apply_move(&mut gs, "w_soldier", "p2");
         let goddess_captured = captured.contains(&PieceType::Goddess);
-        let _ended_turn_early = crate::engine::apply_move_turnover(&mut gs, "w_soldier", "p2", goddess_captured, captured.is_empty());
+        let _ended_turn_early = crate::engine::apply_move_turnover(&mut gs, "w_soldier", "p2", goddess_captured, captured.is_empty(), false);
         
         // Assertions: 
         // 1. The Soldier's personal chaining lock IS totally broken off natively because it landed on yellow!
