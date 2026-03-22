@@ -71,7 +71,7 @@ Pieces capture enemy pieces by moving onto an occupied polygon. Each piece has u
 
 ### The Berserker
 - **Movement:** Behaves similarly to the Soldier (they can also chain their moves through friendly pieces and empty polygons of the chosen color).
-- **Blocheroe & Invulnerability:** Acts as a heavy barricade. Enemy Soldier and Berserker are strictly forbidden from moving into or capturing them. Furthermore, Berserker are entirely **invulnerable to Area of Effect attacks**—they cannot be destroyed by a Mage's chain attack or a Bishop's adjacent blast.
+- **Invulnerability:** Acts as a heavy barricade. All pieces are strictly forbidden from moving into or capturing them. Furthermore, Berserkers are entirely **invulnerable to Area of Effect attacks**—they cannot be destroyed by a Mage's chain attack or a Bishop's adjacent blast.
 
 ## 3. Supplementary Mechanics
 - **Entering / Re-entering the Board:** A piece that is currently off the board (destroyed or unused) can be placed back onto the board during a player's turn. There are exactly two ways a piece can enter:

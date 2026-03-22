@@ -472,5 +472,15 @@ export function getListOfPossibleTargets(board, boardstate, selectedPieceId) {
   toBeReturned = [...new Set(toBeReturned)];
   toBeReturned = toBeReturned.filter(x => x !== selectedPoly);
 
+  // Global Berserker Invulnerability: No piece may capture a berserker natively.
+  toBeReturned = toBeReturned.filter(n => {
+    if (board.allPolygons[n].isIn !== 'empty') {
+      if (board.allPieces[board.allPolygons[n].isIn].type === 'berserker') {
+        return false;
+      }
+    }
+    return true;
+  });
+
   return toBeReturned;
 }

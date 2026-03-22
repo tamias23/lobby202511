@@ -18,6 +18,12 @@ async fn main() {
         500
     };
     
+    let max_turns = if args.len() > 3 {
+        args[3].parse().unwrap_or(100)
+    } else {
+        100
+    };
+    
     println!("Loading board layout from {}...", path);
     let board = match parser::load_board(path) {
         Ok(b) => b,
@@ -28,5 +34,5 @@ async fn main() {
     };
     
     println!("Board parsed perfectly. Initializing core engine simulator...");
-    server::start_server(board, delay_ms).await;
+    server::start_server(board, delay_ms, max_turns).await;
 }

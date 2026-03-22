@@ -14,15 +14,17 @@ use crate::engine::{GameState, perform_random_turn, setup_random_board};
 pub struct AppState {
     pub game_state: Mutex<GameState>,
     pub delay_ms: u64,
+    pub max_turns: u32,
 }
 
-pub async fn start_server(initial_board: BoardMap, delay_ms: u64) {
+pub async fn start_server(initial_board: BoardMap, delay_ms: u64, max_turns: u32) {
     let mut state = GameState::new(initial_board);
     setup_random_board(&mut state);
 
     let shared_state = Arc::new(AppState {
         game_state: Mutex::new(state),
         delay_ms,
+        max_turns,
     });
 
     let app = Router::new()
@@ -52,6 +54,8 @@ struct SocketPayload<'a> {
     board: &'a crate::models::BoardMap,
     chosen_color: Option<String>,
     turn: crate::models::Side,
+    turn_counter: u32,
+    moves_this_turn: u32,
 }
 
 async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
@@ -62,7 +66,9 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
         let payload = SocketPayload {
             board: &gs.board,
             chosen_color: c,
-            turn: gs.turn,
+            turn: gs.turn.clone(),
+            turn_counter: gs.turn_counter,
+            moves_this_turn: gs.moves_this_turn,
         };
         let json = serde_json::to_string(&payload).unwrap();
         if socket.send(Message::Text(json.into())).await.is_err() {
@@ -77,12 +83,14 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
         let (board_json, delay, won, drawn) = {
             let mut gs = state.game_state.lock().await;
             let won = perform_random_turn(&mut gs);
-            let drawn = gs.turn_counter >= 60;
+            let drawn = gs.turn_counter >= state.max_turns;
             let c = gs.color_chosen.get(&gs.turn).cloned();
             let payload = SocketPayload {
                 board: &gs.board,
                 chosen_color: c,
-                turn: gs.turn,
+                turn: gs.turn.clone(),
+                turn_counter: gs.turn_counter,
+                moves_this_turn: gs.moves_this_turn,
             };
             let json = serde_json::to_string(&payload).unwrap();
             (json, state.delay_ms, won, drawn)
@@ -99,7 +107,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
         }
         
         if drawn {
-            println!("Simulation ended: Draw reached after 60 turns (30 by White, 30 by Black)!");
+            println!("Simulation ended: Draw reached after {} turns ({} by White, {} by Black)!", state.max_turns, state.max_turns/2, state.max_turns/2);
             break;
         }
 
