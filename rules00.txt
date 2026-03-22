@@ -1,0 +1,78 @@
+# Game Rules: Lobby 202511
+
+Based on the game's JavaScript codebase, here are the comprehensive rules for this two-player polygon-based board game.
+
+## General Information
+- **Players:** 2 players (White vs. Yellow).
+- **The Board:** The game is played on a board composed of connected, colored polygons (e.g., white, yellow, black, orange). 
+- **The Core Turn System:** The turn-based loop is completely driven by the board's terrain colors.
+  1. At the start of their turn, a player must **choose a color**.
+  2. The player can **only** pick up and move pieces that are currently standing on polygons matching that exact chosen color.
+  3. Moving a piece (or multiple pieces) to polygons of a *different* unchosen color does NOT end the turn. The player can continue moving other valid pieces.
+  4. The turn **immediately ends** if any piece completes a movement by landing exactly on a polygon of the chosen color (with an exception for Soldiers/Trifoxes, which lock the player into continuing to move only that piece until they manually click End Turn or land elsewhere).
+
+## The Pieces & Quantities
+Each player commands an army of 37 pieces:
+- **1 Goddess**
+- **2 Kings**
+- **4 Bishops**
+- **1 Mage**
+- **9 Soldiers**
+- **9 Ghouls**
+- **9 Sirens**
+- **2 Trifoxes**
+
+## 1. Setup Phase
+The game begins with an empty board and pieces are placed sequentially:
+1. **Goddess & Kings:** The White player uses the top edge polygons, and the Yellow player uses the bottom edge polygons. The Goddess is placed on a random edge polygon. The two Kings must be placed exactly 2 polygons away from the Goddess (and not adjacent to each other).
+2. **Trifoxes:** Must be placed exactly 1 polygon away from the Goddess.
+3. **Bishops:** Must be placed such that each of the four Bishops starts on a polygon of a different color.
+4. **Other Pieces:** Soldiers, Ghouls, Sirens, and the Mage are populated onto the remaining empty polygons close to the Kings and Goddess (spreading out 1 to 4 polygons away), following specific color-matching constraints.
+
+## 2. Movement & Capture Rules
+Pieces capture enemy pieces by moving onto an occupied polygon. Each piece has unique movement algorithms and ranges:
+
+### The Goddess
+- **Movement:** Can leap up to **2 polygons** away.
+  
+### The King
+- **Movement:** Can leap up to **3 polygons** away.
+- **Special Limitation:** A King is able to jump one additional time if he captures an enemy piece. If he takes, he can play again, exactly once.
+
+### The Bishop
+- **Movement:** Can leap up to **4 polygons** away.
+- **Special Limitation:** A Bishop can only land on polygons that are the **same color** as the polygon it started its move on. It is color-bound.
+- **Area of Effect:** When a Bishop moves to an empty polygon, it emits an attack that destroys all adjacent enemy pieces (except Trifoxes).
+
+### The Mage
+- **Movement:** Can leap up to **3 polygons** away.
+- **Special Limitation:** Opposite to the Bishop, a Mage **cannot** land on a polygon of the same color as the one it started on. 
+- **Area of Effect (Chain Attack):** When the Mage lands directly on an occupied polygon to capture a piece, it destroys both the target piece AND any adjacent pieces belonging to the SAME TEAM (White or Yellow) as the target (except Trifoxes).
+
+### The Siren
+- **Movement:** Can leap up to **2 polygons** away.
+- **Passive Aura:** Her most powerful attribute is an aura effect. Any enemy piece that stands on a polygon adjacent to a Siren is **pinned** (its `canMove` flag is set to 0), stripping it of its ability to move until the Siren vacates the area or is captured.
+
+### The Ghoul
+- **Movement:** Can move **1 polygon** away to capture or move to an empty space.
+- **Chain Jumping:** If the adjacent polygon is empty, has no enemy Sirens bordering it, and is **not** the player's "chosen color" for the turn, the Ghoul can chain jumps up to **3 polygons** away in a single move.
+
+### The Soldier
+- **Movement:** Can move **1 polygon** away.
+- **Phalanx Movement:** Soldiers can chain their movements by passing through :
+  1. Contiguous polygons occupied by **friendly pieces**.
+  2. Empty polygons that match the player's **"chosen color"** for the turn (provided those specific polygons are not adjacent to an enemy Siren).
+, allowing them to travel vast distances across the board.
+- **Restriction:** They cannot pass through enemy Trifoxes or paths blocked by enemy Sirens.
+
+### The Trifoxes
+- **Movement:** Behaves similarly to the Soldier (they can also chain their moves through friendly pieces and empty polygons of the chosen color).
+- **Blocking & Invulnerability:** Acts as a heavy barricade. Enemy Soldiers and Trifoxes are strictly forbidden from moving into or capturing them. Furthermore, Trifoxes are entirely **invulnerable to Area of Effect attacks**—they cannot be destroyed by a Mage's chain attack or a Bishop's adjacent blast.
+
+## 3. Supplementary Mechanics
+- **Entering / Re-entering the Board:** A piece that is currently off the board (destroyed or unused) can be placed back onto the board during a player's turn. There are exactly two ways a piece can enter:
+  1. It can be placed on any **empty polygon** that matches the player's **"chosen color"** for the turn. (This immediately ends the turn).
+  2. It can be placed on any empty polygon adjacent to a **friendly Mage**. (This does not end the turn unless it is placed on the chosen color).
+  *Special Exception:* A **Bishop** or **Mage** is restricted when entering play. It cannot be placed on a polygon that is adjacent to an enemy piece, regardless of which of the two placement methods is used.
+- **Color Selection:** The first decision in a turn is the choice of a terrain color. All valid piece pickups and the `endOfTurn` triggers revolve entirely around this selected color.
+
