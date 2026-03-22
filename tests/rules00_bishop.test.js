@@ -12,7 +12,7 @@ jest.mock('../games/boardUtils.js', () => ({
     // simplified mock that just calls the mocked removePieceFromGame
     const { board } = require('../games/state.js');
     for (const p of board.allPolygons[idPoly].neighbors) {
-      if (board.allPolygons[p].isIn !== 'empty' && board.allPieces[board.allPolygons[p].isIn].side !== side && board.allPieces[board.allPolygons[p].isIn].type !== 'trifoxes') {
+      if (board.allPolygons[p].isIn !== 'empty' && board.allPieces[board.allPolygons[p].isIn].side !== side && board.allPieces[board.allPolygons[p].isIn].type !== 'berserker') {
         require('../games/boardUtils.js').removePieceFromGame(board.allPolygons[p].isIn);
       }
     }

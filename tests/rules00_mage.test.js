@@ -16,7 +16,7 @@ jest.mock('../games/boardUtils.js', () => ({
     require('../games/boardUtils.js').removePieceFromGame(target);
     for (let currentPoly of board.allPolygons[idPoly].neighbors) {
       let currentPiece = board.allPolygons[currentPoly].isIn;
-      if (currentPiece !== 'empty' && board.allPieces[currentPiece].side === targetSide && board.allPieces[currentPiece].type !== 'trifoxes') {
+      if (currentPiece !== 'empty' && board.allPieces[currentPiece].side === targetSide && board.allPieces[currentPiece].type !== 'berserker') {
         require('../games/boardUtils.js').removePieceFromGame(currentPiece);
       }
     }
@@ -37,14 +37,14 @@ describe('Rules: The Mage', () => {
       'poly_6': { neighbors: ['poly_5'], neighbours: ['poly_5'], color: 'white', isIn: 'black_soldier_1', center: [50, 0] },
       'poly_7': { neighbors: ['poly_5'], neighbours: ['poly_5'], color: 'yellow', isIn: 'empty', center: [60, 0] },
       'poly_8': { neighbors: ['poly_5'], neighbours: ['poly_5'], color: 'black', isIn: 'white_soldier_0', center: [40, 10] },
-      'poly_9': { neighbors: ['poly_5'], neighbours: ['poly_5'], color: 'orange', isIn: 'black_trifoxes_0', center: [40, 20] },
+      'poly_9': { neighbors: ['poly_5'], neighbours: ['poly_5'], color: 'orange', isIn: 'black_berserker_0', center: [40, 20] },
     };
 
     board.allPieces = {
       'white_mage_0': { position: 'poly_1', side: 'white', type: 'mage', canMove: 1 },
       'black_soldier_0': { position: 'poly_5', side : 'black', type: 'soldier', canMove: 1 },
       'black_soldier_1': { position: 'poly_6', side : 'black', type: 'soldier', canMove: 1 },
-      'black_trifoxes_0': { position: 'poly_9', side : 'black', type: 'trifoxes', canMove: 1 },
+      'black_berserker_0': { position: 'poly_9', side : 'black', type: 'berserker', canMove: 1 },
       'white_soldier_0': { position: 'poly_8', side: 'white', type: 'soldier', canMove: 1 },
     };
   });
@@ -72,10 +72,10 @@ describe('Rules: The Mage', () => {
     expect(removePieceFromGame).not.toHaveBeenCalledWith('white_soldier_0'); // Adjacent white piece is safe
   });
 
-  test('Mage Chain Attack does NOT destroy Trifoxes (Test 5)', () => {
+  test('Mage Chain Attack does NOT destroy Berserker (Test 5)', () => {
     const { removePieceFromGame, removeConnex } = require('../games/boardUtils.js');
     removePieceFromGame.mockClear();
     removeConnex('poly_5'); // Target is yellow poly_5 
-    expect(removePieceFromGame).not.toHaveBeenCalledWith('black_trifoxes_0'); // Adjacent yellow trifox is safe
+    expect(removePieceFromGame).not.toHaveBeenCalledWith('black_berserker_0'); // Adjacent yellow berserker is safe
   });
 });

@@ -23,11 +23,11 @@ export const renderer = {
           store.addCircle('circle_' + key);
           e.appendChild(myCircle);
         } else {
-          if (board.allPieces[board.allPolygons[key].isIn].side !== board.allPieces[state.piece].side && board.allPieces[board.allPolygons[key].isIn].type != 'trifoxes') {
+          if (board.allPieces[board.allPolygons[key].isIn].side !== board.allPieces[state.piece].side && board.allPieces[board.allPolygons[key].isIn].type != 'berserker') {
             if (
               board.allPieces[state.piece].type === 'heroe' ||
               board.allPieces[state.piece].type === 'goddess' ||
-              board.allPieces[state.piece].type === 'trifoxes'
+              board.allPieces[state.piece].type === 'berserker'
             ) {
               let e = document.getElementById(key);
               let myCircle = document.createElementNS(ns, 'circle');

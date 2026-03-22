@@ -120,7 +120,7 @@ export function removePieceFromGame(id) {
 export function removeAdjacent(idPoly, color) {
   for (let k of board.allPolygons[idPoly].neighbors) {
     if (board.allPolygons[k].isIn !== 'empty') {
-      if (board.allPieces[board.allPolygons[k].isIn].side !== color && board.allPieces[board.allPolygons[k].isIn].type !== 'trifoxes') {
+      if (board.allPieces[board.allPolygons[k].isIn].side !== color && board.allPieces[board.allPolygons[k].isIn].type !== 'berserker') {
         removePieceFromGame(board.allPolygons[k].isIn);
       }
     }
@@ -133,7 +133,7 @@ export function removeConnex(idPoly) {
 
   let popped = toBeChecked.pop();
   if (board.allPolygons[popped].isIn !== 'empty') {
-    if (board.allPieces[board.allPolygons[popped].isIn].side === targetSide && board.allPieces[board.allPolygons[popped].isIn].type !== 'trifoxes') {
+    if (board.allPieces[board.allPolygons[popped].isIn].side === targetSide && board.allPieces[board.allPolygons[popped].isIn].type !== 'berserker') {
       for (let k of board.allPolygons[popped].neighbors){
         toBeChecked.push(k);
       }
@@ -144,7 +144,7 @@ export function removeConnex(idPoly) {
   while(toBeChecked.length > 0) {
     popped = toBeChecked.pop();
     if (board.allPolygons[popped].isIn !== 'empty') {
-      if (board.allPieces[board.allPolygons[popped].isIn].side === targetSide && board.allPieces[board.allPolygons[popped].isIn].type !== 'trifoxes') {
+      if (board.allPieces[board.allPolygons[popped].isIn].side === targetSide && board.allPieces[board.allPolygons[popped].isIn].type !== 'berserker') {
         removePieceFromGame(board.allPolygons[popped].isIn);
       }
     }

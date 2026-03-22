@@ -1,6 +1,6 @@
 import { boardstate, board, setBoard } from '../games/state.js';
 import { getMoveSiren, getMoveGhoul } from '../games/rules.js';
-import { setSirensNeighbors } from '../games/gameLogic.js';
+import { setSirenNeighbors } from '../games/gameLogic.js';
 
 describe('Rules: Siren and Ghoul', () => {
   beforeEach(() => {
@@ -42,7 +42,7 @@ describe('Rules: Siren and Ghoul', () => {
   });
 
   test('Siren passive aura pins adjacent enemy pieces (Test 3)', () => {
-    setSirensNeighbors();
+    setSirenNeighbors();
     expect(board.allPieces['black_soldier_0'].canMove).toBe(0);
     expect(board.allPieces['black_ghoul_0'].canMove).toBe(0);
   });

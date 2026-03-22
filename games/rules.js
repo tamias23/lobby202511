@@ -39,19 +39,19 @@ export function getListOfPolysClosest(board, boardstate, pieceSide) {
   let toBeReturned = [];
   
   if (board.allPieces[pieceSide + '_goddess_0'].position === 'returned') {
-    let allPossibilities = boardstate.possibleSetupGoddessHeroes[pieceSide];
+    let allPossibilities = boardstate.possibleSetupGoddessHeroe[pieceSide];
     let thisIsPossible = [];
     for (const ap of allPossibilities) {
       const places = ap.split(' ');
       thisIsPossible.push(places[0]);
     }
     toBeReturned = [...new Set(thisIsPossible)];
-  } else if (board.allPieces[pieceSide + '_trifoxes_0'].position === 'returned') {
+  } else if (board.allPieces[pieceSide + '_berserker_0'].position === 'returned') {
     toBeReturned = getPolysClose(board, pieceSide + '_goddess_0', 1);
-  } else if (board.allPieces[pieceSide + '_trifoxes_1'].position === 'returned') {
+  } else if (board.allPieces[pieceSide + '_berserker_1'].position === 'returned') {
     toBeReturned = getPolysClose(board, pieceSide + '_goddess_0', 1);
   } else if (board.allPieces[pieceSide + '_heroe_0'].position === 'returned' && board.allPieces[pieceSide + '_heroe_1'].position === 'returned') {
-    let allPossibilities = boardstate.possibleSetupGoddessHeroes[pieceSide];
+    let allPossibilities = boardstate.possibleSetupGoddessHeroe[pieceSide];
     let thisIsPossible = [];
     for (const ap of allPossibilities) {
       const places = ap.split(' ');
@@ -61,7 +61,7 @@ export function getListOfPolysClosest(board, boardstate, pieceSide) {
     }
     toBeReturned = [...new Set(thisIsPossible)];
   } else if (board.allPieces[pieceSide + '_heroe_0'].position === 'returned' && board.allPieces[pieceSide + '_heroe_1'].position !== 'returned') {
-    let allPossibilities = boardstate.possibleSetupGoddessHeroes[pieceSide];
+    let allPossibilities = boardstate.possibleSetupGoddessHeroe[pieceSide];
     let thisIsPossible = [];
     for (const ap of allPossibilities) {
       const places = ap.split(' ');
@@ -71,7 +71,7 @@ export function getListOfPolysClosest(board, boardstate, pieceSide) {
     }
     toBeReturned = [...new Set(thisIsPossible)];
   } else if (board.allPieces[pieceSide + '_heroe_1'].position === 'returned' && board.allPieces[pieceSide + '_heroe_0'].position !== 'returned') {
-    let allPossibilities = boardstate.possibleSetupGoddessHeroes[pieceSide];
+    let allPossibilities = boardstate.possibleSetupGoddessHeroe[pieceSide];
     let thisIsPossible = [];
     for (const ap of allPossibilities) {
       const places = ap.split(' ');
@@ -114,8 +114,8 @@ export function getListOfPolysClosest(board, boardstate, pieceSide) {
   } else if(countReturnedPieceSide(board, 'soldier', pieceSide) > 0 && countReturnedPieceSide(board, 'soldier', pieceSide) < 6) {
     let allColors = {'orange' : 0, 'grey' : 0, 'blue' : 0, 'green' : 0};
 
-    allColors[board.allPolygons[board.allPieces[pieceSide + '_trifoxes_0'].position].color] = allColors[board.allPolygons[board.allPieces[pieceSide + '_trifoxes_0'].position].color] + 1;
-    allColors[board.allPolygons[board.allPieces[pieceSide + '_trifoxes_1'].position].color] = allColors[board.allPolygons[board.allPieces[pieceSide + '_trifoxes_1'].position].color] + 1
+    allColors[board.allPolygons[board.allPieces[pieceSide + '_berserker_0'].position].color] = allColors[board.allPolygons[board.allPieces[pieceSide + '_berserker_0'].position].color] + 1;
+    allColors[board.allPolygons[board.allPieces[pieceSide + '_berserker_1'].position].color] = allColors[board.allPolygons[board.allPieces[pieceSide + '_berserker_1'].position].color] + 1
     for (let i=0;i<6;i++) {
       if(board.allPieces[pieceSide + '_soldier_' + i].position !== 'returned'){
         allColors[board.allPolygons[board.allPieces[pieceSide + '_soldier_' + i].position].color] = allColors[board.allPolygons[board.allPieces[pieceSide + '_soldier_' + i].position].color] + 1;
@@ -171,7 +171,7 @@ export function getMoveSoldier(board, boardstate, selectedPieceId) {
         } else {
           if (
             board.allPieces[board.allPolygons[n].isIn].side !== board.allPieces[selectedPieceId].side && 
-            (board.allPieces[board.allPolygons[n].isIn].type === 'trifoxes')
+            (board.allPieces[board.allPolygons[n].isIn].type === 'berserker')
           ) {
             forbidden.push(n);
           }
@@ -204,7 +204,7 @@ export function getMoveSoldier(board, boardstate, selectedPieceId) {
     if (
       board.allPolygons[n].isIn !== 'empty' && 
       board.allPieces[board.allPolygons[n].isIn].side !== soldierSide && 
-      (board.allPieces[board.allPolygons[n].isIn].type === 'trifoxes')
+      (board.allPieces[board.allPolygons[n].isIn].type === 'berserker')
       ){
         forbidden.push(n);
       }
@@ -283,7 +283,7 @@ export function getMoveSiren(board, boardstate, selectedPieceId) {
   return toBeReturned;
 }
 
-export function getMoveTrifoxes(board, boardstate, selectedPieceId) {
+export function getMoveBerserker(board, boardstate, selectedPieceId) {
   let toBeReturned = getMoveSoldier(board, boardstate, selectedPieceId);
   return toBeReturned;
 }
@@ -365,7 +365,7 @@ export function getMoveBishop(board, boardstate, selectedPieceId) {
 
 export function getListOfPossibleTargetsForSetup(board, boardstate, selectedPieceId) {
   let toBeReturned = [];
-  let inputOrder = ['goddess', 'trifoxes', 'heroe', 'bishop', 'mage', 'soldier'];
+  let inputOrder = ['goddess', 'berserker', 'heroe', 'bishop', 'mage', 'soldier'];
 
   if (board.allPieces[selectedPieceId].position === 'returned') {
     let pieceType = board.allPieces[selectedPieceId].type;
@@ -464,8 +464,8 @@ export function getListOfPossibleTargets(board, boardstate, selectedPieceId) {
       toBeReturned = getMoveGhoul(board, boardstate, selectedPieceId);
     } else if (board.allPieces[selectedPieceId].type === 'soldier'){
       toBeReturned = getMoveSoldier(board, boardstate, selectedPieceId);
-    } else if (board.allPieces[selectedPieceId].type === 'trifoxes'){
-      toBeReturned = getMoveTrifoxes(board, boardstate, selectedPieceId);
+    } else if (board.allPieces[selectedPieceId].type === 'berserker'){
+      toBeReturned = getMoveBerserker(board, boardstate, selectedPieceId);
     }
   }
 

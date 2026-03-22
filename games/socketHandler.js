@@ -3,7 +3,7 @@ import { store } from './store.js';
 const boardstate = store.getState();
 import { toggleButtonVisibility, setButtonAndFooterColor } from './ui.js';
 import { rotate, setPieceToPoly, removePieceFromGame, removeConnex, removeAdjacent } from './boardUtils.js';
-import { endOfTurn, setSirensNeighbors } from './gameLogic.js';
+import { endOfTurn, setSirenNeighbors } from './gameLogic.js';
 import { sleep, getDistanceBetweenPoly, shuffleArray } from './utils.js';
 import { showColorSelectors } from './ui.js';
 
@@ -114,10 +114,10 @@ export function playAction(typeOfMessage, message) {
         }
 
         if (board.allPolygons[boardstate.draggedOn].color === boardstate.colorChosen){
-          if((board.allPieces[mySelectPieceId].type !== 'soldier' && board.allPieces[mySelectPieceId].type !== 'trifoxes') | thisIsTheEndOfTurn){
+          if((board.allPieces[mySelectPieceId].type !== 'soldier' && board.allPieces[mySelectPieceId].type !== 'berserker') | thisIsTheEndOfTurn){
             endOfTurn();
           }
-          else if(board.allPieces[mySelectPieceId].type === 'soldier' | board.allPieces[mySelectPieceId].type === 'trifoxes'){
+          else if(board.allPieces[mySelectPieceId].type === 'soldier' | board.allPieces[mySelectPieceId].type === 'berserker'){
             boardstate.soldierIsMoving = mySelectPieceId;
           }
         } else {
@@ -128,7 +128,7 @@ export function playAction(typeOfMessage, message) {
         boardstate.heroeHasTakenCounter = 0;
 
         if(boardstate.soldierIsMoving != 'no'){
-          setSirensNeighbors();
+          setSirenNeighbors();
           if(board.allPieces[boardstate.soldierIsMoving].canMove === 0) {
             endOfTurn();
           }
@@ -175,12 +175,12 @@ export function playAction(typeOfMessage, message) {
         setPieceToPoly(message.mySelectPieceId, message.draggedOn);
 
         if (board.allPolygons[boardstate.draggedOn].color === boardstate.colorChosen){
-          if(board.allPieces[mySelectPieceId].type !== 'soldier' && board.allPieces[mySelectPieceId].type !== 'trifoxes'){
+          if(board.allPieces[mySelectPieceId].type !== 'soldier' && board.allPieces[mySelectPieceId].type !== 'berserker'){
             endOfTurn();
           } else if(board.allPieces[mySelectPieceId].type === 'heroe' && boardstate.heroeHasTakenCounter >= boardstate.heroeHasTakenCounterMax) {
             boardstate.heroeHasTakenCounter = 0;
             endOfTurn();
-          } else if(board.allPieces[mySelectPieceId].type === 'soldier' | board.allPieces[mySelectPieceId].type === 'trifoxes'){
+          } else if(board.allPieces[mySelectPieceId].type === 'soldier' | board.allPieces[mySelectPieceId].type === 'berserker'){
             boardstate.soldierIsMoving = mySelectPieceId;
           }
         } else {
@@ -199,7 +199,7 @@ export function playAction(typeOfMessage, message) {
               boardstate.heroeHasTakenCounter = 0;
             }
           } else if (board.allPolygons[boardstate.draggedOn].color === boardstate.colorChosen){
-            setSirensNeighbors();
+            setSirenNeighbors();
             if(board.allPieces[mySelectPieceId].canMove === 0) {
               endOfTurn();
             }
@@ -207,7 +207,7 @@ export function playAction(typeOfMessage, message) {
         }
 
         if(boardstate.soldierIsMoving != 'no'){
-          setSirensNeighbors();
+          setSirenNeighbors();
           if(board.allPieces[boardstate.soldierIsMoving].canMove === 0) {
             endOfTurn();
           }

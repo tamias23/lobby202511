@@ -13,25 +13,25 @@ The turn-based loop is completely driven by the board's terrain colors. Players 
   2. **Activate Pieces:** The player can **only** pick up and move pieces that are currently standing on polygons matching that exact chosen color.
   3. **Continuous Actions:** Moving a piece to a polygon of a *different* (unchosen) color does NOT end the turn. The player can continue moving other valid pieces from the chosen color, effectively doing as much as they can.
   4. **Ending the Turn:** The turn **immediately ends** if any piece completes a movement and lands exactly on a polygon of the *chosen color*. 
-     *Exception:* Because Soldiers and Trifoxes have "chain/phalanx" movement, if they land on the chosen color, they do not end the turn immediately; instead, they lock the active sequence so the player can *only* continue moving that specific piece until they finish their path or manually end the turn. If a Soldier or Trifox is "captured" by an opposin siren on the chosen color, then the turn ends (as the piece is indeed ending its movement on the tchosen color)
+     *Exception:* Because Soldier and Berserker have "chain/phalanx" movement, if they land on the chosen color, they do not end the turn immediately; instead, they lock the active sequence so the player can *only* continue moving that specific piece until they finish their path or manually end the turn. If a Soldier or Berserker is "captured" by an opposin siren on the chosen color, then the turn ends (as the piece is indeed ending its movement on the tchosen color)
 
 ## The Pieces & Quantities
 Each player commands an army of 37 pieces:
 - **1 Goddess**
-- **2 Heroes**
-- **4 Bishops**
+- **2 Heroe**
+- **4 Bishop**
 - **1 Mage**
-- **9 Soldiers**
-- **9 Ghouls**
-- **9 Sirens**
-- **2 Trifoxes**
+- **9 Soldier**
+- **9 Ghoul**
+- **9 Siren**
+- **2 Berserker**
 
 ## 1. Setup Phase
 The game begins with an empty board and pieces are placed sequentially:
-1. **Goddess & Heroes:** The White player uses the top edge polygons, and the Black player uses the bottom edge polygons. The Goddess is placed on a random edge polygon. The two Heroes must be placed exactly 2 polygons away from the Goddess (and not adjacent to each other).
-2. **Trifoxes:** Must be placed exactly 1 polygon away from the Goddess.
-3. **Bishops:** Must be placed such that each of the four Bishops starts on a polygon of a different color.
-4. **Other Pieces:** Soldiers, Ghouls, Sirens, and the Mage are populated onto the remaining empty polygons close to the Heroes and Goddess (spreading out 1 to 4 polygons away), following specific color-matching constraints.
+1. **Goddess & Heroe:** The White player uses the top edge polygons, and the Black player uses the bottom edge polygons. The Goddess is placed on a random edge polygon. The two Heroe must be placed exactly 2 polygons away from the Goddess (and not adjacent to each other).
+2. **Berserker:** Must be placed exactly 1 polygon away from the Goddess.
+3. **Bishop:** Must be placed such that each of the four Bishop starts on a polygon of a different color.
+4. **Other Pieces:** Soldier, Ghoul, Siren, and the Mage are populated onto the remaining empty polygons close to the Heroe and Goddess (spreading out 1 to 4 polygons away), following specific color-matching constraints.
 
 ## 2. Movement & Capture Rules
 Pieces capture enemy pieces by moving onto an occupied polygon. Each piece has unique movement algorithms and ranges:
@@ -46,12 +46,12 @@ Pieces capture enemy pieces by moving onto an occupied polygon. Each piece has u
 ### The Bishop
 - **Movement:** Can leap up to **4 polygons** away.
 - **Special Limitation:** A Bishop can only land on polygons that are the **same color** as the polygon it started its move on. It is color-bound.
-- **Area of Effect:** When a Bishop moves to an empty polygon, it emits an attack that destroys all adjacent enemy pieces (except Trifoxes).
+- **Area of Effect:** When a Bishop moves to an empty polygon, it emits an attack that destroys all adjacent enemy pieces (except Berserker).
 
 ### The Mage
 - **Movement:** Can leap up to **3 polygons** away.
 - **Special Limitation:** Opposite to the Bishop, a Mage **cannot** land on a polygon of the same color as the one it started on. 
-- **Area of Effect (Chain Attack):** When the Mage lands directly on an occupied polygon to capture a piece, it destroys both the target piece AND any adjacent pieces belonging to the SAME TEAM (White or Black) as the target (except Trifoxes).
+- **Area of Effect (Chain Attack):** When the Mage lands directly on an occupied polygon to capture a piece, it destroys both the target piece AND any adjacent pieces belonging to the SAME TEAM (White or Black) as the target (except Berserker).
 
 ### The Siren
 - **Movement:** Can leap up to **2 polygons** away.
@@ -59,19 +59,19 @@ Pieces capture enemy pieces by moving onto an occupied polygon. Each piece has u
 
 ### The Ghoul
 - **Movement:** Can move **1 polygon** away to capture or move to an empty space.
-- **Chain Jumping:** If the adjacent polygon is empty, has no enemy Sirens bordering it, and is **not** the player's "chosen color" for the turn, the Ghoul can chain jumps up to **3 polygons** away in a single move.
+- **Chain Jumping:** If the adjacent polygon is empty, has no enemy Siren bordering it, and is **not** the player's "chosen color" for the turn, the Ghoul can chain jumps up to **3 polygons** away in a single move.
 
 ### The Soldier
 - **Movement:** Can move **1 polygon** away.
-- **Phalanx Movement:** Soldiers can chain their movements by passing through :
+- **Phalanx Movement:** Soldier can chain their movements by passing through :
   1. Contiguous polygons occupied by **friendly pieces**.
   2. Empty polygons that match the player's **"chosen color"** for the turn (provided those specific polygons are not adjacent to an enemy Siren).
 , allowing them to travel vast distances across the board.
-- **Restriction:** They cannot pass through enemy Trifoxes or paths blocked by enemy Sirens.
+- **Restriction:** They cannot pass through enemy Berserker or paths blocked by enemy Siren.
 
-### The Trifoxes
+### The Berserker
 - **Movement:** Behaves similarly to the Soldier (they can also chain their moves through friendly pieces and empty polygons of the chosen color).
-- **Blocheroe & Invulnerability:** Acts as a heavy barricade. Enemy Soldiers and Trifoxes are strictly forbidden from moving into or capturing them. Furthermore, Trifoxes are entirely **invulnerable to Area of Effect attacks**—they cannot be destroyed by a Mage's chain attack or a Bishop's adjacent blast.
+- **Blocheroe & Invulnerability:** Acts as a heavy barricade. Enemy Soldier and Berserker are strictly forbidden from moving into or capturing them. Furthermore, Berserker are entirely **invulnerable to Area of Effect attacks**—they cannot be destroyed by a Mage's chain attack or a Bishop's adjacent blast.
 
 ## 3. Supplementary Mechanics
 - **Entering / Re-entering the Board:** A piece that is currently off the board (destroyed or unused) can be placed back onto the board during a player's turn. There are exactly two ways a piece can enter:

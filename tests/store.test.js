@@ -28,7 +28,7 @@ describe('Store State Management', () => {
       animation_duration_lastMove: -1,
       animation_delay: -1,
       setupIsDone: 'no',
-      possibleSetupGoddessHeroes: { yellow: [], white: [] },
+      possibleSetupGoddessHeroe: { yellow: [], white: [] },
       timeInfo: {},
       board: null,
       transform: '',

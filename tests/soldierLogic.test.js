@@ -30,7 +30,7 @@ describe('Game Logic: getMoveSoldier', () => {
     // poly_2 is occupied by an enemy, and poly_3 is empty but has a different color than chosen? 
     // Actually out original rules says it checks neighbor empty vs occupied.
     
-    // poly_2 has black_soldier_0 (enemy). Soldiers cannot move onto enemies.
+    // poly_2 has black_soldier_0 (enemy). Soldier cannot move onto enemies.
     // poly_3 is empty and its color is 'black', and our chosen color is 'white'. 
     // The soldier can move to adjacent empty polys if the player hasn't restricted color, or if it's the right color.
     

@@ -1,4 +1,4 @@
-import { setSirensNeighbors } from '../games/gameLogic.js';
+import { setSirenNeighbors } from '../games/gameLogic.js';
 import { getMoveHeroe } from '../games/rules.js';
 import { boardstate, board, setBoard } from '../games/state.js';
 
@@ -22,16 +22,16 @@ beforeEach(() => {
   };
 });
 
-describe('Game Logic: Sirens and Heroes', () => {
+describe('Game Logic: Siren and Heroe', () => {
 
-  test('setSirensNeighbors should restrict enemy neighbors', () => {
+  test('setSirenNeighbors should restrict enemy neighbors', () => {
     // A white siren is on poly_3. poly_3 neighbors poly_1.
     // If a yellow soldier is on poly_1, it should lose movement.
     // Let's move the yellow soldier to poly_1, which borders poly_3
     board.allPolygons['poly_1'].isIn = 'black_soldier_0';
     board.allPieces['black_soldier_0'].position = 'poly_1';
     
-    setSirensNeighbors();
+    setSirenNeighbors();
     
     expect(board.allPieces['black_soldier_0'].canMove).toBe(0);
   });

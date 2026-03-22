@@ -26,7 +26,7 @@ export function highlightPossibleMoves() {
   renderer.highlightPossibleMoves();
 }
 
-export function setSirensNeighbors() {
+export function setSirenNeighbors() {
   for (const id in board.allPieces){
     board.allPieces[id].canMove = 1;
   }

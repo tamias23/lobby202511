@@ -11,7 +11,7 @@ let boardFilename = 'noFilename';
 
 
 const allPiecesDict = {
-  'trifoxes' : 2,
+  'berserker' : 2,
   'goddess' : 1,
   'heroe' : 2,
   'soldier' : 9,
@@ -133,7 +133,7 @@ function setPieceToPoly(mySelectPieceId, idPoly){
   gameState.board.allPolygons[idPoly].isIn = mySelectPieceId;
 }
 
-function placeGoddessAndHeroes(lowerP = 3, higherP = 6) {
+function placeGoddessAndHeroe(lowerP = 3, higherP = 6) {
   for (const id in gameState.board.allPolygons){
     gameState.board.allPolygons[id].isIn = 'empty';
   }
@@ -141,8 +141,8 @@ function placeGoddessAndHeroes(lowerP = 3, higherP = 6) {
   let color_Edges = {'white' : gameState.board.topEdgepolys, 'black' : gameState.board.bottomEdgepolys};
 
   for (const side of ['white', 'black']) {
-    let goddessAndHeroesKO = 1;
-    while (goddessAndHeroesKO) {
+    let goddessAndHeroeKO = 1;
+    while (goddessAndHeroeKO) {
       let alreadyOccupied_temp = [];
       
       let randomPoly = getRandomElement(color_Edges[side]);
@@ -163,19 +163,19 @@ function placeGoddessAndHeroes(lowerP = 3, higherP = 6) {
       alreadyOccupied_temp.push(randomPoly);
       setPieceToPoly(side + '_heroe_1', randomPoly);
 
-      goddessAndHeroesKO = 0;
+      goddessAndHeroeKO = 0;
       
       if (getPolysClose(side + '_heroe_0', higherP).includes(gameState.board.allPieces[side + '_heroe_1'].position)) {
-        goddessAndHeroesKO = 1;
+        goddessAndHeroeKO = 1;
       }
       if (getPolysClose(side + '_goddess_0', lowerP).includes(gameState.board.allPieces[side + '_heroe_0'].position) || !getPolysClose(side + '_goddess_0', higherP).includes(gameState.board.allPieces[side + '_heroe_0'].position)) {
-        goddessAndHeroesKO = 1;
+        goddessAndHeroeKO = 1;
       }
       if (getPolysClose(side + '_goddess_0', lowerP).includes(gameState.board.allPieces[side + '_heroe_1'].position) || !getPolysClose(side + '_goddess_0', higherP).includes(gameState.board.allPieces[side + '_heroe_1'].position)) {
-        goddessAndHeroesKO = 1;
+        goddessAndHeroeKO = 1;
       }
 
-      if(goddessAndHeroesKO){
+      if(goddessAndHeroeKO){
         for (const id of [side + '_goddess_0', side + '_heroe_0', side + '_heroe_1']){
           if (gameState.board.allPieces[id].position !== 'returned') {
             gameState.board.allPolygons[gameState.board.allPieces[id].position].isIn = 'empty';
@@ -191,7 +191,7 @@ function placeGoddessAndHeroes(lowerP = 3, higherP = 6) {
 function setUpRandomly() {
   console.log('setUpRandomly() START');
 
-  placeGoddessAndHeroes();
+  placeGoddessAndHeroe();
   
   let alreadyOccupied = [];
   alreadyOccupied.push(gameState.board.allPieces['white_heroe_0'].position);
@@ -236,11 +236,11 @@ function setUpRandomly() {
 
     {
       let k = 0;
-      for (let i = 0; i < allPiecesDict['trifoxes']; i++) {
+      for (let i = 0; i < allPiecesDict['berserker']; i++) {
         while (gameState.board.allPolygons[set1_goddess[k]].isIn != 'empty'){
           k = k + 1;
         }
-        setPieceToPoly(side + '_trifoxes_' + i, set1_goddess[k]);
+        setPieceToPoly(side + '_berserker_' + i, set1_goddess[k]);
       }
     }
 
@@ -298,17 +298,17 @@ function setUpRandomly() {
 
 
 
-    let trifoxesColorNumber = {};
+    let berserkerColorNumber = {};
     for (const c of colorFound){
-      trifoxesColorNumber[c] = 0;
+      berserkerColorNumber[c] = 0;
     }
 
-    for (let i = 0; i < allPiecesDict['trifoxes']; i++) {
-      //console.log('||||||||||||| ' + JSON.stringify(gameState.board.allPieces[side + '_trifoxes_' + i]));
-      let c = gameState.board.allPolygons[gameState.board.allPieces[side + '_trifoxes_' + i].position].color;
-      trifoxesColorNumber[c] = trifoxesColorNumber[c] + 1;
+    for (let i = 0; i < allPiecesDict['berserker']; i++) {
+      //console.log('||||||||||||| ' + JSON.stringify(gameState.board.allPieces[side + '_berserker_' + i]));
+      let c = gameState.board.allPolygons[gameState.board.allPieces[side + '_berserker_' + i].position].color;
+      berserkerColorNumber[c] = berserkerColorNumber[c] + 1;
     }
-    //console.log('------------ ' + JSON.stringify(trifoxesColorNumber));
+    //console.log('------------ ' + JSON.stringify(berserkerColorNumber));
 
 
 

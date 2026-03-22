@@ -7,7 +7,7 @@ describe('Rules: General and Supplementary Mechanics', () => {
     setBoard(mockBoard);
 
     boardstate.colorChosen = 'yellow';
-    boardstate.possibleSetupGoddessHeroes = {
+    boardstate.possibleSetupGoddessHeroe = {
       'white': ['poly_1 poly_2 poly_3'],
       'yellow': ['poly_4 poly_5 poly_6']
     };
@@ -36,7 +36,7 @@ describe('Rules: General and Supplementary Mechanics', () => {
   // Test quantities implicitly through the setup process 
   test('Pieces must be placed on the board during setup (Test 1)', () => {
     let moves = getListOfPossibleTargetsForSetup(board, boardstate, 'white_goddess_0');
-    expect(moves).toContain('poly_1'); // based on possibleSetupGoddessHeroes mockup
+    expect(moves).toContain('poly_1'); // based on possibleSetupGoddessHeroe mockup
   });
 
   test('Re-entering pieces can be placed on chosen color (Test 2)', () => {

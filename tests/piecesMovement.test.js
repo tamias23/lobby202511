@@ -6,7 +6,7 @@ import {
   getMoveBishop, 
   getMoveSiren, 
   getMoveGhoul, 
-  getMoveTrifoxes 
+  getMoveBerserker 
 } from '../games/rules.js';
 import { boardstate, board, setBoard } from '../games/state.js';
 
@@ -109,10 +109,10 @@ describe('Piece Movement Tests', () => {
     expect(moves).toContain('poly_2_0');
   });
 
-  test('Trifoxes Movement: identical to soldier', () => {
-    placePiece('white_trifoxes_0', 'poly_2_2', 'white', 'trifoxes');
-    const moves = getMoveTrifoxes(board, boardstate, 'white_trifoxes_0');
-    const soldierMoves = getMoveSoldier(board, boardstate, 'white_trifoxes_0');
+  test('Berserker Movement: identical to soldier', () => {
+    placePiece('white_berserker_0', 'poly_2_2', 'white', 'berserker');
+    const moves = getMoveBerserker(board, boardstate, 'white_berserker_0');
+    const soldierMoves = getMoveSoldier(board, boardstate, 'white_berserker_0');
     expect(moves).toEqual(soldierMoves);
   });
 });

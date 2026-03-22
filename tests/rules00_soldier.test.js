@@ -1,7 +1,7 @@
 import { boardstate, board, setBoard } from '../games/state.js';
-import { getMoveSoldier, getMoveTrifoxes } from '../games/rules.js';
+import { getMoveSoldier, getMoveBerserker } from '../games/rules.js';
 
-describe('Rules: Soldier and Trifoxes', () => {
+describe('Rules: Soldier and Berserker', () => {
   beforeEach(() => {
     let mockBoard = {};
     setBoard(mockBoard);
@@ -18,7 +18,7 @@ describe('Rules: Soldier and Trifoxes', () => {
       'poly_11': { neighbors: ['poly_10', 'poly_12'], neighbours: ['poly_10', 'poly_12'], color: 'orange', isIn: 'empty', center: [10, 10] }, 
       'poly_12': { neighbors: ['poly_11', 'poly_13'], neighbours: ['poly_11', 'poly_13'], color: 'orange', isIn: 'empty', center: [20, 10] }, // chain path
       
-      'poly_13': { neighbors: ['poly_12', 'poly_14'], neighbours: ['poly_12', 'poly_14'], color: 'orange', isIn: 'black_trifoxes_0', center: [30, 10] }, // Enemy block
+      'poly_13': { neighbors: ['poly_12', 'poly_14'], neighbours: ['poly_12', 'poly_14'], color: 'orange', isIn: 'black_berserker_0', center: [30, 10] }, // Enemy block
       'poly_14': { neighbors: ['poly_13'], neighbours: ['poly_13'], color: 'orange', isIn: 'empty', center: [40, 10] }
     };
 
@@ -27,7 +27,7 @@ describe('Rules: Soldier and Trifoxes', () => {
       'white_soldier_1': { position: 'poly_2', side: 'white', type: 'soldier', canMove: 1 },
       'white_goddess_0': { position: 'poly_3', side: 'white', type: 'goddess', canMove: 1 },
       
-      'black_trifoxes_0': { position: 'poly_13', side : 'black', type: 'trifoxes', canMove: 1 },
+      'black_berserker_0': { position: 'poly_13', side : 'black', type: 'berserker', canMove: 1 },
     };
   });
 
@@ -50,24 +50,24 @@ describe('Rules: Soldier and Trifoxes', () => {
     expect(moves).toContain('poly_12');
   });
 
-  test('Soldier chain movement is blocked by enemy Trifoxes (Test 4)', () => {
-    // Start at poly_12(black empty) touching poly_13(yellow trifox). 
+  test('Soldier chain movement is blocked by enemy Berserker (Test 4)', () => {
+    // Start at poly_12(black empty) touching poly_13(yellow berserker). 
     // Move soldier_0 to poly_12 to test direct blocheroe
     board.allPolygons['poly_1'].isIn = 'empty';
     board.allPolygons['poly_12'].isIn = 'white_soldier_0';
     board.allPieces['white_soldier_0'].position = 'poly_12';
 
     let moves = getMoveSoldier(board, boardstate, 'white_soldier_0');
-    expect(moves).not.toContain('poly_13'); // Blocked by Trifox
-    expect(moves).not.toContain('poly_14'); // Blocked by Trifox
+    expect(moves).not.toContain('poly_13'); // Blocked by Berserker
+    expect(moves).not.toContain('poly_14'); // Blocked by Berserker
   });
 
-  test('Trifoxes behave like soldiers for chaining movement (Test 5)', () => {
-    // black_trifoxes_0 at poly_13. It should be able to move to poly_14 (1 away)
+  test('Berserker behave like soldier for chaining movement (Test 5)', () => {
+    // black_berserker_0 at poly_13. It should be able to move to poly_14 (1 away)
     // and chain through poly_12/11/10 (orange chosen color) to get to poly_1 (empty)
     board.allPolygons['poly_1'].isIn = 'empty';
 
-    let moves = getMoveTrifoxes(board, boardstate, 'black_trifoxes_0');
+    let moves = getMoveBerserker(board, boardstate, 'black_berserker_0');
     expect(moves).toContain('poly_14'); // 1 away
     expect(moves).toContain('poly_12'); // Chain 1
     expect(moves).toContain('poly_11'); // Chain 2

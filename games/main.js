@@ -109,11 +109,11 @@ function afterLoadingData(_board) {
     if (element.classList.contains('mage')) board.allPieces[element.id].centerTransform = [-10, -9.3];
     if (element.classList.contains('ghoul')) board.allPieces[element.id].centerTransform = [-8, -7];
     if (element.classList.contains('siren')) board.allPieces[element.id].centerTransform = [0, 0];
-    if (element.classList.contains('trifoxes')) board.allPieces[element.id].centerTransform = [0, 0];
+    if (element.classList.contains('berserker')) board.allPieces[element.id].centerTransform = [0, 0];
   });
 
   setTimeout(() => {
-    setUpIdentifyGoddessHeroesPositions();
+    setUpIdentifyGoddessHeroePositions();
   }, 0);
 
   bindEventListeners();
@@ -253,7 +253,7 @@ function setPieceToPolyFake(mySelectPieceId, idPoly){
   board.allPolygons[idPoly].isIn = mySelectPieceId;
 }
 
-function setUpIdentifyGoddessHeroesPositions() {
+function setUpIdentifyGoddessHeroePositions() {
   for (const id in board.allPolygons){
     board.allPolygons[id].isIn = 'empty';
   }
@@ -265,8 +265,8 @@ function setUpIdentifyGoddessHeroesPositions() {
 
   for (let i=0;i<300;i++) {
     for (const side of ['white', 'black']) {
-      let goddessAndHeroesKO = 1;
-      while (goddessAndHeroesKO) {
+      let goddessAndHeroeKO = 1;
+      while (goddessAndHeroeKO) {
         let alreadyOccupied_temp = [];
         let randomPoly = color_Edges[side][Math.floor(Math.random() * color_Edges[side].length)];
         alreadyOccupied_temp.push(randomPoly);
@@ -286,7 +286,7 @@ function setUpIdentifyGoddessHeroesPositions() {
         alreadyOccupied_temp.push(randomPoly);
         setPieceToPolyFake(side + '_heroe_1', randomPoly);
 
-        goddessAndHeroesKO = 0;
+        goddessAndHeroeKO = 0;
         
         const getPolysCloseLocal = (selectedPiece, d) => {
           let toBeReturned = [board.allPieces[selectedPiece].position];
@@ -308,22 +308,22 @@ function setUpIdentifyGoddessHeroesPositions() {
         };
 
         if (getPolysCloseLocal(side + '_heroe_0', higherP).includes(board.allPieces[side + '_heroe_1'].position)) {
-          goddessAndHeroesKO = 1;
+          goddessAndHeroeKO = 1;
         }
         else if (getPolysCloseLocal(side + '_goddess_0', lowerP).includes(board.allPieces[side + '_heroe_0'].position)){
-          goddessAndHeroesKO = 1;
+          goddessAndHeroeKO = 1;
         }
         else if (!getPolysCloseLocal(side + '_goddess_0', higherP).includes(board.allPieces[side + '_heroe_0'].position)) {
-          goddessAndHeroesKO = 1;
+          goddessAndHeroeKO = 1;
         }
         else if (getPolysCloseLocal(side + '_goddess_0', lowerP).includes(board.allPieces[side + '_heroe_1'].position)){
-          goddessAndHeroesKO = 1;
+          goddessAndHeroeKO = 1;
         }
         else if (!getPolysCloseLocal(side + '_goddess_0', higherP).includes(board.allPieces[side + '_heroe_1'].position)) {
-          goddessAndHeroesKO = 1;
+          goddessAndHeroeKO = 1;
         }
 
-        if(goddessAndHeroesKO){
+        if(goddessAndHeroeKO){
           for (const id of [side + '_goddess_0', side + '_heroe_0', side + '_heroe_1']){
             if (board.allPieces[id].position !== 'returned') {
               board.allPolygons[board.allPieces[id].position].isIn = 'empty';
@@ -331,7 +331,7 @@ function setUpIdentifyGoddessHeroesPositions() {
             }
           }
         } else {
-          boardstate.possibleSetupGoddessHeroes[side].push(board.allPieces[side + '_goddess_0'].position + ' ' + board.allPieces[side + '_heroe_0'].position + ' '+ board.allPieces[side + '_heroe_1'].position);
+          boardstate.possibleSetupGoddessHeroe[side].push(board.allPieces[side + '_goddess_0'].position + ' ' + board.allPieces[side + '_heroe_0'].position + ' '+ board.allPieces[side + '_heroe_1'].position);
           for (const id of [side + '_goddess_0', side + '_heroe_0', side + '_heroe_1']){
             if (board.allPieces[id].position !== 'returned') {
               board.allPolygons[board.allPieces[id].position].isIn = 'empty';
@@ -352,6 +352,6 @@ function setUpIdentifyGoddessHeroesPositions() {
     }
   }
 
-  boardstate.possibleSetupGoddessHeroes['black'] = [...new Set(boardstate.possibleSetupGoddessHeroes['black'])];
-  boardstate.possibleSetupGoddessHeroes['white'] = [...new Set(boardstate.possibleSetupGoddessHeroes['white'])];
+  boardstate.possibleSetupGoddessHeroe['black'] = [...new Set(boardstate.possibleSetupGoddessHeroe['black'])];
+  boardstate.possibleSetupGoddessHeroe['white'] = [...new Set(boardstate.possibleSetupGoddessHeroe['white'])];
 }

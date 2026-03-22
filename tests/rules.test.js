@@ -1,4 +1,4 @@
-import { setSirensNeighbors, endOfTurn } from '../games/gameLogic.js';
+import { setSirenNeighbors, endOfTurn } from '../games/gameLogic.js';
 import { 
   getMoveGoddess, 
   getMoveHeroe, 
@@ -6,7 +6,7 @@ import {
   getMoveSiren,
   getMoveGhoul,
   getMoveSoldier,
-  getMoveTrifoxes,
+  getMoveBerserker,
   getMoveMage
 } from '../games/rules.js';
 import { rotate } from '../games/boardUtils.js';
@@ -44,7 +44,7 @@ describe('Integration: Complex Movement Rules', () => {
       'white_siren_0': { position: 'poly_1', side: 'white', type: 'siren', canMove: 1 },
       'white_ghoul_0': { position: 'poly_1', side: 'white', type: 'ghoul', canMove: 1 },
       'white_soldier_0': { position: 'poly_1', side: 'white', type: 'soldier', canMove: 1 },
-      'white_trifoxes_0': { position: 'poly_1', side: 'white', type: 'trifoxes', canMove: 1 },
+      'white_berserker_0': { position: 'poly_1', side: 'white', type: 'berserker', canMove: 1 },
       'white_mage_0': { position: 'poly_1', side: 'white', type: 'mage', canMove: 1 },
       
       'black_soldier_0': { position: 'returned', side : 'black', type: 'soldier', canMove: 1 },
@@ -78,7 +78,7 @@ describe('Integration: Complex Movement Rules', () => {
   });
 
   // 3. Bishop
-  test('Bishops must retain their same polygon color across moves', () => {
+  test('Bishop must retain their same polygon color across moves', () => {
     // From poly_1 (white), neighbors -> poly_5 (white), poly_7 (white)
     const moves = getMoveBishop(board, boardstate, 'white_bishop_0');
     expect(moves).toContain('poly_5');
@@ -88,7 +88,7 @@ describe('Integration: Complex Movement Rules', () => {
   });
 
   // 4. Siren 
-  test('Sirens emit effect that shuts down movement of nearby enemy pieces', () => {
+  test('Siren emit effect that shuts down movement of nearby enemy pieces', () => {
     // Place siren and enemy adjacent
     board.allPieces['white_siren_0'].position = 'poly_1';
     board.allPolygons['poly_1'].isIn = 'white_siren_0';
@@ -97,7 +97,7 @@ describe('Integration: Complex Movement Rules', () => {
     board.allPolygons['poly_2'].isIn = 'black_soldier_0';
     
     // Process effect
-    setSirensNeighbors();
+    setSirenNeighbors();
     expect(board.allPieces['black_soldier_0'].canMove).toBe(0);
   });
 
@@ -117,9 +117,9 @@ describe('Integration: Complex Movement Rules', () => {
     expect(moves).toContain('poly_3');
   });
 
-  // 7. Trifox restrictions
-  test('Trifoxes behave like soldiers but with specific skipping limitations', () => {
-    const moves = getMoveTrifoxes(board, boardstate, 'white_trifoxes_0');
+  // 7. Berserker restrictions
+  test('Berserker behave like soldier but with specific skipping limitations', () => {
+    const moves = getMoveBerserker(board, boardstate, 'white_berserker_0');
     expect(moves).toEqual(expect.arrayContaining(['poly_2', 'poly_3']));
   });
 

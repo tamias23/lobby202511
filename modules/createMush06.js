@@ -280,11 +280,11 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
     let hardTranslate = -300
 
     if (makeItBlack === 'yes'){
-        for (let i=0;i<allPiecesDict['trifoxes'];i++){
-            let trifoxes = dom.window.document.createElementNS(ns, 'g');
-            trifoxes.setAttributeNS(null, 'class', 'draggable trifoxes yellow');
-            trifoxes.setAttributeNS(null, 'id', 'black_trifoxes_' + i);
-            trifoxes.setAttributeNS(null, 'transform', 'translate(' + (760 + hardTranslate + i * 15) + ', 255) scale(0.09)');
+        for (let i=0;i<allPiecesDict['berserker'];i++){
+            let berserker = dom.window.document.createElementNS(ns, 'g');
+            berserker.setAttributeNS(null, 'class', 'draggable berserker yellow');
+            berserker.setAttributeNS(null, 'id', 'black_berserker_' + i);
+            berserker.setAttributeNS(null, 'transform', 'translate(' + (760 + hardTranslate + i * 15) + ', 255) scale(0.09)');
 
             const path = dom.window.document.createElementNS(ns, 'path');
             // A rx ry rotate LargeArcFlag SweepFlag x y
@@ -297,7 +297,7 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
             for (let j = 0; j < 3; j++) {
               const rotatedPath = path.cloneNode();          
               rotatedPath.setAttributeNS(null, 'transform', `rotate(${j * 120} 0 0)`);
-              trifoxes.appendChild(rotatedPath);
+              berserker.appendChild(rotatedPath);
             }
 
             /***********************************************/
@@ -313,20 +313,20 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
             for (let j = 0; j < 3; j++) {
               const rotatedPath2 = path2.cloneNode();          
               rotatedPath2.setAttributeNS(null, 'transform', `rotate(${j * 120} 0 0) scale(0.5)`);
-              trifoxes.appendChild(rotatedPath2);
+              berserker.appendChild(rotatedPath2);
             }
 
             /***********************************************/
 
-            setOfAllPieces.appendChild(trifoxes);
+            setOfAllPieces.appendChild(berserker);
         }
     }
     else{
-        for (let i=0;i<allPiecesDict['trifoxes'];i++){
-            let trifoxes = dom.window.document.createElementNS(ns, 'g');
-            trifoxes.setAttributeNS(null, 'class', 'draggable trifoxes yellow');
-            trifoxes.setAttributeNS(null, 'id', 'black_trifoxes_' + i);
-            trifoxes.setAttributeNS(null, 'transform', 'translate(' + (760 + hardTranslate + i * 15) + ', 255) scale(0.09)');
+        for (let i=0;i<allPiecesDict['berserker'];i++){
+            let berserker = dom.window.document.createElementNS(ns, 'g');
+            berserker.setAttributeNS(null, 'class', 'draggable berserker yellow');
+            berserker.setAttributeNS(null, 'id', 'black_berserker_' + i);
+            berserker.setAttributeNS(null, 'transform', 'translate(' + (760 + hardTranslate + i * 15) + ', 255) scale(0.09)');
 
             const path = dom.window.document.createElementNS(ns, 'path');
             // A rx ry rotate LargeArcFlag SweepFlag x y
@@ -339,18 +339,18 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
             for (let j = 0; j < 3; j++) {
               const rotatedPath = path.cloneNode();          
               rotatedPath.setAttributeNS(null, 'transform', `rotate(${j * 120} 0 0)`);
-              trifoxes.appendChild(rotatedPath);
+              berserker.appendChild(rotatedPath);
             }
 
-            setOfAllPieces.appendChild(trifoxes);
+            setOfAllPieces.appendChild(berserker);
         }
     }
 
-    for (let i=0;i<allPiecesDict['trifoxes'];i++){
-        let trifoxes = dom.window.document.createElementNS(ns, 'g');
-        trifoxes.setAttributeNS(null, 'class', 'draggable trifoxes white');
-        trifoxes.setAttributeNS(null, 'id', 'white_trifoxes_' + i);
-        trifoxes.setAttributeNS(null, 'transform', 'translate(' + (760 + hardTranslate + i * 15) + ', 285) scale(0.09)');
+    for (let i=0;i<allPiecesDict['berserker'];i++){
+        let berserker = dom.window.document.createElementNS(ns, 'g');
+        berserker.setAttributeNS(null, 'class', 'draggable berserker white');
+        berserker.setAttributeNS(null, 'id', 'white_berserker_' + i);
+        berserker.setAttributeNS(null, 'transform', 'translate(' + (760 + hardTranslate + i * 15) + ', 285) scale(0.09)');
 
         const path = dom.window.document.createElementNS(ns, 'path');
         // A rx ry rotate LargeArcFlag SweepFlag x y
@@ -363,16 +363,16 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
         for (let j = 0; j < 3; j++) {
           const rotatedPath = path.cloneNode();          
           rotatedPath.setAttributeNS(null, 'transform', `rotate(${j * 120} 0 0)`);
-          trifoxes.appendChild(rotatedPath);
+          berserker.appendChild(rotatedPath);
         }
 
-        setOfAllPieces.appendChild(trifoxes);
+        setOfAllPieces.appendChild(berserker);
     }
 
-    let nbSoldiers = allPiecesDict['soldier'];
+    let nbSoldier = allPiecesDict['soldier'];
 
     if (makeItBlack === 'yes'){
-        for (let i=0;i<nbSoldiers;i++){
+        for (let i=0;i<nbSoldier;i++){
             let mySoldier = dom.window.document.createElementNS(ns, 'g');
             mySoldier.setAttributeNS(null, 'class', 'draggable soldier yellow');
             mySoldier.setAttributeNS(null, 'id', 'black_soldier_' + i);
@@ -399,7 +399,7 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
         }
     }
     else{
-        for (let i=0;i<nbSoldiers;i++){
+        for (let i=0;i<nbSoldier;i++){
             let mySoldier = dom.window.document.createElementNS(ns, 'g');
             mySoldier.setAttributeNS(null, 'class', 'draggable soldier yellow');
             mySoldier.setAttributeNS(null, 'id', 'black_soldier_' + i);
@@ -425,7 +425,7 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
         }
     }
 
-    for (let i=0;i<nbSoldiers;i++){
+    for (let i=0;i<nbSoldier;i++){
         let mySoldier = dom.window.document.createElementNS(ns, 'g');
         mySoldier.setAttributeNS(null, 'class', 'draggable soldier white');
         mySoldier.setAttributeNS(null, 'id', 'white_soldier_' + i);
@@ -1042,10 +1042,10 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
         setOfAllPieces.appendChild(mySiren);
     }
 
-    let nbGhouls = allPiecesDict['ghoul'];
+    let nbGhoul = allPiecesDict['ghoul'];
 
     if (makeItBlack === 'yes'){
-        for (let i=0;i<nbGhouls;i++){
+        for (let i=0;i<nbGhoul;i++){
             let myGhoul = dom.window.document.createElementNS(ns, 'g');
             myGhoul.setAttributeNS(null, 'class', 'draggable ghoul yellow');
             myGhoul.setAttributeNS(null, 'id', 'black_ghoul_' + i);
@@ -1067,7 +1067,7 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
         }
     }
     else{
-        for (let i=0;i<nbGhouls;i++){
+        for (let i=0;i<nbGhoul;i++){
             let myGhoul = dom.window.document.createElementNS(ns, 'g');
             myGhoul.setAttributeNS(null, 'class', 'draggable ghoul yellow');
             myGhoul.setAttributeNS(null, 'id', 'black_ghoul_' + i);
@@ -1085,7 +1085,7 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
         }
     }
 
-    for (let i=0;i<nbGhouls;i++){
+    for (let i=0;i<nbGhoul;i++){
         let myGhoul = dom.window.document.createElementNS(ns, 'g');
         myGhoul.setAttributeNS(null, 'class', 'draggable ghoul white');
         myGhoul.setAttributeNS(null, 'id', 'white_ghoul_' + i);
