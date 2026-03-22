@@ -20,7 +20,7 @@ beforeAll(async () => {
 describe('Socket Event Handlers Integration', () => {
 
   beforeEach(() => {
-    // Basic DOM mocking required for playAction internals that alter CSS dynamically
+    // Basic DOM mocheroe required for playAction internals that alter CSS dynamically
     global.document = {
       getElementById: (id) => ({
         setAttributeNS: () => {},

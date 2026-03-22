@@ -37,7 +37,7 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
         'blue' : 'rgb(20%,60%,100%)',
         'green' : 'rgb(0%,80%,32.156863%)',
         'grey' : 'rgb(66.666667%,66.666667%,66.666667%)',
-        'yellow' : 'rgb(100.0%,95.0%,0%)',
+        'black' : 'rgb(100.0%,95.0%,0%)',
         'white' : 'rgb(100.0%,100.0%,100.0%)',
         'purple' : 'rgb(80.0%,40.0%,100.0%)',
         //'black' : 'rgb(0.0%,0.0%,0.0%)',
@@ -57,10 +57,10 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
 
     let colorWhiteStroke = 'black';
     let colorWhiteFill = 'white';
-    let colorYellowStroke = 'black';
-    let colorYellowFill = 'black'; //red4 fuchsia black yellow
+    let colorBlackStroke = 'black';
+    let colorBlackFill = 'black'; //red4 fuchsia black yellow
 
-    if (colorYellowFill === 'black'){
+    if (colorBlackFill === 'black'){
         makeItBlack = 'yes';
     }
 
@@ -113,7 +113,7 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
 
     svg.setAttributeNS(null, 'version', '1.1');
 
-    svg.setAttributeNS(null, 'actualyellowcolor', myColors[colorYellowFill]);
+    svg.setAttributeNS(null, 'actualyellowcolor', myColors[colorBlackFill]);
     body.appendChild(svg);
 
     
@@ -168,15 +168,15 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
 
         svg.appendChild(blackPlaceForWhiteClock);
 
-        const blackPlaceForYellowClock = dom.window.document.createElementNS(ns, 'rect');
-        blackPlaceForYellowClock.setAttributeNS(null, 'id', 'blackPlaceForYellowClock');
-        blackPlaceForYellowClock.setAttributeNS(null, 'x', '55');
-        blackPlaceForYellowClock.setAttributeNS(null, 'y', '260'); 
-        blackPlaceForYellowClock.setAttributeNS(null, 'width', '125'); 
-        blackPlaceForYellowClock.setAttributeNS(null, 'height', '48'); 
-        blackPlaceForYellowClock.setAttributeNS(null, 'fill', '#273746');
+        const blackPlaceForBlackClock = dom.window.document.createElementNS(ns, 'rect');
+        blackPlaceForBlackClock.setAttributeNS(null, 'id', 'blackPlaceForBlackClock');
+        blackPlaceForBlackClock.setAttributeNS(null, 'x', '55');
+        blackPlaceForBlackClock.setAttributeNS(null, 'y', '260'); 
+        blackPlaceForBlackClock.setAttributeNS(null, 'width', '125'); 
+        blackPlaceForBlackClock.setAttributeNS(null, 'height', '48'); 
+        blackPlaceForBlackClock.setAttributeNS(null, 'fill', '#273746');
 
-        svg.appendChild(blackPlaceForYellowClock);
+        svg.appendChild(blackPlaceForBlackClock);
     }
 
 
@@ -283,14 +283,14 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
         for (let i=0;i<allPiecesDict['trifoxes'];i++){
             let trifoxes = dom.window.document.createElementNS(ns, 'g');
             trifoxes.setAttributeNS(null, 'class', 'draggable trifoxes yellow');
-            trifoxes.setAttributeNS(null, 'id', 'yellow_trifoxes_' + i);
+            trifoxes.setAttributeNS(null, 'id', 'black_trifoxes_' + i);
             trifoxes.setAttributeNS(null, 'transform', 'translate(' + (760 + hardTranslate + i * 15) + ', 255) scale(0.09)');
 
             const path = dom.window.document.createElementNS(ns, 'path');
             // A rx ry rotate LargeArcFlag SweepFlag x y
             path.setAttributeNS(null, 'd', 'M 0 0 A 10 25 0 0 1 110 110 Z');
-            path.setAttributeNS(null, 'stroke', '' + myColors[colorYellowStroke] + '');
-            path.setAttributeNS(null, 'fill', '' + myColors[colorYellowFill] + '');
+            path.setAttributeNS(null, 'stroke', '' + myColors[colorBlackStroke] + '');
+            path.setAttributeNS(null, 'fill', '' + myColors[colorBlackFill] + '');
             path.setAttributeNS(null, 'stroke-width', '20');
 
             // Repeat the path three times to create the full symbol
@@ -325,14 +325,14 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
         for (let i=0;i<allPiecesDict['trifoxes'];i++){
             let trifoxes = dom.window.document.createElementNS(ns, 'g');
             trifoxes.setAttributeNS(null, 'class', 'draggable trifoxes yellow');
-            trifoxes.setAttributeNS(null, 'id', 'yellow_trifoxes_' + i);
+            trifoxes.setAttributeNS(null, 'id', 'black_trifoxes_' + i);
             trifoxes.setAttributeNS(null, 'transform', 'translate(' + (760 + hardTranslate + i * 15) + ', 255) scale(0.09)');
 
             const path = dom.window.document.createElementNS(ns, 'path');
             // A rx ry rotate LargeArcFlag SweepFlag x y
             path.setAttributeNS(null, 'd', 'M 0 0 A 10 25 0 0 1 110 110 Z');
-            path.setAttributeNS(null, 'stroke', '' + myColors[colorYellowStroke] + '');
-            path.setAttributeNS(null, 'fill', '' + myColors[colorYellowFill] + '');
+            path.setAttributeNS(null, 'stroke', '' + myColors[colorBlackStroke] + '');
+            path.setAttributeNS(null, 'fill', '' + myColors[colorBlackFill] + '');
             path.setAttributeNS(null, 'stroke-width', '20');
 
             // Repeat the path three times to create the full symbol
@@ -375,7 +375,7 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
         for (let i=0;i<nbSoldiers;i++){
             let mySoldier = dom.window.document.createElementNS(ns, 'g');
             mySoldier.setAttributeNS(null, 'class', 'draggable soldier yellow');
-            mySoldier.setAttributeNS(null, 'id', 'yellow_soldier_' + i);
+            mySoldier.setAttributeNS(null, 'id', 'black_soldier_' + i);
             let z = 730 + hardTranslate + i * 7;
             mySoldier.setAttributeNS(null, 'transform', 'translate(' + z + ', 170) scale(0.9)');
             let ellipse1 = dom.window.document.createElementNS(ns, 'ellipse');
@@ -402,7 +402,7 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
         for (let i=0;i<nbSoldiers;i++){
             let mySoldier = dom.window.document.createElementNS(ns, 'g');
             mySoldier.setAttributeNS(null, 'class', 'draggable soldier yellow');
-            mySoldier.setAttributeNS(null, 'id', 'yellow_soldier_' + i);
+            mySoldier.setAttributeNS(null, 'id', 'black_soldier_' + i);
             let z = 730 + hardTranslate + i * 7;
             mySoldier.setAttributeNS(null, 'transform', 'translate(' + z + ', 170) scale(0.9)');
             let ellipse1 = dom.window.document.createElementNS(ns, 'ellipse');
@@ -411,12 +411,12 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
             ellipse1.setAttributeNS(null, 'cy', 0);
             ellipse1.setAttributeNS(null, 'rx', 10);
             ellipse1.setAttributeNS(null, 'ry', 10);
-            ellipse1.setAttributeNS(null, 'style', 'fill:' + myColors[colorYellowFill] + ';stroke:' + myColors[colorYellowFill] + ';stroke-width:4;');
+            ellipse1.setAttributeNS(null, 'style', 'fill:' + myColors[colorBlackFill] + ';stroke:' + myColors[colorBlackFill] + ';stroke-width:4;');
             ellipse2.setAttributeNS(null, 'cx', 0);
             ellipse2.setAttributeNS(null, 'cy', 0);
             ellipse2.setAttributeNS(null, 'rx', 12);
             ellipse2.setAttributeNS(null, 'ry', 12);
-            ellipse2.setAttributeNS(null, 'style', 'fill:none;stroke:' + myColors[colorYellowStroke] + ';stroke-width:2;');        
+            ellipse2.setAttributeNS(null, 'style', 'fill:none;stroke:' + myColors[colorBlackStroke] + ';stroke-width:2;');        
 
             mySoldier.appendChild(ellipse1);
             mySoldier.appendChild(ellipse2);
@@ -453,7 +453,7 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
         for (let i=0;i<1;i++){
             let myGoddess = dom.window.document.createElementNS(ns, 'g');
             myGoddess.setAttributeNS(null, 'class', 'draggable goddess yellow');
-            myGoddess.setAttributeNS(null, 'id', 'yellow_goddess_' + i);
+            myGoddess.setAttributeNS(null, 'id', 'black_goddess_' + i);
             let z = 730 + hardTranslate + i * 25;
             myGoddess.setAttributeNS(null, 'transform', 'translate(' + z + ', 255) scale(0.23)');        
             let myPolygon = dom.window.document.createElementNS(ns, 'polygon');
@@ -478,20 +478,20 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
         for (let i=0;i<1;i++){
             let myGoddess = dom.window.document.createElementNS(ns, 'g');
             myGoddess.setAttributeNS(null, 'class', 'draggable goddess yellow');
-            myGoddess.setAttributeNS(null, 'id', 'yellow_goddess_' + i);
+            myGoddess.setAttributeNS(null, 'id', 'black_goddess_' + i);
             let z = 730 + hardTranslate + i * 25;
             myGoddess.setAttributeNS(null, 'transform', 'translate(' + z + ', 255) scale(0.23)');        
             let myPolygon = dom.window.document.createElementNS(ns, 'polygon');
             // myPolygon.setAttributeNS(null, 'points', '50 0 100 65 50 100 0 65');
             myPolygon.setAttributeNS(null, 'points', '0 -55 50 15 0 55 -50 15');
-            myPolygon.setAttributeNS(null, 'fill', myColors[colorYellowFill]);
-            myPolygon.setAttributeNS(null, 'stroke', myColors[colorYellowStroke]);
+            myPolygon.setAttributeNS(null, 'fill', myColors[colorBlackFill]);
+            myPolygon.setAttributeNS(null, 'stroke', myColors[colorBlackStroke]);
             myPolygon.setAttributeNS(null, 'stroke-width', 8);
 
             let myPolygon2 = dom.window.document.createElementNS(ns, 'polygon');
             myPolygon2.setAttributeNS(null, 'points', '0 -15 20 10 0 20 -20 10');
-            myPolygon2.setAttributeNS(null, 'fill', myColors[colorYellowStroke]);
-            myPolygon2.setAttributeNS(null, 'stroke', myColors[colorYellowStroke]);
+            myPolygon2.setAttributeNS(null, 'fill', myColors[colorBlackStroke]);
+            myPolygon2.setAttributeNS(null, 'stroke', myColors[colorBlackStroke]);
             myPolygon2.setAttributeNS(null, 'stroke-width', 8);        
 
             myGoddess.appendChild(myPolygon);
@@ -540,13 +540,13 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
     for (let i=0;i<allPiecesDict['bishop'];i++){
         let myTriangle = dom.window.document.createElementNS(ns, 'g');
         myTriangle.setAttributeNS(null, 'class', 'draggable bishop yellow');
-        myTriangle.setAttributeNS(null, 'id', 'yellow_bishop_' + i);
+        myTriangle.setAttributeNS(null, 'id', 'black_bishop_' + i);
         let z = 780 + hardTranslate + i * 10;
         myTriangle.setAttributeNS(null, 'transform', 'translate(' + z + ', 130) scale(1.0)');
         let myPolygon = dom.window.document.createElementNS(ns, 'polygon');
         myPolygon.setAttributeNS(null, 'points', '40 32 30 50 50 50');
-        myPolygon.setAttributeNS(null, 'fill', myColors[colorYellowFill]);
-        myPolygon.setAttributeNS(null, 'stroke', myColors[colorYellowStroke]);
+        myPolygon.setAttributeNS(null, 'fill', myColors[colorBlackFill]);
+        myPolygon.setAttributeNS(null, 'stroke', myColors[colorBlackStroke]);
         myPolygon.setAttributeNS(null, 'stroke-width', '2');
         myTriangle.appendChild(myPolygon);
         setOfAllPieces.appendChild(myTriangle);
@@ -568,15 +568,15 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
     }
 
     for (let i=0;i<2;i++){
-        let myKing = dom.window.document.createElementNS(ns, 'g');
-        myKing.setAttributeNS(null, 'class', 'draggable king yellow');
-        myKing.setAttributeNS(null, 'id', 'yellow_king_' + i);
+        let myHeroe = dom.window.document.createElementNS(ns, 'g');
+        myHeroe.setAttributeNS(null, 'class', 'draggable heroe yellow');
+        myHeroe.setAttributeNS(null, 'id', 'black_heroe_' + i);
         let z = 720 + hardTranslate + i * 20;
-        myKing.setAttributeNS(null, 'transform', 'translate(' + z + ', 5) scale(0.46)');
+        myHeroe.setAttributeNS(null, 'transform', 'translate(' + z + ', 5) scale(0.46)');
         let myPolygon = dom.window.document.createElementNS(ns, 'polygon');
         myPolygon.setAttributeNS(null, 'points', '50 165 55 180 70 180 60 190 65 205 50 195 35 205 40 190 30 180 45 180');
-        myPolygon.setAttributeNS(null, 'fill', myColors[colorYellowFill]);
-        myPolygon.setAttributeNS(null, 'stroke', myColors[colorYellowStroke]);
+        myPolygon.setAttributeNS(null, 'fill', myColors[colorBlackFill]);
+        myPolygon.setAttributeNS(null, 'stroke', myColors[colorBlackStroke]);
         myPolygon.setAttributeNS(null, 'stroke-width', 3);
         //let ellipse1 = dom.window.document.createElementNS(ns, 'ellipse');
         //let ellipse2 = dom.window.document.createElementNS(ns, 'ellipse');
@@ -586,7 +586,7 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
         ellipse1.setAttributeNS(null, 'cy', 187);
         ellipse1.setAttributeNS(null, 'rx', 20);
         ellipse1.setAttributeNS(null, 'ry', 20);
-        ellipse1.setAttributeNS(null, 'style', 'fill:none;stroke:' + myColors[colorYellowFill] + ';stroke-width:5;');
+        ellipse1.setAttributeNS(null, 'style', 'fill:none;stroke:' + myColors[colorBlackFill] + ';stroke-width:5;');
         ellipse2.setAttributeNS(null, 'cx', 50);
         ellipse2.setAttributeNS(null, 'cy', 187);
         ellipse2.setAttributeNS(null, 'rx', 22.5);
@@ -601,21 +601,21 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
         ellipse4.setAttributeNS(null, 'cy', 187);
         ellipse4.setAttributeNS(null, 'rx', 22.5);
         ellipse4.setAttributeNS(null, 'ry', 22.5);
-        ellipse4.setAttributeNS(null, 'style', 'opacity:0.01;fill:' + myColors[colorYellowStroke] + ';stroke:' + myColors[colorYellowStroke] + ';stroke-width:3;');
-        myKing.appendChild(ellipse4);
-        myKing.appendChild(myPolygon);
-        //myKing.appendChild(ellipse1);
-        //myKing.appendChild(ellipse2);
-        //myKing.appendChild(ellipse3);
-        setOfAllPieces.appendChild(myKing);
+        ellipse4.setAttributeNS(null, 'style', 'opacity:0.01;fill:' + myColors[colorBlackStroke] + ';stroke:' + myColors[colorBlackStroke] + ';stroke-width:3;');
+        myHeroe.appendChild(ellipse4);
+        myHeroe.appendChild(myPolygon);
+        //myHeroe.appendChild(ellipse1);
+        //myHeroe.appendChild(ellipse2);
+        //myHeroe.appendChild(ellipse3);
+        setOfAllPieces.appendChild(myHeroe);
     }
 
     for (let i=0;i<2;i++){
-        let myKing = dom.window.document.createElementNS(ns, 'g');
-        myKing.setAttributeNS(null, 'class', 'draggable king white');
-        myKing.setAttributeNS(null, 'id', 'white_king_' + i);
+        let myHeroe = dom.window.document.createElementNS(ns, 'g');
+        myHeroe.setAttributeNS(null, 'class', 'draggable heroe white');
+        myHeroe.setAttributeNS(null, 'id', 'white_heroe_' + i);
         let z = 720 + hardTranslate + i * 20;
-        myKing.setAttributeNS(null, 'transform', 'translate(' + z + ', 30) scale(0.46)');
+        myHeroe.setAttributeNS(null, 'transform', 'translate(' + z + ', 30) scale(0.46)');
         let myPolygon = dom.window.document.createElementNS(ns, 'polygon');
         myPolygon.setAttributeNS(null, 'points', '50 165 55 180 70 180 60 190 65 205 50 195 35 205 40 190 30 180 45 180');
         myPolygon.setAttributeNS(null, 'fill', myColors[colorWhiteFill]);
@@ -645,12 +645,12 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
         ellipse4.setAttributeNS(null, 'rx', 22.5);
         ellipse4.setAttributeNS(null, 'ry', 22.5);
         ellipse4.setAttributeNS(null, 'style', 'opacity:0.01;fill:' + myColors[colorWhiteStroke] + ';stroke:' + myColors[colorWhiteStroke] + ';stroke-width:3;');
-        myKing.appendChild(ellipse4);
-        myKing.appendChild(myPolygon);
-        //myKing.appendChild(ellipse1);
-        //myKing.appendChild(ellipse2);
-        //myKing.appendChild(ellipse3);
-        setOfAllPieces.appendChild(myKing);
+        myHeroe.appendChild(ellipse4);
+        myHeroe.appendChild(myPolygon);
+        //myHeroe.appendChild(ellipse1);
+        //myHeroe.appendChild(ellipse2);
+        //myHeroe.appendChild(ellipse3);
+        setOfAllPieces.appendChild(myHeroe);
     }
 
     let sizeSmallRoundLeg = 80;
@@ -660,27 +660,27 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
         for (let i=0;i<allPiecesDict['mage'];i++){
             let myMage = dom.window.document.createElementNS(ns, 'g');
             myMage.setAttributeNS(null, 'class', 'draggable mage yellow');
-            myMage.setAttributeNS(null, 'id', 'yellow_mage_' + i);
+            myMage.setAttributeNS(null, 'id', 'black_mage_' + i);
             let z = 800 + hardTranslate + i * 25;
             myMage.setAttributeNS(null, 'transform', 'translate(' + z + ', 83) scale(0.040)');        
             let ellipse1 = dom.window.document.createElementNS(ns, 'ellipse');
             ellipse1.setAttributeNS(null, 'cx', 130.773); ellipse1.setAttributeNS(null, 'cy', 438.01); ellipse1.setAttributeNS(null, 'rx', sizeSmallRoundLeg); ellipse1.setAttributeNS(null, 'ry', sizeSmallRoundLeg);
-            ellipse1.setAttributeNS(null, 'style', 'fill:' + myColors[colorYellowStroke] + ';stroke:' + myColors[colorYellowStroke] + ';stroke-width:10;');
+            ellipse1.setAttributeNS(null, 'style', 'fill:' + myColors[colorBlackStroke] + ';stroke:' + myColors[colorBlackStroke] + ';stroke-width:10;');
             let ellipse2 = dom.window.document.createElementNS(ns, 'ellipse');
             ellipse2.setAttributeNS(null, 'cx', 5.774); ellipse2.setAttributeNS(null, 'cy', 221.505); ellipse2.setAttributeNS(null, 'rx', sizeSmallRoundLeg); ellipse2.setAttributeNS(null, 'ry', sizeSmallRoundLeg);
-            ellipse2.setAttributeNS(null, 'style', 'fill:' + myColors[colorYellowStroke] + ';stroke:' + myColors[colorYellowStroke] + ';stroke-width:10;');
+            ellipse2.setAttributeNS(null, 'style', 'fill:' + myColors[colorBlackStroke] + ';stroke:' + myColors[colorBlackStroke] + ';stroke-width:10;');
             let ellipse3 = dom.window.document.createElementNS(ns, 'ellipse');
             ellipse3.setAttributeNS(null, 'cx', 130.773); ellipse3.setAttributeNS(null, 'cy', 5); ellipse3.setAttributeNS(null, 'rx', sizeSmallRoundLeg); ellipse3.setAttributeNS(null, 'ry', sizeSmallRoundLeg);
-            ellipse3.setAttributeNS(null, 'style', 'fill:' + myColors[colorYellowStroke] + ';stroke:' + myColors[colorYellowStroke] + ';stroke-width:10;');
+            ellipse3.setAttributeNS(null, 'style', 'fill:' + myColors[colorBlackStroke] + ';stroke:' + myColors[colorBlackStroke] + ';stroke-width:10;');
             let ellipse4 = dom.window.document.createElementNS(ns, 'ellipse');
             ellipse4.setAttributeNS(null, 'cx', 380.771); ellipse4.setAttributeNS(null, 'cy', 5); ellipse4.setAttributeNS(null, 'rx', sizeSmallRoundLeg); ellipse4.setAttributeNS(null, 'ry', sizeSmallRoundLeg);
-            ellipse4.setAttributeNS(null, 'style', 'fill:' + myColors[colorYellowStroke] + ';stroke:' + myColors[colorYellowStroke] + ';stroke-width:10;');
+            ellipse4.setAttributeNS(null, 'style', 'fill:' + myColors[colorBlackStroke] + ';stroke:' + myColors[colorBlackStroke] + ';stroke-width:10;');
             let ellipse5 = dom.window.document.createElementNS(ns, 'ellipse');
             ellipse5.setAttributeNS(null, 'cx', 505.771); ellipse5.setAttributeNS(null, 'cy', 221.505); ellipse5.setAttributeNS(null, 'rx', sizeSmallRoundLeg); ellipse5.setAttributeNS(null, 'ry', sizeSmallRoundLeg);
-            ellipse5.setAttributeNS(null, 'style', 'fill:' + myColors[colorYellowStroke] + ';stroke:' + myColors[colorYellowStroke] + ';stroke-width:10;');
+            ellipse5.setAttributeNS(null, 'style', 'fill:' + myColors[colorBlackStroke] + ';stroke:' + myColors[colorBlackStroke] + ';stroke-width:10;');
             let ellipse6 = dom.window.document.createElementNS(ns, 'ellipse');
             ellipse6.setAttributeNS(null, 'cx', 380.771); ellipse6.setAttributeNS(null, 'cy', 438.01); ellipse6.setAttributeNS(null, 'rx', sizeSmallRoundLeg); ellipse6.setAttributeNS(null, 'ry', sizeSmallRoundLeg);
-            ellipse6.setAttributeNS(null, 'style', 'fill:' + myColors[colorYellowStroke] + ';stroke:' + myColors[colorYellowStroke] + ';stroke-width:10;');
+            ellipse6.setAttributeNS(null, 'style', 'fill:' + myColors[colorBlackStroke] + ';stroke:' + myColors[colorBlackStroke] + ';stroke-width:10;');
 
             let myPolygon = dom.window.document.createElementNS(ns, 'polygon');
             myPolygon.setAttributeNS(null, 'points', '130.773,438.01 5.774,221.505 130.773,5  380.771,5 505.771,221.505 380.771,438.01');
@@ -690,10 +690,10 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
 
             let ellipse7 = dom.window.document.createElementNS(ns, 'ellipse');
             ellipse7.setAttributeNS(null, 'cx', 255.7725); ellipse7.setAttributeNS(null, 'cy', 221.505); ellipse7.setAttributeNS(null, 'rx', 20); ellipse7.setAttributeNS(null, 'ry', 20);
-            ellipse7.setAttributeNS(null, 'style', 'fill:none;stroke:' + myColors[colorYellowStroke] + ';stroke-width:20;');
+            ellipse7.setAttributeNS(null, 'style', 'fill:none;stroke:' + myColors[colorBlackStroke] + ';stroke-width:20;');
             let ellipse8 = dom.window.document.createElementNS(ns, 'ellipse');
             ellipse8.setAttributeNS(null, 'cx', 255.7725); ellipse8.setAttributeNS(null, 'cy', 221.505); ellipse8.setAttributeNS(null, 'rx', 50); ellipse8.setAttributeNS(null, 'ry', 50);
-            ellipse8.setAttributeNS(null, 'style', 'fill:none;stroke:' + myColors[colorYellowStroke] + ';stroke-width:20;');
+            ellipse8.setAttributeNS(null, 'style', 'fill:none;stroke:' + myColors[colorBlackStroke] + ';stroke-width:20;');
             
             let ellipse9 = dom.window.document.createElementNS(ns, 'ellipse');
             ellipse9.setAttributeNS(null, 'cx', 255.7725); ellipse9.setAttributeNS(null, 'cy', 221.505); ellipse9.setAttributeNS(null, 'rx', 80); ellipse9.setAttributeNS(null, 'ry', 80);
@@ -707,7 +707,7 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
             
             let ellipse12 = dom.window.document.createElementNS(ns, 'ellipse');
             ellipse12.setAttributeNS(null, 'cx', 255.7725); ellipse12.setAttributeNS(null, 'cy', 221.505); ellipse12.setAttributeNS(null, 'rx', 170); ellipse12.setAttributeNS(null, 'ry', 170);
-            ellipse12.setAttributeNS(null, 'style', 'fill:none;stroke:' + myColors[colorYellowStroke] + ';stroke-width:20;');
+            ellipse12.setAttributeNS(null, 'style', 'fill:none;stroke:' + myColors[colorBlackStroke] + ';stroke-width:20;');
             
             myMage.appendChild(ellipse1);
             myMage.appendChild(ellipse2);
@@ -729,52 +729,52 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
         for (let i=0;i<allPiecesDict['mage'];i++){
             let myMage = dom.window.document.createElementNS(ns, 'g');
             myMage.setAttributeNS(null, 'class', 'draggable mage yellow');
-            myMage.setAttributeNS(null, 'id', 'yellow_mage_' + i);
+            myMage.setAttributeNS(null, 'id', 'black_mage_' + i);
             let z = 800 + hardTranslate + i * 25;
             myMage.setAttributeNS(null, 'transform', 'translate(' + z + ', 83) scale(0.040)');        
             let ellipse1 = dom.window.document.createElementNS(ns, 'ellipse');
             ellipse1.setAttributeNS(null, 'cx', 130.773); ellipse1.setAttributeNS(null, 'cy', 438.01); ellipse1.setAttributeNS(null, 'rx', sizeSmallRoundLeg); ellipse1.setAttributeNS(null, 'ry', sizeSmallRoundLeg);
-            ellipse1.setAttributeNS(null, 'style', 'fill:' + myColors[colorYellowStroke] + ';stroke:' + myColors[colorYellowStroke] + ';stroke-width:10;');
+            ellipse1.setAttributeNS(null, 'style', 'fill:' + myColors[colorBlackStroke] + ';stroke:' + myColors[colorBlackStroke] + ';stroke-width:10;');
             let ellipse2 = dom.window.document.createElementNS(ns, 'ellipse');
             ellipse2.setAttributeNS(null, 'cx', 5.774); ellipse2.setAttributeNS(null, 'cy', 221.505); ellipse2.setAttributeNS(null, 'rx', sizeSmallRoundLeg); ellipse2.setAttributeNS(null, 'ry', sizeSmallRoundLeg);
-            ellipse2.setAttributeNS(null, 'style', 'fill:' + myColors[colorYellowStroke] + ';stroke:' + myColors[colorYellowStroke] + ';stroke-width:10;');
+            ellipse2.setAttributeNS(null, 'style', 'fill:' + myColors[colorBlackStroke] + ';stroke:' + myColors[colorBlackStroke] + ';stroke-width:10;');
             let ellipse3 = dom.window.document.createElementNS(ns, 'ellipse');
             ellipse3.setAttributeNS(null, 'cx', 130.773); ellipse3.setAttributeNS(null, 'cy', 5); ellipse3.setAttributeNS(null, 'rx', sizeSmallRoundLeg); ellipse3.setAttributeNS(null, 'ry', sizeSmallRoundLeg);
-            ellipse3.setAttributeNS(null, 'style', 'fill:' + myColors[colorYellowStroke] + ';stroke:' + myColors[colorYellowStroke] + ';stroke-width:10;');
+            ellipse3.setAttributeNS(null, 'style', 'fill:' + myColors[colorBlackStroke] + ';stroke:' + myColors[colorBlackStroke] + ';stroke-width:10;');
             let ellipse4 = dom.window.document.createElementNS(ns, 'ellipse');
             ellipse4.setAttributeNS(null, 'cx', 380.771); ellipse4.setAttributeNS(null, 'cy', 5); ellipse4.setAttributeNS(null, 'rx', sizeSmallRoundLeg); ellipse4.setAttributeNS(null, 'ry', sizeSmallRoundLeg);
-            ellipse4.setAttributeNS(null, 'style', 'fill:' + myColors[colorYellowStroke] + ';stroke:' + myColors[colorYellowStroke] + ';stroke-width:10;');
+            ellipse4.setAttributeNS(null, 'style', 'fill:' + myColors[colorBlackStroke] + ';stroke:' + myColors[colorBlackStroke] + ';stroke-width:10;');
             let ellipse5 = dom.window.document.createElementNS(ns, 'ellipse');
             ellipse5.setAttributeNS(null, 'cx', 505.771); ellipse5.setAttributeNS(null, 'cy', 221.505); ellipse5.setAttributeNS(null, 'rx', sizeSmallRoundLeg); ellipse5.setAttributeNS(null, 'ry', sizeSmallRoundLeg);
-            ellipse5.setAttributeNS(null, 'style', 'fill:' + myColors[colorYellowStroke] + ';stroke:' + myColors[colorYellowStroke] + ';stroke-width:10;');
+            ellipse5.setAttributeNS(null, 'style', 'fill:' + myColors[colorBlackStroke] + ';stroke:' + myColors[colorBlackStroke] + ';stroke-width:10;');
             let ellipse6 = dom.window.document.createElementNS(ns, 'ellipse');
             ellipse6.setAttributeNS(null, 'cx', 380.771); ellipse6.setAttributeNS(null, 'cy', 438.01); ellipse6.setAttributeNS(null, 'rx', sizeSmallRoundLeg); ellipse6.setAttributeNS(null, 'ry', sizeSmallRoundLeg);
-            ellipse6.setAttributeNS(null, 'style', 'fill:' + myColors[colorYellowStroke] + ';stroke:' + myColors[colorYellowStroke] + ';stroke-width:10;');
+            ellipse6.setAttributeNS(null, 'style', 'fill:' + myColors[colorBlackStroke] + ';stroke:' + myColors[colorBlackStroke] + ';stroke-width:10;');
 
             let myPolygon = dom.window.document.createElementNS(ns, 'polygon');
             myPolygon.setAttributeNS(null, 'points', '130.773,438.01 5.774,221.505 130.773,5  380.771,5 505.771,221.505 380.771,438.01');
-            myPolygon.setAttributeNS(null, 'fill', myColors[colorYellowFill]);
-            myPolygon.setAttributeNS(null, 'stroke', '' + myColors[colorYellowStroke] + '');
+            myPolygon.setAttributeNS(null, 'fill', myColors[colorBlackFill]);
+            myPolygon.setAttributeNS(null, 'stroke', '' + myColors[colorBlackStroke] + '');
             myPolygon.setAttributeNS(null, 'stroke-width', 30);
 
             let ellipse7 = dom.window.document.createElementNS(ns, 'ellipse');
             ellipse7.setAttributeNS(null, 'cx', 255.7725); ellipse7.setAttributeNS(null, 'cy', 221.505); ellipse7.setAttributeNS(null, 'rx', 20); ellipse7.setAttributeNS(null, 'ry', 20);
-            ellipse7.setAttributeNS(null, 'style', 'fill:none;stroke:' + myColors[colorYellowStroke] + ';stroke-width:20;');
+            ellipse7.setAttributeNS(null, 'style', 'fill:none;stroke:' + myColors[colorBlackStroke] + ';stroke-width:20;');
             let ellipse8 = dom.window.document.createElementNS(ns, 'ellipse');
             ellipse8.setAttributeNS(null, 'cx', 255.7725); ellipse8.setAttributeNS(null, 'cy', 221.505); ellipse8.setAttributeNS(null, 'rx', 50); ellipse8.setAttributeNS(null, 'ry', 50);
-            ellipse8.setAttributeNS(null, 'style', 'fill:none;stroke:' + myColors[colorYellowStroke] + ';stroke-width:20;');
+            ellipse8.setAttributeNS(null, 'style', 'fill:none;stroke:' + myColors[colorBlackStroke] + ';stroke-width:20;');
             let ellipse9 = dom.window.document.createElementNS(ns, 'ellipse');
             ellipse9.setAttributeNS(null, 'cx', 255.7725); ellipse9.setAttributeNS(null, 'cy', 221.505); ellipse9.setAttributeNS(null, 'rx', 80); ellipse9.setAttributeNS(null, 'ry', 80);
-            ellipse9.setAttributeNS(null, 'style', 'fill:none;stroke:' + myColors[colorYellowStroke] + ';stroke-width:20;');
+            ellipse9.setAttributeNS(null, 'style', 'fill:none;stroke:' + myColors[colorBlackStroke] + ';stroke-width:20;');
             let ellipse10 = dom.window.document.createElementNS(ns, 'ellipse');
             ellipse10.setAttributeNS(null, 'cx', 255.7725); ellipse10.setAttributeNS(null, 'cy', 221.505); ellipse10.setAttributeNS(null, 'rx', 110); ellipse10.setAttributeNS(null, 'ry', 110);
-            ellipse10.setAttributeNS(null, 'style', 'fill:none;stroke:' + myColors[colorYellowStroke] + ';stroke-width:20;');
+            ellipse10.setAttributeNS(null, 'style', 'fill:none;stroke:' + myColors[colorBlackStroke] + ';stroke-width:20;');
             let ellipse11 = dom.window.document.createElementNS(ns, 'ellipse');
             ellipse11.setAttributeNS(null, 'cx', 255.7725); ellipse11.setAttributeNS(null, 'cy', 221.505); ellipse11.setAttributeNS(null, 'rx', 140); ellipse11.setAttributeNS(null, 'ry', 140);
-            ellipse11.setAttributeNS(null, 'style', 'fill:none;stroke:' + myColors[colorYellowStroke] + ';stroke-width:20;');
+            ellipse11.setAttributeNS(null, 'style', 'fill:none;stroke:' + myColors[colorBlackStroke] + ';stroke-width:20;');
             let ellipse12 = dom.window.document.createElementNS(ns, 'ellipse');
             ellipse12.setAttributeNS(null, 'cx', 255.7725); ellipse12.setAttributeNS(null, 'cy', 221.505); ellipse12.setAttributeNS(null, 'rx', 170); ellipse12.setAttributeNS(null, 'ry', 170);
-            ellipse12.setAttributeNS(null, 'style', 'fill:none;stroke:' + myColors[colorYellowStroke] + ';stroke-width:20;');
+            ellipse12.setAttributeNS(null, 'style', 'fill:none;stroke:' + myColors[colorBlackStroke] + ';stroke-width:20;');
             
             myMage.appendChild(ellipse1);
             myMage.appendChild(ellipse2);
@@ -898,7 +898,7 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
         for (let i=0;i<allPiecesDict['siren'];i++){
             let mySiren = dom.window.document.createElementNS(ns, 'g');
             mySiren.setAttributeNS(null, 'class', 'draggable siren yellow');
-            mySiren.setAttributeNS(null, 'id', 'yellow_siren_' + i);
+            mySiren.setAttributeNS(null, 'id', 'black_siren_' + i);
             let z = 810 + hardTranslate + i * 7;
             mySiren.setAttributeNS(null, 'transform', 'translate(' + z + ', 255) scale(0.8)');
             let ellipse1 = dom.window.document.createElementNS(ns, 'ellipse');
@@ -947,37 +947,37 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
         for (let i=0;i<allPiecesDict['siren'];i++){
             let mySiren = dom.window.document.createElementNS(ns, 'g');
             mySiren.setAttributeNS(null, 'class', 'draggable siren yellow');
-            mySiren.setAttributeNS(null, 'id', 'yellow_siren_' + i);
+            mySiren.setAttributeNS(null, 'id', 'black_siren_' + i);
             let z = 810 + hardTranslate + i * 7;
             mySiren.setAttributeNS(null, 'transform', 'translate(' + z + ', 255) scale(0.8)');
             let ellipse1 = dom.window.document.createElementNS(ns, 'ellipse');
             ellipse1.setAttributeNS(null, 'cx', 0); ellipse1.setAttributeNS(null, 'cy', 0); ellipse1.setAttributeNS(null, 'rx', 10); ellipse1.setAttributeNS(null, 'ry', 10);
-            ellipse1.setAttributeNS(null, 'style', 'fill:' + myColors[colorYellowFill] + ';stroke:' + myColors[colorYellowFill] + ';stroke-width:4;');
+            ellipse1.setAttributeNS(null, 'style', 'fill:' + myColors[colorBlackFill] + ';stroke:' + myColors[colorBlackFill] + ';stroke-width:4;');
             /*let ellipse2 = dom.window.document.createElementNS(ns, 'ellipse');
             ellipse2.setAttributeNS(null, 'cx', 0); ellipse2.setAttributeNS(null, 'cy', 0); ellipse2.setAttributeNS(null, 'rx', 12); ellipse2.setAttributeNS(null, 'ry', 12);
             ellipse2.setAttributeNS(null, 'style', 'fill:none;stroke:black;stroke-width:2;');*/
             let polygon = dom.window.document.createElementNS(ns, 'polygon');
             polygon.setAttribute('points', points);
-            polygon.setAttribute('fill', myColors[colorYellowFill]);
-            polygon.setAttribute('stroke', myColors[colorYellowStroke]);
-            polygon.setAttributeNS(null, 'style', 'fill:' + myColors[colorYellowFill]+ ';stroke:' + myColors[colorYellowStroke] + ';stroke-width:2;');
+            polygon.setAttribute('fill', myColors[colorBlackFill]);
+            polygon.setAttribute('stroke', myColors[colorBlackStroke]);
+            polygon.setAttributeNS(null, 'style', 'fill:' + myColors[colorBlackFill]+ ';stroke:' + myColors[colorBlackStroke] + ';stroke-width:2;');
 
             let line1 = dom.window.document.createElementNS(ns, 'line');
             line1.setAttributeNS(null, 'x1', -8); line1.setAttributeNS(null, 'x2', 8); line1.setAttributeNS(null, 'y1', -8); line1.setAttributeNS(null, 'y2', 8);
-            line1.setAttributeNS(null, 'style', 'stroke:' + myColors[colorYellowStroke] + ';stroke-width:1;');
+            line1.setAttributeNS(null, 'style', 'stroke:' + myColors[colorBlackStroke] + ';stroke-width:1;');
             let line2 = dom.window.document.createElementNS(ns, 'line');
             line2.setAttributeNS(null, 'x1', -8); line2.setAttributeNS(null, 'x2', 8); line2.setAttributeNS(null, 'y1', 8); line2.setAttributeNS(null, 'y2', -8);
-            line2.setAttributeNS(null, 'style', 'stroke:' + myColors[colorYellowStroke] + ';stroke-width:1;');
+            line2.setAttributeNS(null, 'style', 'stroke:' + myColors[colorBlackStroke] + ';stroke-width:1;');
             let line3 = dom.window.document.createElementNS(ns, 'line');
             line3.setAttributeNS(null, 'x1', 10); line3.setAttributeNS(null, 'x2', -10); line3.setAttributeNS(null, 'y1', 0); line3.setAttributeNS(null, 'y2', 0);
-            line3.setAttributeNS(null, 'style', 'stroke:' + myColors[colorYellowStroke] + ';stroke-width:1;');
+            line3.setAttributeNS(null, 'style', 'stroke:' + myColors[colorBlackStroke] + ';stroke-width:1;');
             let line4 = dom.window.document.createElementNS(ns, 'line');
             line4.setAttributeNS(null, 'x1', 0); line4.setAttributeNS(null, 'x2', 0); line4.setAttributeNS(null, 'y1', -10); line4.setAttributeNS(null, 'y2', 10);
-            line4.setAttributeNS(null, 'style', 'stroke:' + myColors[colorYellowStroke] + ';stroke-width:1;');
+            line4.setAttributeNS(null, 'style', 'stroke:' + myColors[colorBlackStroke] + ';stroke-width:1;');
 
             let ellipse3 = dom.window.document.createElementNS(ns, 'ellipse');
             ellipse3.setAttributeNS(null, 'cx', 0); ellipse3.setAttributeNS(null, 'cy', 0); ellipse3.setAttributeNS(null, 'rx', 1); ellipse3.setAttributeNS(null, 'ry', 1);
-            ellipse3.setAttributeNS(null, 'style', 'fill:' + myColors[colorYellowStroke] + ';stroke:' + myColors[colorYellowStroke] + ';stroke-width:11;');
+            ellipse3.setAttributeNS(null, 'style', 'fill:' + myColors[colorBlackStroke] + ';stroke:' + myColors[colorBlackStroke] + ';stroke-width:11;');
 
             mySiren.appendChild(ellipse1);
 
@@ -1048,7 +1048,7 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
         for (let i=0;i<nbGhouls;i++){
             let myGhoul = dom.window.document.createElementNS(ns, 'g');
             myGhoul.setAttributeNS(null, 'class', 'draggable ghoul yellow');
-            myGhoul.setAttributeNS(null, 'id', 'yellow_ghoul_' + i);
+            myGhoul.setAttributeNS(null, 'id', 'black_ghoul_' + i);
             let z = 740 + hardTranslate + i * 11;
             myGhoul.setAttributeNS(null, 'transform', 'translate(' + z + ', 320) scale(0.8)');        
             let myRect = dom.window.document.createElementNS(ns, 'rect');
@@ -1070,13 +1070,13 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
         for (let i=0;i<nbGhouls;i++){
             let myGhoul = dom.window.document.createElementNS(ns, 'g');
             myGhoul.setAttributeNS(null, 'class', 'draggable ghoul yellow');
-            myGhoul.setAttributeNS(null, 'id', 'yellow_ghoul_' + i);
+            myGhoul.setAttributeNS(null, 'id', 'black_ghoul_' + i);
             let z = 740 + hardTranslate + i * 11;
             myGhoul.setAttributeNS(null, 'transform', 'translate(' + z + ', 320) scale(0.8)');        
             let myRect = dom.window.document.createElementNS(ns, 'rect');
             myRect.setAttributeNS(null, 'x', 0); myRect.setAttributeNS(null, 'y', 0); 
             myRect.setAttributeNS(null, 'width', 19); myRect.setAttributeNS(null, 'height', 19); 
-            myRect.setAttributeNS(null, 'style', 'fill:' + myColors[colorYellowFill] + ';stroke:' + myColors[colorYellowStroke] + ';stroke-width:2;');
+            myRect.setAttributeNS(null, 'style', 'fill:' + myColors[colorBlackFill] + ';stroke:' + myColors[colorBlackStroke] + ';stroke-width:2;');
             myGhoul.appendChild(myRect);
 
 
@@ -1308,18 +1308,18 @@ function getMainPage(boardFilename, allPiecesDict, whatColorToDrawFor, timeInfo)
 
         svg.appendChild(clockWhite);
 
-        let clockYellow = dom.window.document.createElementNS(ns, 'text');
-        clockYellow.setAttributeNS(null, 'id', 'clockYellow');
-        clockYellow.setAttributeNS(null, 'x', 60);
-        clockYellow.setAttributeNS(null, 'y', 300);
-        clockYellow.setAttributeNS(null, 'style', 'font-family="Arial";font-size:50px;fill:white;fill-opacity:1;stroke-width:10;');
-        // clockYellow.textContent = timeInfo['timeYellow'];
+        let clockBlack = dom.window.document.createElementNS(ns, 'text');
+        clockBlack.setAttributeNS(null, 'id', 'clockBlack');
+        clockBlack.setAttributeNS(null, 'x', 60);
+        clockBlack.setAttributeNS(null, 'y', 300);
+        clockBlack.setAttributeNS(null, 'style', 'font-family="Arial";font-size:50px;fill:white;fill-opacity:1;stroke-width:10;');
+        // clockBlack.textContent = timeInfo['timeBlack'];
 
-        minutes = Math.floor(timeInfo['timeYellow'] / 60000);
-        seconds = Math.floor((timeInfo['timeYellow'] % 60000) / 1000);
-        clockYellow.textContent = minutes + ':' + seconds.toString().padStart(2, '0');
+        minutes = Math.floor(timeInfo['timeBlack'] / 60000);
+        seconds = Math.floor((timeInfo['timeBlack'] % 60000) / 1000);
+        clockBlack.textContent = minutes + ':' + seconds.toString().padStart(2, '0');
 
-        svg.appendChild(clockYellow);
+        svg.appendChild(clockBlack);
     }
 
     //return pretty(dom.serialize());

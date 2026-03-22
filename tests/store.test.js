@@ -14,21 +14,21 @@ describe('Store State Management', () => {
       whoseTurnItIs: 'white',
       colorChosen: 'noColor',
       circleIdToColor: {},
-      kingHasTaken: 'no',
-      kingHasTakenCounter: 0,
-      kingHasTakenCounterMax: 2,
+      heroeHasTaken: 'no',
+      heroeHasTakenCounter: 0,
+      heroeHasTakenCounterMax: 2,
       soldierIsMoving: 'no',
       randomHash: '',
-      amIWhiteOrYellow: '',
+      amIWhiteOrBlack: '',
       boardRotated: 'no',
       newBoardRequested: 'no',
-      actualYellowColor: 'yellow',
+      actualBlackColor: 'yellow',
       piecesRemoved: [],
       animation_duration: 300,
       animation_duration_lastMove: -1,
       animation_delay: -1,
       setupIsDone: 'no',
-      possibleSetupGoddessKings: { yellow: [], white: [] },
+      possibleSetupGoddessHeroes: { yellow: [], white: [] },
       timeInfo: {},
       board: null,
       transform: '',
@@ -46,20 +46,20 @@ describe('Store State Management', () => {
   test('swapWhoseTurnItIs toggles seamlessly between white and yellow', () => {
     expect(store.getState().whoseTurnItIs).toBe('white');
     store.swapWhoseTurnItIs();
-    expect(store.getState().whoseTurnItIs).toBe('yellow');
+    expect(store.getState().whoseTurnItIs).toBe('black');
     store.swapWhoseTurnItIs();
     expect(store.getState().whoseTurnItIs).toBe('white');
   });
 
-  test('resetTurnState clears the turn trackers: kingHasTakenCounter, soldierIsMoving, and colorChosen', () => {
-    store.state.kingHasTakenCounter = 2;
+  test('resetTurnState clears the turn trackers: heroeHasTakenCounter, soldierIsMoving, and colorChosen', () => {
+    store.state.heroeHasTakenCounter = 2;
     store.state.soldierIsMoving = 'white_soldier_1';
     store.setColorChosen('orange');
     
     store.resetTurnState();
     const state = store.getState();
     
-    expect(state.kingHasTakenCounter).toBe(0);
+    expect(state.heroeHasTakenCounter).toBe(0);
     expect(state.soldierIsMoving).toBe('no');
     expect(state.colorChosen).toBe('noColor');
   });
@@ -87,28 +87,28 @@ describe('Store State Management', () => {
     expect(store.getState().circles).toEqual(['circleA', 'circleB']);
   });
 
-  test('incrementKingTakeCounter adds 1 continuously', () => {
-    expect(store.getState().kingHasTakenCounter).toBe(0);
-    store.incrementKingTakeCounter();
-    expect(store.getState().kingHasTakenCounter).toBe(1);
-    store.incrementKingTakeCounter();
-    expect(store.getState().kingHasTakenCounter).toBe(2);
+  test('incrementHeroeTakeCounter adds 1 continuously', () => {
+    expect(store.getState().heroeHasTakenCounter).toBe(0);
+    store.incrementHeroeTakeCounter();
+    expect(store.getState().heroeHasTakenCounter).toBe(1);
+    store.incrementHeroeTakeCounter();
+    expect(store.getState().heroeHasTakenCounter).toBe(2);
   });
 
-  test('setKingHasTaken properly registers the king doing the capturing', () => {
-    store.setKingHasTaken('yellow_king_1');
-    expect(store.getState().kingHasTaken).toBe('yellow_king_1');
+  test('setHeroeHasTaken properly registers the heroe doing the capturing', () => {
+    store.setHeroeHasTaken('black_heroe_1');
+    expect(store.getState().heroeHasTaken).toBe('black_heroe_1');
   });
 
-  test('resetKingHasTaken clears the properties', () => {
-    store.state.kingHasTaken = 'white_king_0';
-    store.state.kingHasTakenCounter = 1;
+  test('resetHeroeHasTaken clears the properties', () => {
+    store.state.heroeHasTaken = 'white_heroe_0';
+    store.state.heroeHasTakenCounter = 1;
 
-    store.resetKingHasTaken();
+    store.resetHeroeHasTaken();
     const state = store.getState();
     
-    expect(state.kingHasTaken).toBe('no');
-    expect(state.kingHasTakenCounter).toBe(0);
+    expect(state.heroeHasTaken).toBe('no');
+    expect(state.heroeHasTakenCounter).toBe(0);
   });
 
   test('setSoldierIsMoving correctly identifies the active piece', () => {

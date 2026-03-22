@@ -124,8 +124,8 @@ export function playAction(typeOfMessage, message) {
           boardstate.soldierIsMoving = 'no';
         }
 
-        boardstate.kingHasTaken = 'no';
-        boardstate.kingHasTakenCounter = 0;
+        boardstate.heroeHasTaken = 'no';
+        boardstate.heroeHasTakenCounter = 0;
 
         if(boardstate.soldierIsMoving != 'no'){
           setSirensNeighbors();
@@ -177,8 +177,8 @@ export function playAction(typeOfMessage, message) {
         if (board.allPolygons[boardstate.draggedOn].color === boardstate.colorChosen){
           if(board.allPieces[mySelectPieceId].type !== 'soldier' && board.allPieces[mySelectPieceId].type !== 'trifoxes'){
             endOfTurn();
-          } else if(board.allPieces[mySelectPieceId].type === 'king' && boardstate.kingHasTakenCounter >= boardstate.kingHasTakenCounterMax) {
-            boardstate.kingHasTakenCounter = 0;
+          } else if(board.allPieces[mySelectPieceId].type === 'heroe' && boardstate.heroeHasTakenCounter >= boardstate.heroeHasTakenCounterMax) {
+            boardstate.heroeHasTakenCounter = 0;
             endOfTurn();
           } else if(board.allPieces[mySelectPieceId].type === 'soldier' | board.allPieces[mySelectPieceId].type === 'trifoxes'){
             boardstate.soldierIsMoving = mySelectPieceId;
@@ -187,16 +187,16 @@ export function playAction(typeOfMessage, message) {
           boardstate.soldierIsMoving = 'no';
         }
 
-        if (board.allPieces[mySelectPieceId].type === 'king' && boardstate.kingHasTakenCounter < boardstate.kingHasTakenCounterMax){
-          boardstate.kingHasTaken = mySelectPieceId;
-          boardstate.kingHasTakenCounter = boardstate.kingHasTakenCounter + 1;
-          if (boardstate.kingHasTakenCounter == boardstate.kingHasTakenCounterMax){
+        if (board.allPieces[mySelectPieceId].type === 'heroe' && boardstate.heroeHasTakenCounter < boardstate.heroeHasTakenCounterMax){
+          boardstate.heroeHasTaken = mySelectPieceId;
+          boardstate.heroeHasTakenCounter = boardstate.heroeHasTakenCounter + 1;
+          if (boardstate.heroeHasTakenCounter == boardstate.heroeHasTakenCounterMax){
             if (board.allPolygons[boardstate.draggedOn].color === boardstate.colorChosen){
               endOfTurn();
             } else {
               board.allPieces[mySelectPieceId].canMove === 0;
-              boardstate.kingHasTaken = 'no';
-              boardstate.kingHasTakenCounter = 0;
+              boardstate.heroeHasTaken = 'no';
+              boardstate.heroeHasTakenCounter = 0;
             }
           } else if (board.allPolygons[boardstate.draggedOn].color === boardstate.colorChosen){
             setSirensNeighbors();

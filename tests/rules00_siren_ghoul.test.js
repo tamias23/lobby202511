@@ -11,11 +11,11 @@ describe('Rules: Siren and Ghoul', () => {
 
     board.allPolygons = {
       'poly_1': { neighbors: ['poly_2', 'poly_10'], neighbours: ['poly_2', 'poly_10'], color: 'white', isIn: 'white_siren_0', center: [0, 0] },
-      'poly_2': { neighbors: ['poly_1', 'poly_3'], neighbours: ['poly_1', 'poly_3'], color: 'black', isIn: 'yellow_soldier_0', center: [10, 0] },
+      'poly_2': { neighbors: ['poly_1', 'poly_3'], neighbours: ['poly_1', 'poly_3'], color: 'black', isIn: 'black_soldier_0', center: [10, 0] },
       'poly_3': { neighbors: ['poly_2', 'poly_4'], neighbours: ['poly_2', 'poly_4'], color: 'orange', isIn: 'empty', center: [20, 0] },
       'poly_4': { neighbors: ['poly_3', 'poly_5'], neighbours: ['poly_3', 'poly_5'], color: 'white', isIn: 'empty', center: [30, 0] },
       
-      'poly_10': { neighbors: ['poly_1', 'poly_11'], neighbours: ['poly_1', 'poly_11'], color: 'white', isIn: 'yellow_ghoul_0', center: [0, 10] },
+      'poly_10': { neighbors: ['poly_1', 'poly_11'], neighbours: ['poly_1', 'poly_11'], color: 'white', isIn: 'black_ghoul_0', center: [0, 10] },
       'poly_11': { neighbors: ['poly_10', 'poly_12'], neighbours: ['poly_10', 'poly_12'], color: 'black', isIn: 'empty', center: [10, 10] },
       'poly_12': { neighbors: ['poly_11', 'poly_13'], neighbours: ['poly_11', 'poly_13'], color: 'black', isIn: 'empty', center: [20, 10] }, 
       'poly_13': { neighbors: ['poly_12', 'poly_14'], neighbours: ['poly_12', 'poly_14'], color: 'white', isIn: 'empty', center: [30, 10] },
@@ -24,8 +24,8 @@ describe('Rules: Siren and Ghoul', () => {
 
     board.allPieces = {
       'white_siren_0': { position: 'poly_1', side: 'white', type: 'siren', canMove: 1 },
-      'yellow_soldier_0': { position: 'poly_2', side: 'yellow', type: 'soldier', canMove: 1 },
-      'yellow_ghoul_0': { position: 'poly_10', side: 'yellow', type: 'ghoul', canMove: 1 },
+      'black_soldier_0': { position: 'poly_2', side : 'black', type: 'soldier', canMove: 1 },
+      'black_ghoul_0': { position: 'poly_10', side : 'black', type: 'ghoul', canMove: 1 },
     };
   });
 
@@ -43,8 +43,8 @@ describe('Rules: Siren and Ghoul', () => {
 
   test('Siren passive aura pins adjacent enemy pieces (Test 3)', () => {
     setSirensNeighbors();
-    expect(board.allPieces['yellow_soldier_0'].canMove).toBe(0);
-    expect(board.allPieces['yellow_ghoul_0'].canMove).toBe(0);
+    expect(board.allPieces['black_soldier_0'].canMove).toBe(0);
+    expect(board.allPieces['black_ghoul_0'].canMove).toBe(0);
   });
 
   // Ghoul
@@ -59,7 +59,7 @@ describe('Rules: Siren and Ghoul', () => {
     board.allPolygons['poly_11'].neighbors = ['poly_10', 'poly_12', 'poly_2'];
     board.allPolygons['poly_2'].neighbors.push('poly_11');
 
-    let moves = getMoveGhoul(board, boardstate, 'yellow_ghoul_0');
+    let moves = getMoveGhoul(board, boardstate, 'black_ghoul_0');
     // It can move to poly_11 but it cannot chain through it because poly_11 hugs a siren.
     expect(moves).toContain('poly_11');
     expect(moves).not.toContain('poly_12');
@@ -70,7 +70,7 @@ describe('Rules: Siren and Ghoul', () => {
     // poly_12 becomes yellow (the chosen color) temporarily to test the block.
     board.allPolygons['poly_12'].color = 'yellow';
     
-    let moves = getMoveGhoul(board, boardstate, 'yellow_ghoul_0');
+    let moves = getMoveGhoul(board, boardstate, 'black_ghoul_0');
     expect(moves).toContain('poly_11');
     expect(moves).toContain('poly_12'); // Can land on it (1 jump + 1 jump)
     expect(moves).not.toContain('poly_13'); // Cannot chain through it
@@ -83,7 +83,7 @@ describe('Rules: Siren and Ghoul', () => {
     board.allPolygons['poly_1'].isIn = 'empty'; // Clear siren
     boardstate.colorChosen = 'orange'; // Change chosen color so black poly_11/12 are free
     
-    let moves = getMoveGhoul(board, boardstate, 'yellow_ghoul_0');
+    let moves = getMoveGhoul(board, boardstate, 'black_ghoul_0');
     expect(moves).toContain('poly_11'); // 1 jump
     expect(moves).toContain('poly_12'); // 2 jumps
     expect(moves).toContain('poly_13'); // 3 jumps

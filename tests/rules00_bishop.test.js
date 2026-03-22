@@ -36,11 +36,11 @@ describe('Rules: The Bishop', () => {
 
     board.allPieces = {
       'white_bishop_0': { position: 'poly_1', side: 'white', type: 'bishop', canMove: 1 },
-      'yellow_soldier_0': { position: 'poly_5', side: 'yellow', type: 'soldier', canMove: 1 },
+      'black_soldier_0': { position: 'poly_5', side : 'black', type: 'soldier', canMove: 1 },
       'white_soldier_0': { position: 'poly_3', side: 'white', type: 'soldier', canMove: 1 }
     };
     
-    board.allPolygons['poly_5'].isIn = 'yellow_soldier_0';
+    board.allPolygons['poly_5'].isIn = 'black_soldier_0';
     board.allPolygons['poly_3'].isIn = 'white_soldier_0';
   });
 
@@ -63,7 +63,7 @@ describe('Rules: The Bishop', () => {
   test('Bishop Area of Effect destroys adjacent enemy pieces (Test 4)', () => {
     const { removePieceFromGame } = require('../games/boardUtils.js');
     removeAdjacent('poly_4', 'white');
-    expect(removePieceFromGame).toHaveBeenCalledWith('yellow_soldier_0');
+    expect(removePieceFromGame).toHaveBeenCalledWith('black_soldier_0');
   });
 
   test('Bishop Area of Effect does NOT destroy adjacent friendly pieces (Test 5)', () => {

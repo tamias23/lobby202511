@@ -20,7 +20,7 @@ beforeEach(() => {
   state.whoseTurnItIs = 'white';
   store.setColorChosen('noColor');
   store.resetTurnState();
-  state.actualYellowColor = 'yellow';
+  state.actualBlackColor = 'yellow';
   state.circleIdToColor = {};
 });
 
@@ -32,17 +32,17 @@ describe('Game Logic: endOfTurn', () => {
     endOfTurn();
     
     state = store.getState();
-    expect(state.whoseTurnItIs).toBe('yellow');
+    expect(state.whoseTurnItIs).toBe('black');
     expect(state.halfTurn).toBe(2);
     expect(state.turn).toBe(1); // Turn only increments when yellow finishes
-    expect(state.kingHasTakenCounter).toBe(0);
+    expect(state.heroeHasTakenCounter).toBe(0);
     expect(state.soldierIsMoving).toBe('no');
     expect(state.colorChosen).toBe('noColor');
   });
 
   test('should swap turn from yellow to white and increment full turn', () => {
     let state = store.getState();
-    state.whoseTurnItIs = 'yellow';
+    state.whoseTurnItIs = 'black';
     state.turn = 1;
     state.halfTurn = 2;
     

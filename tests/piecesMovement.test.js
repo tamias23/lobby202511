@@ -1,6 +1,6 @@
 import { 
   getMoveSoldier, 
-  getMoveKing, 
+  getMoveHeroe, 
   getMoveGoddess, 
   getMoveMage, 
   getMoveBishop, 
@@ -23,8 +23,8 @@ describe('Piece Movement Tests', () => {
     setBoard(mockBoard);
 
     // Initialize state
-    boardstate.kingHasTakenCounter = 0;
-    boardstate.kingHasTakenCounterMax = 2;
+    boardstate.heroeHasTakenCounter = 0;
+    boardstate.heroeHasTakenCounterMax = 2;
     boardstate.colorChosen = 'orange';
 
     // Create a 5x5 grid of polygons for testing
@@ -71,9 +71,9 @@ describe('Piece Movement Tests', () => {
     expect(moves).toContain('poly_2_1');
   });
 
-  test('King Movement: 3-step range', () => {
-    placePiece('white_king_0', 'poly_0_0', 'white', 'king');
-    const moves = getMoveKing(board, boardstate, 'white_king_0');
+  test('Heroe Movement: 3-step range', () => {
+    placePiece('white_heroe_0', 'poly_0_0', 'white', 'heroe');
+    const moves = getMoveHeroe(board, boardstate, 'white_heroe_0');
     // Should reach poly_3_0, poly_0_3, poly_1_1 etc.
     expect(moves).toContain('poly_3_0');
     expect(moves).toContain('poly_0_3');

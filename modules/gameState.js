@@ -12,7 +12,7 @@ let gameState = {
   turnWhoIsToPlay : 'white',
   turnColorChosen : 'notYetChosen',
   board : '',
-  kingHasTaken : 'no',
+  heroeHasTaken : 'no',
   timeInfo : {}
 }
 

@@ -13,7 +13,7 @@ let boardFilename = 'noFilename';
 const allPiecesDict = {
   'trifoxes' : 2,
   'goddess' : 1,
-  'king' : 2,
+  'heroe' : 2,
   'soldier' : 9,
   'ghoul' : 9,
   'bishop' : 4,
@@ -57,7 +57,7 @@ function setPiecesAsGameBegins(){
   
   gameState.board.allPieces = {};
 
-  for (const side of ['white', 'yellow']){
+  for (const side of ['white', 'black']){
     for (const [k, v] of Object.entries(allPiecesDict)) {
       for (let i = 0 ; i < v ; i++){
         let id = side + '_' + k + '_' + i;
@@ -133,16 +133,16 @@ function setPieceToPoly(mySelectPieceId, idPoly){
   gameState.board.allPolygons[idPoly].isIn = mySelectPieceId;
 }
 
-function placeGoddessAndKings(lowerP = 3, higherP = 6) {
+function placeGoddessAndHeroes(lowerP = 3, higherP = 6) {
   for (const id in gameState.board.allPolygons){
     gameState.board.allPolygons[id].isIn = 'empty';
   }
 
-  let color_Edges = {'white' : gameState.board.topEdgepolys, 'yellow' : gameState.board.bottomEdgepolys};
+  let color_Edges = {'white' : gameState.board.topEdgepolys, 'black' : gameState.board.bottomEdgepolys};
 
-  for (const side of ['white', 'yellow']) {
-    let goddessAndKingsKO = 1;
-    while (goddessAndKingsKO) {
+  for (const side of ['white', 'black']) {
+    let goddessAndHeroesKO = 1;
+    while (goddessAndHeroesKO) {
       let alreadyOccupied_temp = [];
       
       let randomPoly = getRandomElement(color_Edges[side]);
@@ -154,29 +154,29 @@ function placeGoddessAndKings(lowerP = 3, higherP = 6) {
         randomPoly = getRandomElement(color_Edges[side]);
       }
       alreadyOccupied_temp.push(randomPoly);
-      setPieceToPoly(side + '_king_0', randomPoly);
+      setPieceToPoly(side + '_heroe_0', randomPoly);
 
       randomPoly = getRandomElement(color_Edges[side]);
       while(alreadyOccupied_temp.includes(randomPoly)){
         randomPoly = getRandomElement(color_Edges[side]);
       }
       alreadyOccupied_temp.push(randomPoly);
-      setPieceToPoly(side + '_king_1', randomPoly);
+      setPieceToPoly(side + '_heroe_1', randomPoly);
 
-      goddessAndKingsKO = 0;
+      goddessAndHeroesKO = 0;
       
-      if (getPolysClose(side + '_king_0', higherP).includes(gameState.board.allPieces[side + '_king_1'].position)) {
-        goddessAndKingsKO = 1;
+      if (getPolysClose(side + '_heroe_0', higherP).includes(gameState.board.allPieces[side + '_heroe_1'].position)) {
+        goddessAndHeroesKO = 1;
       }
-      if (getPolysClose(side + '_goddess_0', lowerP).includes(gameState.board.allPieces[side + '_king_0'].position) || !getPolysClose(side + '_goddess_0', higherP).includes(gameState.board.allPieces[side + '_king_0'].position)) {
-        goddessAndKingsKO = 1;
+      if (getPolysClose(side + '_goddess_0', lowerP).includes(gameState.board.allPieces[side + '_heroe_0'].position) || !getPolysClose(side + '_goddess_0', higherP).includes(gameState.board.allPieces[side + '_heroe_0'].position)) {
+        goddessAndHeroesKO = 1;
       }
-      if (getPolysClose(side + '_goddess_0', lowerP).includes(gameState.board.allPieces[side + '_king_1'].position) || !getPolysClose(side + '_goddess_0', higherP).includes(gameState.board.allPieces[side + '_king_1'].position)) {
-        goddessAndKingsKO = 1;
+      if (getPolysClose(side + '_goddess_0', lowerP).includes(gameState.board.allPieces[side + '_heroe_1'].position) || !getPolysClose(side + '_goddess_0', higherP).includes(gameState.board.allPieces[side + '_heroe_1'].position)) {
+        goddessAndHeroesKO = 1;
       }
 
-      if(goddessAndKingsKO){
-        for (const id of [side + '_goddess_0', side + '_king_0', side + '_king_1']){
+      if(goddessAndHeroesKO){
+        for (const id of [side + '_goddess_0', side + '_heroe_0', side + '_heroe_1']){
           if (gameState.board.allPieces[id].position !== 'returned') {
             gameState.board.allPolygons[gameState.board.allPieces[id].position].isIn = 'empty';
             gameState.board.allPieces[id].position = 'returned';
@@ -191,40 +191,40 @@ function placeGoddessAndKings(lowerP = 3, higherP = 6) {
 function setUpRandomly() {
   console.log('setUpRandomly() START');
 
-  placeGoddessAndKings();
+  placeGoddessAndHeroes();
   
   let alreadyOccupied = [];
-  alreadyOccupied.push(gameState.board.allPieces['white_king_0'].position);
-  alreadyOccupied.push(gameState.board.allPieces['white_king_1'].position);
+  alreadyOccupied.push(gameState.board.allPieces['white_heroe_0'].position);
+  alreadyOccupied.push(gameState.board.allPieces['white_heroe_1'].position);
   alreadyOccupied.push(gameState.board.allPieces['white_goddess_0'].position);
-  alreadyOccupied.push(gameState.board.allPieces['yellow_king_0'].position);
-  alreadyOccupied.push(gameState.board.allPieces['yellow_king_1'].position);
-  alreadyOccupied.push(gameState.board.allPieces['yellow_goddess_0'].position);
+  alreadyOccupied.push(gameState.board.allPieces['black_heroe_0'].position);
+  alreadyOccupied.push(gameState.board.allPieces['black_heroe_1'].position);
+  alreadyOccupied.push(gameState.board.allPieces['black_goddess_0'].position);
 
   //====================================================================================================
 
-  for (const side of ['white', 'yellow']) {
+  for (const side of ['white', 'black']) {
     let set1_goddess = getPolysClose(side + '_goddess_0', 1);
     if (set1_goddess.length < 2) {
       set1_goddess = getPolysClose(side + '_goddess_0', 2);
     }
 
-    let set1 = getPolysClose(side + '_king_0', 1);
-    set1 = set1.concat(getPolysClose(side + '_king_1', 1));
+    let set1 = getPolysClose(side + '_heroe_0', 1);
+    set1 = set1.concat(getPolysClose(side + '_heroe_1', 1));
     set1 = set1.concat(getPolysClose(side + '_goddess_0', 1));
 
-    let set2 = getPolysClose(side + '_king_0', 2);
+    let set2 = getPolysClose(side + '_heroe_0', 2);
     set2 = set2.concat(getPolysClose(side + '_goddess_0', 2));
-    set2 = set2.concat(getPolysClose(side + '_king_1', 2)).filter(x => set1.indexOf(x) === -1);
+    set2 = set2.concat(getPolysClose(side + '_heroe_1', 2)).filter(x => set1.indexOf(x) === -1);
 
 
-    let set3 = getPolysClose(side + '_king_0', 3);
+    let set3 = getPolysClose(side + '_heroe_0', 3);
     set3 = set3.concat(getPolysClose(side + '_goddess_0', 3));
-    set3 = set3.concat(getPolysClose(side + '_king_1', 3)).filter(x => set2.indexOf(x) === -1);
+    set3 = set3.concat(getPolysClose(side + '_heroe_1', 3)).filter(x => set2.indexOf(x) === -1);
 
-    let set4 = getPolysClose(side + '_king_0', 4);
+    let set4 = getPolysClose(side + '_heroe_0', 4);
     set4 = set4.concat(getPolysClose(side + '_goddess_0', 4));
-    set4 = set4.concat(getPolysClose(side + '_king_1', 4)).filter(x => set3.indexOf(x) === -1);
+    set4 = set4.concat(getPolysClose(side + '_heroe_1', 4)).filter(x => set3.indexOf(x) === -1);
 
     set1_goddess = shuffleArray([...new Set(set1_goddess)]);
     set1 = shuffleArray([...new Set(set1)]);

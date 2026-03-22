@@ -7,7 +7,7 @@ describe('Rules: General and Supplementary Mechanics', () => {
     setBoard(mockBoard);
 
     boardstate.colorChosen = 'yellow';
-    boardstate.possibleSetupGoddessKings = {
+    boardstate.possibleSetupGoddessHeroes = {
       'white': ['poly_1 poly_2 poly_3'],
       'yellow': ['poly_4 poly_5 poly_6']
     };
@@ -18,25 +18,25 @@ describe('Rules: General and Supplementary Mechanics', () => {
       'poly_3': { neighbors: ['poly_2'], neighbours: ['poly_2'], color: 'black', isIn: 'empty', center: [20, 0] },
       'poly_7': { neighbors: [], neighbours: [], color: 'yellow', isIn: 'empty', center: [30, 0] }, // Chosen color empty
       'poly_8': { neighbors: ['poly_9'], neighbours: ['poly_9'], color: 'black', isIn: 'white_mage_0', center: [40, 0] },
-      'poly_9': { neighbors: ['poly_8'], neighbours: ['poly_8'], color: 'orange', isIn: 'yellow_soldier_0', center: [50, 0] }, // enemy
+      'poly_9': { neighbors: ['poly_8'], neighbours: ['poly_8'], color: 'orange', isIn: 'black_soldier_0', center: [50, 0] }, // enemy
     };
 
     board.allPieces = {
       'white_goddess_0': { position: 'returned', side: 'white', type: 'goddess', canMove: 1 },
-      'white_king_0': { position: 'returned', side: 'white', type: 'king', canMove: 1 },
+      'white_heroe_0': { position: 'returned', side: 'white', type: 'heroe', canMove: 1 },
       
       'white_soldier_0': { position: 'returned', side: 'white', type: 'soldier', canMove: 1 },
       'white_mage_0': { position: 'poly_8', side: 'white', type: 'mage', canMove: 1 },
       
       'white_bishop_0': { position: 'returned', side: 'white', type: 'bishop', canMove: 1 },
-      'yellow_soldier_0': { position: 'poly_9', side: 'yellow', type: 'soldier', canMove: 1 }
+      'black_soldier_0': { position: 'poly_9', side : 'black', type: 'soldier', canMove: 1 }
     };
   });
 
   // Test quantities implicitly through the setup process 
   test('Pieces must be placed on the board during setup (Test 1)', () => {
     let moves = getListOfPossibleTargetsForSetup(board, boardstate, 'white_goddess_0');
-    expect(moves).toContain('poly_1'); // based on possibleSetupGoddessKings mockup
+    expect(moves).toContain('poly_1'); // based on possibleSetupGoddessHeroes mockup
   });
 
   test('Re-entering pieces can be placed on chosen color (Test 2)', () => {

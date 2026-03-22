@@ -39,7 +39,7 @@ export function getListOfPolysClosest(board, boardstate, pieceSide) {
   let toBeReturned = [];
   
   if (board.allPieces[pieceSide + '_goddess_0'].position === 'returned') {
-    let allPossibilities = boardstate.possibleSetupGoddessKings[pieceSide];
+    let allPossibilities = boardstate.possibleSetupGoddessHeroes[pieceSide];
     let thisIsPossible = [];
     for (const ap of allPossibilities) {
       const places = ap.split(' ');
@@ -50,8 +50,8 @@ export function getListOfPolysClosest(board, boardstate, pieceSide) {
     toBeReturned = getPolysClose(board, pieceSide + '_goddess_0', 1);
   } else if (board.allPieces[pieceSide + '_trifoxes_1'].position === 'returned') {
     toBeReturned = getPolysClose(board, pieceSide + '_goddess_0', 1);
-  } else if (board.allPieces[pieceSide + '_king_0'].position === 'returned' && board.allPieces[pieceSide + '_king_1'].position === 'returned') {
-    let allPossibilities = boardstate.possibleSetupGoddessKings[pieceSide];
+  } else if (board.allPieces[pieceSide + '_heroe_0'].position === 'returned' && board.allPieces[pieceSide + '_heroe_1'].position === 'returned') {
+    let allPossibilities = boardstate.possibleSetupGoddessHeroes[pieceSide];
     let thisIsPossible = [];
     for (const ap of allPossibilities) {
       const places = ap.split(' ');
@@ -60,22 +60,22 @@ export function getListOfPolysClosest(board, boardstate, pieceSide) {
       }
     }
     toBeReturned = [...new Set(thisIsPossible)];
-  } else if (board.allPieces[pieceSide + '_king_0'].position === 'returned' && board.allPieces[pieceSide + '_king_1'].position !== 'returned') {
-    let allPossibilities = boardstate.possibleSetupGoddessKings[pieceSide];
+  } else if (board.allPieces[pieceSide + '_heroe_0'].position === 'returned' && board.allPieces[pieceSide + '_heroe_1'].position !== 'returned') {
+    let allPossibilities = boardstate.possibleSetupGoddessHeroes[pieceSide];
     let thisIsPossible = [];
     for (const ap of allPossibilities) {
       const places = ap.split(' ');
-      if (places[1] === board.allPieces[pieceSide + '_king_1'].position){
+      if (places[1] === board.allPieces[pieceSide + '_heroe_1'].position){
         thisIsPossible.push(places[2]);
       }
     }
     toBeReturned = [...new Set(thisIsPossible)];
-  } else if (board.allPieces[pieceSide + '_king_1'].position === 'returned' && board.allPieces[pieceSide + '_king_0'].position !== 'returned') {
-    let allPossibilities = boardstate.possibleSetupGoddessKings[pieceSide];
+  } else if (board.allPieces[pieceSide + '_heroe_1'].position === 'returned' && board.allPieces[pieceSide + '_heroe_0'].position !== 'returned') {
+    let allPossibilities = boardstate.possibleSetupGoddessHeroes[pieceSide];
     let thisIsPossible = [];
     for (const ap of allPossibilities) {
       const places = ap.split(' ');
-      if (places[1] === board.allPieces[pieceSide + '_king_0'].position){
+      if (places[1] === board.allPieces[pieceSide + '_heroe_0'].position){
         thisIsPossible.push(places[2]);
       }
     }
@@ -104,8 +104,8 @@ export function getListOfPolysClosest(board, boardstate, pieceSide) {
     let n = 1;
     while(toBeReturned.length == 0){
       toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_goddess_0', n));
-      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_king_0', n));
-      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_king_1', n));
+      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_heroe_0', n));
+      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_heroe_1', n));
       toBeReturned = toBeReturned.filter(x => board.allPolygons[x].isIn === 'empty');
       toBeReturned = toBeReturned.filter(x => !allColors.includes(board.allPolygons[x].color));
       n = n + 1;
@@ -125,8 +125,8 @@ export function getListOfPolysClosest(board, boardstate, pieceSide) {
     let n = 1;
     while(toBeReturned.length == 0){
       toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_goddess_0', n));
-      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_king_0', n));
-      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_king_1', n));
+      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_heroe_0', n));
+      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_heroe_1', n));
       toBeReturned = toBeReturned.filter(x => board.allPolygons[x].isIn === 'empty');
       toBeReturned = toBeReturned.filter(x => allColors[board.allPolygons[x].color] < 2);
       n = n + 1;
@@ -136,8 +136,8 @@ export function getListOfPolysClosest(board, boardstate, pieceSide) {
     let n = 1;
     while(toBeReturned.length == 0){
       toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_goddess_0', n));
-      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_king_0', n));
-      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_king_1', n));
+      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_heroe_0', n));
+      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_heroe_1', n));
       toBeReturned = toBeReturned.filter(x => board.allPolygons[x].isIn === 'empty');
       n = n + 1;
       if (n == 15) break;
@@ -302,7 +302,7 @@ export function getMoveGoddess(board, boardstate, selectedPieceId) {
   return toBeReturned;
 }
 
-export function getMoveKing(board, boardstate, selectedPieceId) {
+export function getMoveHeroe(board, boardstate, selectedPieceId) {
   let selectedPoly = board.allPieces[selectedPieceId].position;
   let toBeReturned = [];
   for (const n1 of board.allPolygons[selectedPoly].neighbours){
@@ -317,7 +317,7 @@ export function getMoveKing(board, boardstate, selectedPieceId) {
   toBeReturned = [...new Set(toBeReturned)];
   toBeReturned = toBeReturned.filter(x => x !== selectedPoly);
   
-  if (boardstate.kingHasTakenCounter >= boardstate.kingHasTakenCounterMax) {
+  if (boardstate.heroeHasTakenCounter >= boardstate.heroeHasTakenCounterMax) {
     toBeReturned = [];
   }
 
@@ -365,7 +365,7 @@ export function getMoveBishop(board, boardstate, selectedPieceId) {
 
 export function getListOfPossibleTargetsForSetup(board, boardstate, selectedPieceId) {
   let toBeReturned = [];
-  let inputOrder = ['goddess', 'trifoxes', 'king', 'bishop', 'mage', 'soldier'];
+  let inputOrder = ['goddess', 'trifoxes', 'heroe', 'bishop', 'mage', 'soldier'];
 
   if (board.allPieces[selectedPieceId].position === 'returned') {
     let pieceType = board.allPieces[selectedPieceId].type;
@@ -450,8 +450,8 @@ export function getListOfPossibleTargets(board, boardstate, selectedPieceId) {
       }
     }
   } else {
-    if (board.allPieces[selectedPieceId].type === 'king'){
-      toBeReturned = getMoveKing(board, boardstate, selectedPieceId);
+    if (board.allPieces[selectedPieceId].type === 'heroe'){
+      toBeReturned = getMoveHeroe(board, boardstate, selectedPieceId);
     } else if (board.allPieces[selectedPieceId].type === 'goddess'){
       toBeReturned = getMoveGoddess(board, boardstate, selectedPieceId);
     } else if (board.allPieces[selectedPieceId].type === 'mage'){

@@ -33,18 +33,18 @@ describe('Rules: The Mage', () => {
       'poly_2': { neighbors: ['poly_1', 'poly_3'], neighbours: ['poly_1', 'poly_3'], color: 'yellow', isIn: 'empty', center: [10, 0] },
       'poly_3': { neighbors: ['poly_2', 'poly_4'], neighbours: ['poly_2', 'poly_4'], color: 'black', isIn: 'empty', center: [20, 0] },
       'poly_4': { neighbors: ['poly_3', 'poly_5'], neighbours: ['poly_3', 'poly_5'], color: 'white', isIn: 'empty', center: [30, 0] },
-      'poly_5': { neighbors: ['poly_4', 'poly_6', 'poly_7', 'poly_8', 'poly_9'], neighbours: ['poly_4', 'poly_6', 'poly_7', 'poly_8', 'poly_9'], color: 'yellow', isIn: 'yellow_soldier_0', center: [40, 0] },
-      'poly_6': { neighbors: ['poly_5'], neighbours: ['poly_5'], color: 'white', isIn: 'yellow_soldier_1', center: [50, 0] },
+      'poly_5': { neighbors: ['poly_4', 'poly_6', 'poly_7', 'poly_8', 'poly_9'], neighbours: ['poly_4', 'poly_6', 'poly_7', 'poly_8', 'poly_9'], color: 'yellow', isIn: 'black_soldier_0', center: [40, 0] },
+      'poly_6': { neighbors: ['poly_5'], neighbours: ['poly_5'], color: 'white', isIn: 'black_soldier_1', center: [50, 0] },
       'poly_7': { neighbors: ['poly_5'], neighbours: ['poly_5'], color: 'yellow', isIn: 'empty', center: [60, 0] },
       'poly_8': { neighbors: ['poly_5'], neighbours: ['poly_5'], color: 'black', isIn: 'white_soldier_0', center: [40, 10] },
-      'poly_9': { neighbors: ['poly_5'], neighbours: ['poly_5'], color: 'orange', isIn: 'yellow_trifoxes_0', center: [40, 20] },
+      'poly_9': { neighbors: ['poly_5'], neighbours: ['poly_5'], color: 'orange', isIn: 'black_trifoxes_0', center: [40, 20] },
     };
 
     board.allPieces = {
       'white_mage_0': { position: 'poly_1', side: 'white', type: 'mage', canMove: 1 },
-      'yellow_soldier_0': { position: 'poly_5', side: 'yellow', type: 'soldier', canMove: 1 },
-      'yellow_soldier_1': { position: 'poly_6', side: 'yellow', type: 'soldier', canMove: 1 },
-      'yellow_trifoxes_0': { position: 'poly_9', side: 'yellow', type: 'trifoxes', canMove: 1 },
+      'black_soldier_0': { position: 'poly_5', side : 'black', type: 'soldier', canMove: 1 },
+      'black_soldier_1': { position: 'poly_6', side : 'black', type: 'soldier', canMove: 1 },
+      'black_trifoxes_0': { position: 'poly_9', side : 'black', type: 'trifoxes', canMove: 1 },
       'white_soldier_0': { position: 'poly_8', side: 'white', type: 'soldier', canMove: 1 },
     };
   });
@@ -67,8 +67,8 @@ describe('Rules: The Mage', () => {
   test('Mage Chain Attack destroys adjacent pieces of the same team as target (Test 4)', () => {
     const { removePieceFromGame, removeConnex } = require('../games/boardUtils.js');
     removeConnex('poly_5'); // Target is yellow on poly_5
-    expect(removePieceFromGame).toHaveBeenCalledWith('yellow_soldier_0'); // Target itself
-    expect(removePieceFromGame).toHaveBeenCalledWith('yellow_soldier_1'); // Adjacent yellow piece
+    expect(removePieceFromGame).toHaveBeenCalledWith('black_soldier_0'); // Target itself
+    expect(removePieceFromGame).toHaveBeenCalledWith('black_soldier_1'); // Adjacent yellow piece
     expect(removePieceFromGame).not.toHaveBeenCalledWith('white_soldier_0'); // Adjacent white piece is safe
   });
 
@@ -76,6 +76,6 @@ describe('Rules: The Mage', () => {
     const { removePieceFromGame, removeConnex } = require('../games/boardUtils.js');
     removePieceFromGame.mockClear();
     removeConnex('poly_5'); // Target is yellow poly_5 
-    expect(removePieceFromGame).not.toHaveBeenCalledWith('yellow_trifoxes_0'); // Adjacent yellow trifox is safe
+    expect(removePieceFromGame).not.toHaveBeenCalledWith('black_trifoxes_0'); // Adjacent yellow trifox is safe
   });
 });

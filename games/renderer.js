@@ -25,7 +25,7 @@ export const renderer = {
         } else {
           if (board.allPieces[board.allPolygons[key].isIn].side !== board.allPieces[state.piece].side && board.allPieces[board.allPolygons[key].isIn].type != 'trifoxes') {
             if (
-              board.allPieces[state.piece].type === 'king' ||
+              board.allPieces[state.piece].type === 'heroe' ||
               board.allPieces[state.piece].type === 'goddess' ||
               board.allPieces[state.piece].type === 'trifoxes'
             ) {
@@ -72,10 +72,10 @@ export const renderer = {
    */
   updateUIOnTurnEnd() {
     let state = store.getState();
-    if (state.whoseTurnItIs === 'yellow' ){ // It was swapped inside endOfTurn
-      document.getElementById('myButtonEndTurn').querySelector('rect').style.fill = state.actualYellowColor;
-      document.getElementById('purpleFooter').style.fill = state.actualYellowColor;
-      if(state.actualYellowColor === 'black') {
+    if (state.whoseTurnItIs === 'black' ){ // It was swapped inside endOfTurn
+      document.getElementById('myButtonEndTurn').querySelector('rect').style.fill = state.actualBlackColor;
+      document.getElementById('purpleFooter').style.fill = state.actualBlackColor;
+      if(state.actualBlackColor === 'black') {
         document.getElementById('myButtonEndTurn').querySelector('text').style.fill = 'white';
       }
     } else {

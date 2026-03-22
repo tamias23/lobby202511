@@ -19,7 +19,7 @@ beforeEach(() => {
   
   board.allPieces = {
     'white_soldier_0': { position: 'poly_1', side: 'white', type: 'soldier' },
-    'yellow_soldier_0': { position: 'poly_2', side: 'yellow', type: 'soldier' },
+    'black_soldier_0': { position: 'poly_2', side : 'black', type: 'soldier' },
     'white_siren_0': { position: 'returned', side: 'white', type: 'siren'}
   };
 });
@@ -30,7 +30,7 @@ describe('Game Logic: getMoveSoldier', () => {
     // poly_2 is occupied by an enemy, and poly_3 is empty but has a different color than chosen? 
     // Actually out original rules says it checks neighbor empty vs occupied.
     
-    // poly_2 has yellow_soldier_0 (enemy). Soldiers cannot move onto enemies.
+    // poly_2 has black_soldier_0 (enemy). Soldiers cannot move onto enemies.
     // poly_3 is empty and its color is 'black', and our chosen color is 'white'. 
     // The soldier can move to adjacent empty polys if the player hasn't restricted color, or if it's the right color.
     

@@ -70,7 +70,7 @@ function mouseDownAfterSetupIsDone(evt) {
         (
           board.allPolygons[board.allPieces[state.selectedElement.id].position].color === state.colorChosen || 
           (
-            board.allPieces[state.selectedElement.id].type === 'king' && state.kingHasTaken === state.selectedElement.id)
+            board.allPieces[state.selectedElement.id].type === 'heroe' && state.heroeHasTaken === state.selectedElement.id)
           )
         )
         && (state.soldierIsMoving === 'no' || state.soldierIsMoving === state.selectedElement.id)

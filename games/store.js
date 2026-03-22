@@ -10,21 +10,21 @@ export const store = {
     whoseTurnItIs: 'white',
     colorChosen: 'noColor',
     circleIdToColor: {},
-    kingHasTaken: 'no',
-    kingHasTakenCounter: 0,
-    kingHasTakenCounterMax: 2,
+    heroeHasTaken: 'no',
+    heroeHasTakenCounter: 0,
+    heroeHasTakenCounterMax: 2,
     soldierIsMoving: 'no',
     randomHash: '',
-    amIWhiteOrYellow: '',
+    amIWhiteOrBlack: '',
     boardRotated: 'no',
     newBoardRequested: 'no',
-    actualYellowColor: 'yellow',
+    actualBlackColor: 'yellow',
     piecesRemoved: [],
     animation_duration: 300,
     animation_duration_lastMove: -1,
     animation_delay: -1,
     setupIsDone: 'no',
-    possibleSetupGoddessKings: { yellow: [], white: [] },
+    possibleSetupGoddessHeroes: { yellow: [], white: [] },
     timeInfo: {},
     board: null,
     transform: '',
@@ -54,14 +54,14 @@ export const store = {
 
   swapWhoseTurnItIs() {
     if (this.state.whoseTurnItIs === 'white') {
-      this.state.whoseTurnItIs = 'yellow';
+      this.state.whoseTurnItIs = 'black';
     } else {
       this.state.whoseTurnItIs = 'white';
     }
   },
 
   resetTurnState() {
-    this.state.kingHasTakenCounter = 0;
+    this.state.heroeHasTakenCounter = 0;
     this.state.soldierIsMoving = 'no';
     this.state.colorChosen = 'noColor';
   },
@@ -83,17 +83,17 @@ export const store = {
     this.state.circles.push(id);
   },
 
-  incrementKingTakeCounter() {
-    this.state.kingHasTakenCounter += 1;
+  incrementHeroeTakeCounter() {
+    this.state.heroeHasTakenCounter += 1;
   },
   
-  setKingHasTaken(pieceId) {
-    this.state.kingHasTaken = pieceId;
+  setHeroeHasTaken(pieceId) {
+    this.state.heroeHasTaken = pieceId;
   },
 
-  resetKingHasTaken() {
-    this.state.kingHasTaken = 'no';
-    this.state.kingHasTakenCounter = 0;
+  resetHeroeHasTaken() {
+    this.state.heroeHasTaken = 'no';
+    this.state.heroeHasTakenCounter = 0;
   },
 
   setSoldierIsMoving(pieceId) {
