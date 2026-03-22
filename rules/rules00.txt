@@ -51,7 +51,7 @@ Pieces capture enemy pieces by moving onto an occupied polygon. Each piece has u
 ### The Mage
 - **Movement:** Can leap up to **3 polygons** away.
 - **Special Limitation:** Opposite to the Bishop, a Mage **cannot** land on a polygon of the same color as the one it started on. 
-- **Area of Effect (Chain Attack):** When the Mage lands directly on an occupied polygon to capture a piece, it destroys both the target piece AND any adjacent pieces belonging to the SAME TEAM (White or Black) as the target (except Berserker).
+- **Area of Effect (Chain Attack):** When the Mage lands directly on an occupied polygon to capture a piece, it destroys both the target piece AND all adjacent enemy pieces (except Berserker).
 
 ### The Siren
 - **Movement:** Can leap up to **2 polygons** away.

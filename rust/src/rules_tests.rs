@@ -28,6 +28,20 @@ mod tests {
         });
     }
 
+    fn add_poly_split(board: &mut BoardMap, id: &str, color: &str, slide: Vec<&str>, jump: Vec<&str>) {
+        let num_id: usize = id.replace("p", "").parse().unwrap_or(0);
+        board.polygons.insert(id.to_string(), Polygon {
+            id: num_id,
+            name: id.to_string(),
+            shape: "hex".to_string(),
+            neighbors: slide.iter().map(|s| s.to_string()).collect(),
+            neighbours: jump.iter().map(|s| s.to_string()).collect(),
+            color: color.to_string(),
+            center: [0.0, 0.0],
+            points: vec![],
+        });
+    }
+
     fn add_piece(board: &mut BoardMap, id: &str, pos: &str, side: Side, ptype: PieceType) {
         board.pieces.insert(id.to_string(), Piece {
             id: id.to_string(),
@@ -178,8 +192,8 @@ mod tests {
         
         // Siren Movement Range:
         let siren_moves = get_legal_moves(&gs, "w_siren");
-        assert!(siren_moves.contains(&"p2".to_string())); // 1 away
-        assert!(siren_moves.contains(&"p3".to_string())); // 2 away
+        assert!(!siren_moves.contains(&"p2".to_string())); // Blocked natively by pacifist restraint (enemy occupied)!
+        assert!(siren_moves.contains(&"p3".to_string())); // 2 away (empty)
         assert!(!siren_moves.contains(&"p4".to_string())); // 3 away blocked
     }
 
@@ -289,5 +303,85 @@ mod tests {
         
         // Berserker has exactly 0 legal maneuvers generated. Immobilized flawlessly.
         assert_eq!(berserker_moves.len(), 0);
+    }
+
+    // ---------------------------------------------------------
+    // Phase 9 Final Physics Defect Rectification Asserts
+    // ---------------------------------------------------------
+
+    // TEST 6: Siren pinning utilizes "slide" matrices exclusively natively bypassing cross-wall jump bounds mathematically!
+    #[test]
+    fn test_siren_topology_pinning_strict_slide() {
+        let mut board = create_mock_board();
+        add_poly_split(&mut board, "p1", "white", vec!["p3"], vec!["p2", "p3"]);
+        add_poly_split(&mut board, "p2", "black", vec![], vec!["p1"]);
+        add_poly_split(&mut board, "p3", "grey", vec!["p1"], vec!["p1"]);
+        
+        add_piece(&mut board, "w_soldier", "p1", Side::White, PieceType::Soldier);
+        add_piece(&mut board, "b_siren", "p2", Side::Black, PieceType::Siren);
+        
+        let gs = GameState::new(board);
+        let moves = get_legal_moves(&gs, "w_soldier");
+        
+        // p2 is a jump neighbor organically natively representing a physical gap, so the Siren does NOT organically pin the Soldier!
+        assert!(moves.contains(&"p3".to_string()));
+    }
+
+    // TEST 7: Siren pacisfism! Siren cannot explicitly target enemies natively mapping empty geometry exclusively!
+    #[test]
+    fn test_siren_cannot_capture() {
+        let mut board = create_mock_board();
+        add_poly(&mut board, "p1", "white", vec!["p2"]);
+        add_poly(&mut board, "p2", "yellow", vec!["p1"]);
+        
+        add_piece(&mut board, "w_siren", "p1", Side::White, PieceType::Siren);
+        add_piece(&mut board, "b_soldier", "p2", Side::Black, PieceType::Soldier);
+        
+        let gs = GameState::new(board);
+        let moves = get_legal_moves(&gs, "w_siren");
+        
+        // Target is an enemy realistically mathematically reachable, but Sirens are strictly pacifists natively!
+        assert_eq!(moves.len(), 0);
+    }
+
+    // TEST 8: Phalanxes mathematically terminate chaining organically passing across pinned chosen colors!
+    #[test]
+    fn test_soldier_chain_blocked_at_pinned_chosen_color() {
+        let mut board = create_mock_board();
+        add_poly(&mut board, "p1", "white", vec!["p2"]);
+        add_poly(&mut board, "p2", "orange", vec!["p1", "p3", "p4"]); // The chosen color hub natively
+        add_poly(&mut board, "p3", "grey", vec!["p2"]); // Target organically past the hub
+        add_poly(&mut board, "p4", "black", vec!["p2"]); // Enemy Siren position organically pinning the hub
+        
+        add_piece(&mut board, "w_soldier", "p1", Side::White, PieceType::Soldier);
+        add_piece(&mut board, "b_siren", "p4", Side::Black, PieceType::Siren);
+        
+        let mut gs = GameState::new(board);
+        gs.color_chosen.insert(Side::White, "orange".to_string());
+        
+        let moves = get_legal_moves(&gs, "w_soldier");
+        
+        // p2 is securely permitted landing organically locally, but chaining projecting into p3 is strictly blocked because p2 is pinned natively!
+        assert!(moves.contains(&"p2".to_string()));
+        assert!(!moves.contains(&"p3".to_string()));
+    }
+
+    // TEST 9: Heroe sequence caps dynamically evaluate 1 exact sequence natively identically to JS!
+    #[test]
+    fn test_heroe_has_taken_counter_limits() {
+        let mut board = create_mock_board();
+        add_poly(&mut board, "p1", "white", vec!["p2"]);
+        add_poly(&mut board, "p2", "yellow", vec!["p1"]);
+        
+        add_piece(&mut board, "w_heroe", "p1", Side::White, PieceType::Heroe);
+        
+        let mut gs = GameState::new(board);
+        // Simulating an AI Heroe natively tracking that it has already executed its exactly 1 extra sequence
+        gs.heroe_take_counter = 2; 
+        
+        let moves = get_legal_moves(&gs, "w_heroe");
+        
+        // Heroe is exhausted mathematically natively mirroring limits accurately entirely!
+        assert_eq!(moves.len(), 0);
     }
 }

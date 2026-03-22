@@ -143,7 +143,7 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
                 if valid {
                     if piece.piece_type == PieceType::Bishop || piece.piece_type == PieceType::Mage {
                         let mut enemy_adj = false;
-                        for n in state.get_jump_neighbors(poly_id).into_iter().chain(state.get_slide_neighbors(poly_id).into_iter()) {
+                        for n in state.get_slide_neighbors(poly_id) {
                             if let Some(s) = state.get_occupant_side(&n) {
                                 if s != piece.side { enemy_adj = true; break; }
                             }
@@ -161,9 +161,9 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
 
     let start = &piece.position;
     
-    // Siren Pin check - Siren pin evaluates using jump_neighbors explicitly
+    // Siren Pin check - Siren pin physically operates explicitly across slide topology matching JS `neighbors` iteration bounds!
     if piece.position != "returned" && piece.position != "graveyard" {
-        for n in state.get_jump_neighbors(start) {
+        for n in state.get_slide_neighbors(start) {
             if let Some(s) = state.get_occupant_side(&n) {
                 if s != piece.side && state.get_occupant_type(&n) == Some(PieceType::Siren) {
                     return vec![]; // Pinned!
@@ -217,9 +217,9 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
                             if friendly_hops.insert(n.clone()) { explore.push(n.clone()); }
                         }
                     } else if Some(state.board.polygons[&n].color.clone()) == chosen_color {
-                        // Empty polygon matching chosen color. Ensure it isn't blocked by Siren (evaluating jump topology).
+                        // Empty polygon matching chosen color. Ensure it isn't blocked by Siren (evaluating slide topology natively matched to JS).
                         let mut siren_pinned = false;
-                        for nn in state.get_jump_neighbors(&n) {
+                        for nn in state.get_slide_neighbors(&n) {
                             if let Some(s) = state.get_occupant_side(&nn) {
                                 if s != piece.side && state.get_occupant_type(&nn) == Some(PieceType::Siren) {
                                     siren_pinned = true; break;
@@ -228,8 +228,6 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
                         }
                         if !siren_pinned {
                             if friendly_hops.insert(n.clone()) { explore.push(n.clone()); }
-                        } else {
-                            friendly_hops.insert(n.clone()); // Permits landing natively, but strictly breaks chains
                         }
                     }
                 }
@@ -255,7 +253,7 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
                         if !state.is_occupied(&n) {
                             if Some(state.board.polygons[&n].color.clone()) != chosen_color {
                                 let mut siren_pinned = false;
-                                for nn in state.get_jump_neighbors(&n) {
+                                for nn in state.get_slide_neighbors(&n) {
                                     if let Some(s) = state.get_occupant_side(&nn) {
                                         if s != piece.side && state.get_occupant_type(&nn) == Some(PieceType::Siren) {
                                             siren_pinned = true; break;
@@ -308,8 +306,8 @@ pub fn apply_move(state: &mut GameState, piece_id: &str, target_poly: &str) -> V
     
     // Process AoE Capabilities
     if piece_type == PieceType::Bishop {
-        // Destroy all adjacent enemy pieces except Berserker
-        for n in state.get_jump_neighbors(target_poly).into_iter().chain(state.get_slide_neighbors(target_poly).into_iter()) {
+        // Destroy all adjacent enemy pieces except Berserker utilizing strict `slide` topologies natively mirroring local blasts
+        for n in state.get_slide_neighbors(target_poly) {
             if let Some(target_id) = state.occupancy.get(&n).cloned() {
                 let neighbor_piece = state.board.pieces.get(&target_id).unwrap();
                 if neighbor_piece.side != piece_side && neighbor_piece.piece_type != PieceType::Berserker {
@@ -321,9 +319,9 @@ pub fn apply_move(state: &mut GameState, piece_id: &str, target_poly: &str) -> V
             }
         }
     } else if piece_type == PieceType::Mage && !captured_types.is_empty() {
-        // Destroy ALL adjacent pieces matching the SAME TEAM as the defender except Berserker.
+        // Destroy ALL adjacent enemy pieces organically mapping the strict 1-hop slide array identical to native JS boundaries.
         let target_side = if piece_side == Side::White { Side::Black } else { Side::White };
-        for n in state.get_jump_neighbors(target_poly).into_iter().chain(state.get_slide_neighbors(target_poly).into_iter()) {
+        for n in state.get_slide_neighbors(target_poly) {
             if let Some(target_id) = state.occupancy.get(&n).cloned() {
                 let neighbor_piece = state.board.pieces.get(&target_id).unwrap();
                 if neighbor_piece.side == target_side && neighbor_piece.piece_type != PieceType::Berserker {
@@ -689,7 +687,7 @@ pub fn perform_random_turn(state: &mut GameState) -> bool {
     let piece_type = state.board.pieces[&chosen_piece_tmp].piece_type.clone();
     let was_returned = state.board.pieces[&chosen_piece_tmp].position == "returned";
     let is_heroe = piece_type == PieceType::Heroe;
-    let is_chainable = piece_type == PieceType::Soldier || piece_type == PieceType::Berserker || piece_type == PieceType::Ghoul;
+    let is_chainable = piece_type == PieceType::Soldier || piece_type == PieceType::Berserker;
     
     let captured = apply_move(state, &chosen_piece_tmp, &chosen_target);
     state.moves_this_turn += 1;
