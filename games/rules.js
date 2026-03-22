@@ -482,5 +482,10 @@ export function getListOfPossibleTargets(board, boardstate, selectedPieceId) {
     return true;
   });
 
+  // Siren and Bishop can never capture: they only move to empty polygons.
+  if (board.allPieces[selectedPieceId].type === 'siren' || board.allPieces[selectedPieceId].type === 'bishop') {
+    toBeReturned = toBeReturned.filter(n => board.allPolygons[n].isIn === 'empty');
+  }
+
   return toBeReturned;
 }

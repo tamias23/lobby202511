@@ -133,7 +133,7 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
                     valid = true;
                 } else {
                     for m_poly in &friendly_mages_polys {
-                        if state.get_jump_neighbors(m_poly).contains(poly_id) || state.get_slide_neighbors(m_poly).contains(poly_id) {
+                        if state.get_slide_neighbors(m_poly).contains(poly_id) {
                             valid = true;
                             break;
                         }
@@ -279,8 +279,8 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
         if state.get_occupant_type(t) == Some(PieceType::Berserker) {
             return false;
         }
-        if piece.piece_type == PieceType::Siren {
-            if state.is_occupied(t) { return false; } // Forbid completely capturing enemies directly for Siren
+        if piece.piece_type == PieceType::Siren || piece.piece_type == PieceType::Bishop {
+            if state.is_occupied(t) { return false; } // Siren and Bishop can never capture; they only move to empty polygons
         }
         true
     }).collect()
@@ -647,6 +647,11 @@ pub fn perform_random_turn(state: &mut GameState) -> bool {
                 can_start = true;
             } else if state.board.polygons.get(&p.position).map(|x| &x.color) == Some(&chosen_color) {
                 can_start = true;
+            } else if let Some(locked_id) = &state.locked_sequence_piece {
+                // A locked Heroe (after capture on non-chosen color) can continue from any polygon
+                if locked_id == &p.id {
+                    can_start = true;
+                }
             }
             if can_start {
                 for target in get_legal_moves(state, &p.id) {
