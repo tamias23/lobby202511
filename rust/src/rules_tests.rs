@@ -121,7 +121,7 @@ mod tests {
         apply_move(&mut gs, "w_bishop", "p4");
 
         // Verify AoE: black soldier on p5 is destroyed, white soldier on p3 is immune.
-        assert_eq!(gs.board.pieces.get("b_soldier").unwrap().position, "graveyard"); 
+        assert_eq!(gs.board.pieces.get("b_soldier").unwrap().position, "returned"); 
         assert_eq!(gs.board.pieces.get("w_soldier").unwrap().position, "p3"); 
     }
 
@@ -156,8 +156,8 @@ mod tests {
         apply_move(&mut gs, "w_mage", "p5");
 
         // AoE: Target black_soldier_1 at p5 triggers chain killing black_soldier_2 at p6, but spares white_soldier at p7.
-        assert_eq!(gs.board.pieces.get("b_soldier_1").unwrap().position, "graveyard"); 
-        assert_eq!(gs.board.pieces.get("b_soldier_2").unwrap().position, "graveyard"); 
+        assert_eq!(gs.board.pieces.get("b_soldier_1").unwrap().position, "returned"); 
+        assert_eq!(gs.board.pieces.get("b_soldier_2").unwrap().position, "returned"); 
         assert_eq!(gs.board.pieces.get("w_soldier").unwrap().position, "p7"); 
     }
 
@@ -238,7 +238,7 @@ mod tests {
         apply_move(&mut gs, "w_mage", "p2");
 
         // Verify the soldier died but the massive Berserkers survived seamlessly.
-        assert_eq!(gs.board.pieces.get("b_soldier").unwrap().position, "graveyard"); 
+        assert_eq!(gs.board.pieces.get("b_soldier").unwrap().position, "returned"); 
         assert_eq!(gs.board.pieces.get("b_berserker").unwrap().position, "p3"); 
         assert_eq!(gs.board.pieces.get("w_berserker").unwrap().position, "p4"); 
     }
@@ -414,5 +414,33 @@ mod tests {
         // 2. The overarching turn itself DID NOT organically end natively! White still has the right to move `w_goddess` on orange!
         assert_eq!(gs.turn, Side::White);
         assert!(!gs.is_new_turn);
+    }
+
+    // TEST 11: Captured pieces go to "returned" and can be re-deployed
+    #[test]
+    fn test_captured_piece_can_redeploy() {
+        let mut board = create_mock_board();
+        add_poly(&mut board, "p1", "orange", vec!["p2"]);
+        add_poly(&mut board, "p2", "orange", vec!["p1", "p3"]);
+        add_poly(&mut board, "p3", "orange", vec!["p2"]);
+
+        add_piece(&mut board, "w_heroe", "p1", Side::White, PieceType::Heroe);
+        add_piece(&mut board, "b_soldier", "p2", Side::Black, PieceType::Soldier);
+
+        let mut gs = GameState::new(board);
+        gs.turn = Side::Black;
+        gs.color_chosen.insert(Side::Black, "orange".to_string());
+
+        // White captures the black soldier
+        apply_move(&mut gs, "w_heroe", "p2");
+
+        // Soldier should be "returned", not "graveyard"
+        assert_eq!(gs.board.pieces.get("b_soldier").unwrap().position, "returned");
+
+        // Now the returned soldier should have legal deployment targets
+        // p3 is empty and matches the chosen color "orange"
+        gs.turn = Side::Black;
+        let moves = get_legal_moves(&gs, "b_soldier");
+        assert!(moves.contains(&"p3".to_string()), "Captured soldier should be deployable to p3");
     }
 }

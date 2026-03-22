@@ -294,7 +294,7 @@ pub fn apply_move(state: &mut GameState, piece_id: &str, target_poly: &str) -> V
     // Check if target is occupied
     if let Some(defender_id) = state.occupancy.get(target_poly).cloned() {
         captured_types.push(state.board.pieces[&defender_id].piece_type.clone());
-        state.board.pieces.get_mut(&defender_id).unwrap().position = "graveyard".to_string();
+        state.board.pieces.get_mut(&defender_id).unwrap().position = "returned".to_string();
     }
     
     // Move the piece map
@@ -313,7 +313,7 @@ pub fn apply_move(state: &mut GameState, piece_id: &str, target_poly: &str) -> V
                 if neighbor_piece.side != piece_side && neighbor_piece.piece_type != PieceType::Berserker {
                     captured_types.push(neighbor_piece.piece_type.clone());
                     let mut_p = state.board.pieces.get_mut(&target_id).unwrap();
-                    mut_p.position = "graveyard".to_string();
+                    mut_p.position = "returned".to_string();
                     state.occupancy.remove(&n);
                 }
             }
@@ -327,7 +327,7 @@ pub fn apply_move(state: &mut GameState, piece_id: &str, target_poly: &str) -> V
                 if neighbor_piece.side == target_side && neighbor_piece.piece_type != PieceType::Berserker {
                     captured_types.push(neighbor_piece.piece_type.clone());
                     let mut_p = state.board.pieces.get_mut(&target_id).unwrap();
-                    mut_p.position = "graveyard".to_string();
+                    mut_p.position = "returned".to_string();
                     state.occupancy.remove(&n);
                 }
             }
