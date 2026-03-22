@@ -4,12 +4,12 @@ here are comprehensive rules for a two-player polygon-based board game.
 
 ## General Information
 - **Players:** 2 players (White vs. Black).
-- **The Board:** The game is played on a board composed of connected, colored polygons (e.g., white, yellow, blue, orange). 
+- **The Board:** The game is played on a board composed of connected, colored polygons (e.g., grey, yellow, blue, orange). 
 - **Game Objective:** The primary objective is to capture the opponent's **Goddess**. (Note: While not yet hard-coded into the `endOfTurn` loop, this is the traditional win condition given the Goddess's unique protected setup).
 
 ## The Core Turn Sequence
 The turn-based loop is completely driven by the board's terrain colors. Players alternate turns following this sequence:
-  1. **Choose a Color:** At the start of their turn, a player must choose a terrain color from the selector UI (e.g., white, yellow, blue, orange).
+  1. **Choose a Color:** At the start of their turn, a player must choose a terrain color from the selector UI (e.g., grey, yellow, blue, orange).
   2. **Activate Pieces:** The player can **only** pick up and move pieces that are currently standing on polygons matching that exact chosen color.
   3. **Continuous Actions:** Moving a piece to a polygon of a *different* (unchosen) color does NOT end the turn. The player can continue moving other valid pieces from the chosen color, effectively doing as much as they can.
   4. **Ending the Turn:** The turn **immediately ends** if any piece completes a movement and lands exactly on a polygon of the *chosen color*. 

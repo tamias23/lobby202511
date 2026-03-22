@@ -13,6 +13,11 @@ const port = 3000;
 const dynamicRouter = express.Router();
 const staticPath = path.join(__dirname, '.');
 
+app.use((req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  next();
+});
+
 app.use(express.static(staticPath));
 
 //const myIp = '192.168.1.157';

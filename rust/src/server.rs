@@ -1,0 +1,108 @@
+use axum::{
+    extract::{ws::{Message, WebSocket, WebSocketUpgrade}, State},
+    response::IntoResponse,
+    routing::get,
+    Router,
+};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tower_http::services::ServeDir;
+
+use crate::models::BoardMap;
+use crate::engine::{GameState, perform_random_turn, setup_random_board};
+
+pub struct AppState {
+    pub game_state: Mutex<GameState>,
+    pub delay_ms: u64,
+}
+
+pub async fn start_server(initial_board: BoardMap, delay_ms: u64) {
+    let mut state = GameState::new(initial_board);
+    setup_random_board(&mut state);
+
+    let shared_state = Arc::new(AppState {
+        game_state: Mutex::new(state),
+        delay_ms,
+    });
+
+    let app = Router::new()
+        .fallback_service(ServeDir::new("static")) // serve visualizer interface
+        .route("/ws", get(ws_handler))
+        .with_state(shared_state);
+
+    let addr = "0.0.0.0:3000";
+    println!("Visualizer hosted at http://{}", addr);
+    
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
+}
+
+async fn ws_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    ws.on_upgrade(|socket| handle_socket(socket, state))
+}
+
+use serde::Serialize;
+
+#[derive(Serialize)]
+struct SocketPayload<'a> {
+    #[serde(flatten)]
+    board: &'a crate::models::BoardMap,
+    chosen_color: Option<String>,
+    turn: crate::models::Side,
+}
+
+async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
+    // Broadcast Turn 0 (Pristine Initial Board Setup) before executing any AI turns.
+    {
+        let gs = state.game_state.lock().await;
+        let c = gs.color_chosen.get(&gs.turn).cloned();
+        let payload = SocketPayload {
+            board: &gs.board,
+            chosen_color: c,
+            turn: gs.turn,
+        };
+        let json = serde_json::to_string(&payload).unwrap();
+        if socket.send(Message::Text(json.into())).await.is_err() {
+            println!("Client disconnected immediately.");
+            return;
+        }
+    }
+
+    tokio::time::sleep(std::time::Duration::from_millis(state.delay_ms)).await;
+
+    loop {
+        let (board_json, delay, won, drawn) = {
+            let mut gs = state.game_state.lock().await;
+            let won = perform_random_turn(&mut gs);
+            let drawn = gs.turn_counter >= 60;
+            let c = gs.color_chosen.get(&gs.turn).cloned();
+            let payload = SocketPayload {
+                board: &gs.board,
+                chosen_color: c,
+                turn: gs.turn,
+            };
+            let json = serde_json::to_string(&payload).unwrap();
+            (json, state.delay_ms, won, drawn)
+        };
+
+        if socket.send(Message::Text(board_json.into())).await.is_err() {
+            println!("Client socket disconnected.");
+            break;
+        }
+
+        if won {
+            println!("Simulation ended: A Goddess was successfully captured!");
+            break;
+        }
+        
+        if drawn {
+            println!("Simulation ended: Draw reached after 60 turns (30 by White, 30 by Black)!");
+            break;
+        }
+
+        tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+    }
+}

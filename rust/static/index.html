@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Rust Random AI Spectator</title>
+    <style>
+        body {
+            background-color: #111827;
+            color: #f3f4f6;
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem;
+            margin: 0;
+        }
+
+        h1 {
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(to right, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        #game-container {
+            background: #1f2937;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            display: flex;
+            justify-content: center;
+            margin-top: 2rem;
+        }
+
+        svg {
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: inset 0 2px 4px 0 rgba(0,0,0,0.06);
+            /* Fluid resizing relative to viewport */
+            width: 80vw;
+            height: 70vh;
+        }
+
+        .side-black { fill: #000; }
+        .side-white { fill: #fff; stroke: #000; stroke-width: 2px; }
+        .text-black { fill: #fff; font-size: 14px; font-weight: bold; text-anchor: middle; dominant-baseline: central;}
+        .text-white { fill: #000; font-size: 14px; font-weight: bold; text-anchor: middle; dominant-baseline: central;}
+    </style>
+</head>
+<body>
+    <h1>Rust Simulation Engine</h1>
+    <p>Spectating random AI execution natively streamed over WebSockets.</p>
+    <div id="game-container">
+        <!-- SVG Canvas initialized by app.js -->
+    </div>
+    
+    <script src="/app.js"></script>
+</body>
+</html>
