@@ -23,7 +23,8 @@ cd ./rust ; cargo run --bin rust -- /home/mat/Bureau/lobby202511/games/data/nt50
 ./replay_games.sh "$(ls -t parquet/*.parquet | head -n 1)"
 
 /home/mat/Bureau/spyder-env/bin/python3 genetic_bob.py --duration 900 --rounds 10 --agents 40 --parallel 10
-/home/mat/Bureau/spyder-env/bin/python3 genetic_bob.py --duration 3600 --rounds 12 --agents 36 --parallel 12
+/home/mat/Bureau/spyder-env/bin/python3 genetic_bob.py --duration 3600 --rounds 10 --agents 36 --parallel 12
+/home/mat/Bureau/spyder-env/bin/python3 genetic_swiss_bob.py --duration 3600 --rounds 13 --agents 48 --parallel 12
 
 =================================================================================
 
