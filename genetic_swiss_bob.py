@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 
 # Parse CLI arguments
-parser = argparse.ArgumentParser(description="Greedy Bob Genetic Algorithm Evolution")
+parser = argparse.ArgumentParser(description="Greedy Bob Genetic Algorithm Evolution (Swiss Tournament)")
 parser.add_argument("--duration", type=int, default=3600, help="Duration to run the evolution in seconds (default: 3600)")
 parser.add_argument("--rounds", type=int, default=20, help="Number of rounds per generation before culling (default: 20)")
 parser.add_argument("--agents", type=int, default=100, help="Total population size of agents (default: 100)")
@@ -44,6 +44,7 @@ class Agent:
         self.name = name if name else generate_random_name(generation_num)
         self.weights = weights if weights else generate_random_weights()
         self.score = 0
+        self.opponents = []
 
 async def run_match(sem, agent1, agent2, board_path):
     async with sem:
@@ -92,25 +93,52 @@ async def run_match(sem, agent1, agent2, board_path):
                 black.score += 1
         else:
             print(f"Failed to parse match output for Agents: {white.id} vs {black.id}")
-            print(f"RAW OUTPUT:\\n{output}")
+            print(f"RAW OUTPUT:\n{output}")
 
 async def run_generation(agents, sem, start_time, board_path):
     # Wipe scores completely mapping across generations freshly
     for a in agents:
         a.score = 0
+        a.opponents = []
         
     matches_played = 0
     for r in range(args.rounds):
-        # Shuffle agents for random pairing combinations securely traversing local minimas
+        # Swiss pairing logic
         pool = list(agents)
+        # Random shuffle first to randomize ties
         random.shuffle(pool)
+        # Sort agents by score descending, then by Buchholz descending
+        pool.sort(key=lambda a: (a.score, sum(opp.score for opp in a.opponents)), reverse=True)
         
+        unpaired = list(pool)
+        pairings = []
+        
+        while len(unpaired) >= 2:
+            p1 = unpaired.pop(0)
+            
+            # Find an opponent for p1 that they haven't played yet
+            opponent_idx = -1
+            for i, p2 in enumerate(unpaired):
+                if p2 not in p1.opponents:
+                    opponent_idx = i
+                    break
+            
+            if opponent_idx == -1:
+                # Fallback: just play the next available if all have been played
+                opponent_idx = 0
+                
+            p2 = unpaired.pop(opponent_idx)
+            pairings.append((p1, p2))
+            
+            # Record opponents for Buchholz tie breaks and duplicate match avoidance
+            p1.opponents.append(p2)
+            p2.opponents.append(p1)
+                
         # Deploy parallel pair combinations sequentially limited by max throughput boundaries natively mapped inside asyncio bounds
         tasks = []
-        for i in range(0, len(pool), 2):
-            if i + 1 < len(pool):
-                tasks.append(run_match(sem, pool[i], pool[i+1], board_path))
-                matches_played += 1
+        for p1, p2 in pairings:
+            tasks.append(run_match(sem, p1, p2, board_path))
+            matches_played += 1
                 
         # Async execution block targeting completion wait limits globally across iteration bounds mapping loop rounds directly
         await asyncio.gather(*tasks)
@@ -122,7 +150,7 @@ async def run_generation(agents, sem, start_time, board_path):
     return matches_played
 
 async def main():
-    print(f"Initializing {args.agents} random Greedy Bob agents...")
+    print(f"Initializing {args.agents} random Greedy Bob agents (Swiss System)...")
     population = [Agent(i+1, generation_num=1) for i in range(args.agents)]
     sem = asyncio.Semaphore(args.parallel)
     
@@ -132,7 +160,7 @@ async def main():
     
     import glob
     board_files = glob.glob("games/data/*board.json")
-
+    
     while (time.time() - start_time) < args.duration:
         print(f"\n--- Starting Generation {generation} ---")
         
@@ -147,12 +175,13 @@ async def main():
         matches_this_gen = await run_generation(population, sem, start_time, current_board)
         total_matches += matches_this_gen
         
-        # Sort population array bounds mathematically shifting score counts dynamically sequentially
-        population.sort(key=lambda a: a.score, reverse=True)
+        # Sort population array bounds mathematically shifting score counts dynamically sequentially (Swiss + Buchholz)
+        population.sort(key=lambda a: (a.score, sum(opp.score for opp in a.opponents)), reverse=True)
         
-        print("\nTop 5 Agents this Generation:")
-        for i in range(5):
-            print(f"  Rank {i+1}: Agent {population[i].id} '{population[i].name}' | Score: {population[i].score}")
+        print("\nTop 20 Agents this Generation (Swiss Tournament Table):")
+        for i in range(min(20, len(population))):
+            buchholz = sum(opp.score for opp in population[i].opponents)
+            print(f"  Rank {i+1}: Agent {population[i].id} '{population[i].name}' | Score: {population[i].score} | Buchholz: {buchholz}")
             print(f"  Weights: {weights_to_str(population[i].weights)}")
         
         # Isolate exactly half bounds executing hard culling cuts securely wiping non-competitive branches immediately
@@ -194,25 +223,37 @@ async def main():
     print(f"  Match Processing Speed: {total_matches / elapsed:.2f} matches/sec")
     
     # Secure maximum bounds extraction natively globally ensuring the master combination iteration survives!
-    population.sort(key=lambda a: a.score, reverse=True)
+    population.sort(key=lambda a: (a.score, sum(opp.score for opp in a.opponents)), reverse=True)
     
-    print("\n--- TOP 30 AGENT CONFIGURATIONS ---")
+    table_filename = "swiss_tournament_table.csv"
+    with open(table_filename, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(["Rank", "AgentID", "Name", "Score", "Buchholz", "OpponentsPlayed"])
+        for i in range(len(population)):
+            agent = population[i]
+            buchholz = sum(opp.score for opp in agent.opponents)
+            opps_str = "|".join(str(opp.id) for opp in agent.opponents)
+            writer.writerow([i+1, agent.id, agent.name, agent.score, buchholz, opps_str])
+    print(f"✅ Successfully exported the final Swiss tournament table to {table_filename}!\n")
+
+    print("--- TOP 30 AGENT CONFIGURATIONS ---")
     
-    csv_filename = "greedy_bob_results.csv"
+    csv_filename = "greedy_bob_results_swiss.csv"
     with open(csv_filename, 'w', newline='') as csvfile:
         csvwriter = csv.writer(csvfile)
         
         # Write CSV Header natively matching 26 parameter blocks
-        header = ["Rank", "AgentID", "Name", "Score"] + [f"Weight_{i}" for i in range(26)]
+        header = ["Rank", "AgentID", "Name", "Score", "Buchholz"] + [f"Weight_{i}" for i in range(26)]
         csvwriter.writerow(header)
         
         for i in range(min(30, len(population))):
             agent = population[i]
-            print(f"Rank {i+1} [Agent {agent.id} '{agent.name}'] - Score: {agent.score}")
+            buchholz = sum(opp.score for opp in agent.opponents)
+            print(f"Rank {i+1} [Agent {agent.id} '{agent.name}'] - Score: {agent.score} | Buchholz: {buchholz}")
             print(f"Weights: {weights_to_str(agent.weights)}\n")
             
             # Write row to CSV natively explicitly matching float bindings
-            row = [i+1, agent.id, agent.name, agent.score] + agent.weights
+            row = [i+1, agent.id, agent.name, agent.score, buchholz] + agent.weights
             csvwriter.writerow(row)
             
     print(f"✅ Successfully exported the top {min(30, len(population))} genetic configurations to {csv_filename}!")
