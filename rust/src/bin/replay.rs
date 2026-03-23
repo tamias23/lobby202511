@@ -152,7 +152,7 @@ async fn get_turn(
             gs.is_new_turn = false;
         }
 
-        gs.turn = match m.active_side.as_str() {
+        gs.turn = match m.active_side.to_lowercase().as_str() {
             "white" => Side::White,
             _ => Side::Black,
         };

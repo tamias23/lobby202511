@@ -17,9 +17,9 @@ re-code setuprandomy, so that it fires all moves
 
 =================================================================================
 
-cargo run --bin rust -- /home/mat/Bureau/lobby202511/games/data/nt502220148101996_f1b4eb34cc3ccb285ee5fe158bf4284d_board.json --batch 10 --store-parquet /home/mat/Bureau/lobby202511/parquet
-./replay_games.sh parquet/batch_1774269657636.parquet
-
+./rust/cargo run --bin rust -- /home/mat/Bureau/lobby202511/games/data/nt502220148101996_f1b4eb34cc3ccb285ee5fe158bf4284d_board.json --batch 100 --store-parquet /home/mat/Bureau/lobby202511/parquet
+./replay_games.sh parquet/batch_1774272458017.parquet
+./replay_games.sh "$(ls -t data/*.parquet | head -n 1)"
 
 
 

@@ -134,6 +134,8 @@ fn run_batch(
         let mut winner: Option<Side> = None;
         while gs.turn_counter < max_turns {
             let active_side = gs.turn.clone();
+            let current_turn_number = gs.turn_counter;
+            
             let agent: &dyn agents::Agent = match active_side {
                 Side::White => white_agent,
                 Side::Black => black_agent,
@@ -142,14 +144,14 @@ fn run_batch(
             let (goddess_captured, move_made) = perform_turn(&mut gs, agent);
             
             if recorder.is_some() {
-                if let Some((piece, target)) = move_made {
-                    let chosen_color = gs.color_chosen.get(&active_side).cloned().unwrap_or_default();
+                if let Some((piece, target, chosen_color)) = move_made {
                     game_moves.push(MoveEvent {
-                        turn_number: gs.turn_counter,
+                        turn_number: current_turn_number,
                         active_side: format!("{:?}", active_side),
                         chosen_color,
                         piece_id: piece,
                         target_pos: target,
+                        timestamp_ms: current_timestamp_ms(),
                     });
                 }
             }

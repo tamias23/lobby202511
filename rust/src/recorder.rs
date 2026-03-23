@@ -12,6 +12,8 @@ pub struct MoveEvent {
     pub chosen_color: String,
     pub piece_id: String,
     pub target_pos: String,
+    #[serde(default)]
+    pub timestamp_ms: i64,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

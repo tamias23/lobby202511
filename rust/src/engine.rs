@@ -589,8 +589,8 @@ pub fn perform_random_turn(state: &mut GameState) -> bool {
 }
 
 /// Executes one half-step of a turn using the provided agent.
-/// Returns `(goddess_captured, Option<(piece_id, target_pos)>)`.
-pub fn perform_turn(state: &mut GameState, agent: &dyn Agent) -> (bool, Option<(String, String)>) {
+/// Returns `(goddess_captured, Option<(piece_id, target_pos, chosen_color)>)`.
+pub fn perform_turn(state: &mut GameState, agent: &dyn Agent) -> (bool, Option<(String, String, String)>) {
     if state.is_new_turn {
         state.moves_this_turn = 0;
 
@@ -695,11 +695,12 @@ pub fn perform_turn(state: &mut GameState, agent: &dyn Agent) -> (bool, Option<(
         }
         AgentMove::Move { piece: chosen_piece, target: chosen_target } => {
             let was_returned = state.board.pieces[&chosen_piece].position == "returned";
+            let played_color = state.color_chosen.get(&current_turn).unwrap().clone();
             let captured = apply_move(state, &chosen_piece, &chosen_target);
             state.moves_this_turn += 1;
             let goddess_captured = captured.contains(&PieceType::Goddess);
             let result = apply_move_turnover(state, &chosen_piece, &chosen_target, goddess_captured, captured.is_empty(), was_returned);
-            (result, Some((chosen_piece, chosen_target)))
+            (result, Some((chosen_piece, chosen_target, played_color)))
         }
     }
 }

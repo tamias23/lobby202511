@@ -21,7 +21,7 @@ const randomFile = files[Math.floor(Math.random() * files.length)];
 const boardPath = path.join(dataDir, randomFile);
 
 // Configure delay via CLI argument or default to 1300ms
-const delay = process.argv[2] || "30";
+const delay = process.argv[2] || "2000";
 const maxTurns = process.argv[3] || "600";
 
 console.log('==============================================');

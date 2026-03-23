@@ -11,7 +11,7 @@ import polars as pl
 import pandas as pd
 import duckdb
 
-dts = pl.read_parquet('/home/mat/Bureau/lobby202511/parquet/batch_1774266194168.parquet')
+dts = pl.read_parquet('/home/mat/Bureau/lobby202511/parquet/batch_1774272458017.parquet')
 dts.columns
 dts.shape
 
@@ -19,7 +19,7 @@ dts.shape
 
 # dts.drop_in_place('moves')
 
-with pd.ExcelWriter('/home/mat/Bureau/lobby202511/parquet/batch_1774266194168.xlsx') as writer:  
-    dts.to_pandas().to_excel(writer, sheet_name='data', index = False)
+with pd.ExcelWriter('/home/mat/Bureau/lobby202511/parquet/batch_1774272458017.xlsx') as writer:  
+    dts.sample(50).to_pandas().to_excel(writer, sheet_name='data', index = False)
 
 
