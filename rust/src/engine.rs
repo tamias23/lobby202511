@@ -14,6 +14,7 @@ pub struct GameState {
     pub moves_this_turn: u32,
     pub locked_sequence_piece: Option<String>,
     pub heroe_take_counter: u32,
+    pub visited_polygons: HashSet<String>,
 }
 
 impl GameState {
@@ -34,6 +35,7 @@ impl GameState {
             moves_this_turn: 0,
             locked_sequence_piece: None,
             heroe_take_counter: 0,
+            visited_polygons: HashSet::new(),
         }
     }
 
@@ -241,6 +243,9 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
                 }
             }
             targets.remove(start);
+
+            // Global filter for previously visited polygons during the current turn sequence
+            targets.retain(|t| !state.visited_polygons.contains(t));
         },
         PieceType::Ghoul => {
             let chosen_color = state.color_chosen.get(&state.turn).cloned();
@@ -291,7 +296,15 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
 pub fn apply_move(state: &mut GameState, piece_id: &str, target_poly: &str) -> Vec<PieceType> {
     let mut captured_types = Vec::new();
     let piece_type = state.board.pieces[piece_id].piece_type.clone();
-    let piece_side = state.board.pieces[piece_id].side.clone();
+    let piece_side = state.board.pieces[piece_id].side;
+    
+    let old_pos = state.board.pieces[piece_id].position.clone();
+    
+    // Register chain movement sequence memory
+    if state.moves_this_turn == 0 && old_pos != "returned" {
+        state.visited_polygons.insert(old_pos.clone());
+    }
+    state.visited_polygons.insert(target_poly.to_string());
     
     // Check if target is occupied
     if let Some(defender_id) = state.occupancy.get(target_poly).cloned() {
@@ -593,6 +606,7 @@ pub fn perform_random_turn(state: &mut GameState) -> bool {
 pub fn perform_turn(state: &mut GameState, agent: &dyn Agent) -> (bool, Option<(String, String, String)>) {
     if state.is_new_turn {
         state.moves_this_turn = 0;
+        state.visited_polygons.clear(); // Clear visited polygons at the start of a new turn
 
         let current_turn = state.turn;
 
@@ -634,6 +648,7 @@ pub fn perform_turn(state: &mut GameState, agent: &dyn Agent) -> (bool, Option<(
             state.is_new_turn = true;
             state.locked_sequence_piece = None;
             state.heroe_take_counter = 0;
+            state.visited_polygons.clear(); // Wipe trajectory memory across completely fresh turnovers
             return (false, None);
         }
 
@@ -678,6 +693,7 @@ pub fn perform_turn(state: &mut GameState, agent: &dyn Agent) -> (bool, Option<(
         state.is_new_turn = true;
         state.locked_sequence_piece = None;
         state.heroe_take_counter = 0;
+        state.visited_polygons.clear(); // Wipe trajectory memory across completely fresh turnovers
         return (false, None);
     }
 

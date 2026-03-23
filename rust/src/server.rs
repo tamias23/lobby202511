@@ -9,15 +9,24 @@ use tokio::sync::Mutex;
 use tower_http::services::ServeDir;
 
 use crate::models::BoardMap;
-use crate::engine::{GameState, perform_random_turn, setup_random_board};
+use crate::engine::{GameState, perform_turn, setup_random_board};
+use crate::agents::Agent;
 
 pub struct AppState {
     pub game_state: Mutex<GameState>,
     pub delay_ms: u64,
     pub max_turns: u32,
+    pub white_agent: Arc<dyn Agent>,
+    pub black_agent: Arc<dyn Agent>,
 }
 
-pub async fn start_server(initial_board: BoardMap, delay_ms: u64, max_turns: u32) {
+pub async fn start_server(
+    initial_board: BoardMap, 
+    delay_ms: u64, 
+    max_turns: u32,
+    white_agent: Arc<dyn Agent>,
+    black_agent: Arc<dyn Agent>
+) {
     let mut state = GameState::new(initial_board);
     setup_random_board(&mut state);
 
@@ -25,6 +34,8 @@ pub async fn start_server(initial_board: BoardMap, delay_ms: u64, max_turns: u32
         game_state: Mutex::new(state),
         delay_ms,
         max_turns,
+        white_agent,
+        black_agent,
     });
 
     let app = Router::new()
@@ -82,7 +93,13 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
     loop {
         let (board_json, delay, won, drawn) = {
             let mut gs = state.game_state.lock().await;
-            let won = perform_random_turn(&mut gs);
+            
+            let agent: &dyn Agent = match gs.turn {
+                crate::models::Side::White => &*state.white_agent,
+                crate::models::Side::Black => &*state.black_agent,
+            };
+            
+            let (won, _) = perform_turn(&mut gs, agent);
             let drawn = gs.turn_counter >= state.max_turns;
             let c = gs.color_chosen.get(&gs.turn).cloned();
             let payload = SocketPayload {

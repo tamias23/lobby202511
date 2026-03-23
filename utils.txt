@@ -21,21 +21,49 @@ cd ./rust ; cargo run --bin rust -- /home/mat/Bureau/lobby202511/games/data/nt50
 ./replay_games.sh parquet/batch_1774272458017.parquet
 ./replay_games.sh "$(ls -t parquet/*.parquet | head -n 1)"
 
+=================================================================================
+
+I would like to create a new agent called greedy_bob, inmplemented in greedy_bob.rs.
+This agent will implement a greedy function that is a score over the game state. This score is the weighted sum of several score functions : 
+For itself and the opponent :
+  the min distance between our soldiers, berserkers, mage, bishops, ghouls,heroes and the oponent goddess 
+  the sum distance between our soldiers, berserkers, mage, bishops, ghouls, heroes and the oponent goddess (returned pieces get a default distance of 100, for example)
+  the number of mages on the board
+  the number of soldiers on the board
+  the number of ghouls on the board
+  the number of sirens on the board
+  the number of heroes on the board
+  the number of mages immobilized
+  the number of soldiers immobilized
+  the number of berserkers immobilized
+  the number of ghouls immobilized
+  the number of sirens immobilized
+  the number of heroes immobilized
+for the distance : you do not need to count the number of polygons, simply compute the distance between the svg elements.
+This agent will simply evaluate all possible moves using this function (it will need to create a temporary board where to test possible moves).
+The weight vector is a parameter of greedy_bob. This will enable us to do grid search on the space of weight parameters (maybe followed by some genetic algorithms or local search...), finding the best greedy_bob possible.
+
+=================================================================================
+
+I would like to find the best greedy_bob possible. For that, I would like you to
+randomly generate 100 weights arrays. this gives you 100 agents with ids 1..100
+repeat for one hour : {
+  organize 20 rounds, keep track of score : {
+    randomly sort those 100 agents
+    make 1 play againts 2, 3 against 4, 5 against 6, ..., 99 against 100 (make this step parralel, 5 matches at the same time. Wait for all to complete)
+  }
+  after 20 rounds, remove the 50 agents that performed badly
+  randomly generate 50 weights arrays (50 new agents). this gives you a total of 100 agents
+  for those new agents, give them the id of an agent that was removed
+}
+write this in Python. Create parameters for the duration (1), 20, 100
+
+/home/mat/Bureau/spyder-env/bin/python3 genetic_bob.py --duration 600 --rounds 20 --agents 100 --parallel 10
+/home/mat/Bureau/spyder-env/bin/python3 genetic_bob.py --duration 900 --rounds 10 --agents 40 --parallel 10
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
+=================================================================================
 
 
 Injecting the Initial Board State into Parquet recordings

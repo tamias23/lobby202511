@@ -1,5 +1,7 @@
 use rust::*;
 
+use std::sync::Arc;
+
 fn parse_flag_value(args: &[String], flag: &str, default: u32) -> u32 {
     args.iter()
         .position(|a| a == flag)
@@ -16,11 +18,21 @@ fn parse_flag_str<'a>(args: &'a [String], flag: &str, default: &'a str) -> &'a s
         .unwrap_or(default)
 }
 
-fn make_agent(name: &str) -> Box<dyn agents::Agent> {
+fn make_agent(name: &str, weights_str: Option<&String>) -> Arc<dyn agents::Agent> {
     match name {
-        "random" => Box::new(agents::random::RandomAgent),
+        "random" => Arc::new(agents::random::RandomAgent),
+        "greedy_bob" => {
+            let mut weights = [1.0; 26]; // Default baseline
+            if let Some(w_str) = weights_str {
+                let parsed: Vec<f64> = w_str.split(',').filter_map(|s| s.parse().ok()).collect();
+                for (i, val) in parsed.into_iter().enumerate().take(26) {
+                    weights[i] = val;
+                }
+            }
+            Arc::new(agents::greedy_bob::GreedyBobAgent::new(weights))
+        }
         other => {
-            eprintln!("Unknown agent '{}'. Available: random", other);
+            eprintln!("Unknown agent '{}'. Available: random, greedy_bob", other);
             std::process::exit(1);
         }
     }
@@ -33,8 +45,11 @@ async fn main() {
         println!("Usage:");
         println!("  cargo run -- <board.json> [--delay <ms>] [--max-turns <N>] [--white <agent>] [--black <agent>]");
         println!("  cargo run -- <board.json> --batch <n_games> [--max-turns <N>] [--white <agent>] [--black <agent>] [--store-parquet <dir>]");
+        println!("  Optional Agent Traits:");
+        println!("      --greedy-weights-white \"1.0,1.0,-2.0,...\"");
+        println!("      --greedy-weights-black \"1.0,1.0,-2.0,...\"");
         println!();
-        println!("  Agents: random");
+        println!("  Agents: random, greedy_bob");
         std::process::exit(1);
     }
 
@@ -52,14 +67,17 @@ async fn main() {
     let white_agent_name = parse_flag_str(&args, "--white", "random").to_string();
     let black_agent_name = parse_flag_str(&args, "--black", "random").to_string();
     let parquet_dir = args.iter().position(|a| a == "--store-parquet").and_then(|i| args.get(i + 1)).cloned();
+    
+    let white_weights = args.iter().position(|a| a == "--greedy-weights-white").and_then(|i| args.get(i + 1));
+    let black_weights = args.iter().position(|a| a == "--greedy-weights-black").and_then(|i| args.get(i + 1));
+
+    let white_agent = make_agent(&white_agent_name, white_weights);
+    let black_agent = make_agent(&black_agent_name, black_weights);
 
     if let Some(batch_pos) = args.iter().position(|a| a == "--batch") {
         let n_games: u32 = args.get(batch_pos + 1)
             .and_then(|s| s.parse().ok())
             .unwrap_or(100);
-
-        let white_agent = make_agent(&white_agent_name);
-        let black_agent = make_agent(&black_agent_name);
 
         run_batch(
             board, 
@@ -78,7 +96,7 @@ async fn main() {
 
         println!("Loading board layout from {}...", path);
         println!("Board parsed perfectly. Initializing core engine simulator...");
-        server::start_server(board, delay_ms, max_turns).await;
+        server::start_server(board, delay_ms, max_turns, white_agent, black_agent).await;
     }
 }
 

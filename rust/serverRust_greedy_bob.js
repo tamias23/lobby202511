@@ -26,12 +26,13 @@ const maxTurns = process.argv[3] || "600";
 
 console.log('==============================================');
 console.log('🚀 Launching Native Rust Backend Simulator...');
+console.log('🧠 Loading Agent: Greedy Bob (Self-Play Sequence)');
 console.log(`📂 Selected Board: ${randomFile}`);
 console.log(`⏱️  Tick Delay: ${delay}ms`);
 console.log(`♾️  Max Turns: ${maxTurns}`);
 console.log('==============================================');
 
-const rustProcess = spawn('cargo', ['run', '--bin', 'rust', '--', boardPath, '--delay', delay, '--max-turns', maxTurns], {
+const rustProcess = spawn('cargo', ['run', '--bin', 'rust', '--', boardPath, '--delay', delay, '--max-turns', maxTurns, '--white', 'greedy_bob', '--black', 'greedy_bob'], {
     cwd: __dirname,
     stdio: 'inherit'
 });
