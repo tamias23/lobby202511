@@ -23,7 +23,7 @@ async function initReplay() {
                 const selected = gamesList.find(g => g.game_id === e.target.value);
                 if (selected) {
                     gameId = selected.game_id;
-                    totalTurns = selected.total_turns || 200;
+                    totalTurns = JSON.parse(selected.moves || "[]").length;
                     
                     // Clear svg layer state immediately to cleanly switch to new games mapping new paths
                     let piecesLayer = document.getElementById("pieces-layer");
@@ -34,7 +34,7 @@ async function initReplay() {
             };
 
             gameId = gamesList[0].game_id;
-            totalTurns = gamesList[0].total_turns || 200;
+            totalTurns = JSON.parse(gamesList[0].moves || "[]").length;
             await fetchTurn(0);
             
             window.addEventListener('keydown', (e) => {

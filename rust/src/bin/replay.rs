@@ -137,11 +137,19 @@ async fn get_turn(
     }
 
     let move_events: Vec<MoveEvent> = serde_json::from_str(&game.moves).unwrap_or_default();
+    let mut last_turn_side = gs.turn.clone();
+    let mut last_chosen_color = gs.color_chosen.get(&gs.turn).cloned();
+    let mut moves_run = 0;
 
     // Iterate up to the specified turn (1 turn = 1 move played)
     for (i, m) in move_events.iter().enumerate() {
         if i >= turn as usize {
             break;
+        }
+        
+        if gs.is_new_turn {
+            gs.moves_this_turn = 0;
+            gs.is_new_turn = false;
         }
 
         gs.turn = match m.active_side.as_str() {
@@ -149,6 +157,11 @@ async fn get_turn(
             _ => Side::Black,
         };
         gs.color_chosen.insert(gs.turn.clone(), m.chosen_color.clone());
+
+        last_turn_side = gs.turn.clone();
+        last_chosen_color = Some(m.chosen_color.clone());
+        gs.moves_this_turn += 1;
+        moves_run = gs.moves_this_turn;
 
         let piece_opt = gs.board.pieces.get(&m.piece_id);
         if piece_opt.is_none() {
@@ -169,14 +182,14 @@ async fn get_turn(
     }
     
     // Explicitly sync the `moves_this_turn` counter
-    // Wait, the counter logic is native to turnover sequence. We just set it strictly for display.
+    // The counter logic is native to turnover sequence. We just set it strictly for display.
 
     let payload = SocketPayload {
         board: gs.board,
-        chosen_color: gs.color_chosen.get(&gs.turn).cloned(),
-        turn: gs.turn,
+        chosen_color: last_chosen_color,
+        turn: last_turn_side,
         turn_counter: gs.turn_counter,
-        moves_this_turn: gs.moves_this_turn,
+        moves_this_turn: moves_run,
     };
 
     Json(Some(payload)).into_response()
