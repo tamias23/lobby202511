@@ -2,3 +2,4 @@ games/data/*
 !games/data/nt409*
 games/data/rust
 rust/target/
+./javascript/node_modules
