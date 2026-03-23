@@ -222,7 +222,11 @@ impl Agent for GreedyBobAgent {
                     was_returned,
                 );
 
-                let score = self.score_state(&clone_state, &perspective);
+                let score = if goddess_captured {
+                    std::f64::INFINITY
+                } else {
+                    self.score_state(&clone_state, &perspective)
+                };
                 
                 if score > best_score {
                     best_score = score;
