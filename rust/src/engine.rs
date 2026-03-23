@@ -342,10 +342,8 @@ pub fn apply_move(state: &mut GameState, piece_id: &str, target_poly: &str) -> V
 use rand::seq::{IteratorRandom, SliceRandom};
 use rand::Rng;
 
-/// Randomly assigns all `returned` pieces to currently unoccupied polygons.
-pub fn setup_random_board(state: &mut GameState) {
-    let mut rng = rand::rng();
-    
+/// Initializes the standard set of pieces into the "returned" position without randomizing them onto the board.
+pub fn setup_pieces(state: &mut GameState) {
     // 1. Force completely new pieces map based strictly on Rule quantities
     state.board.pieces.clear();
     state.occupancy.clear();
@@ -384,6 +382,13 @@ pub fn setup_random_board(state: &mut GameState) {
         add_pieces(crate::models::PieceType::Siren, 9);
         add_pieces(crate::models::PieceType::Berserker, 2);
     }
+}
+
+/// Randomly assigns all `returned` pieces to currently unoccupied polygons.
+pub fn setup_random_board(state: &mut GameState) {
+    setup_pieces(state);
+    
+    let mut rng = rand::rng();
 
     // Find Edge polygons
     let mut top_edges = Vec::new();

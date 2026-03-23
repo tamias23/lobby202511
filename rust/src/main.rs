@@ -120,6 +120,12 @@ fn run_batch(
         let mut gs = GameState::new(board.clone());
         setup_random_board(&mut gs);
         
+        let mut init_map = std::collections::HashMap::new();
+        for (pid, p) in &gs.board.pieces {
+            init_map.insert(pid.clone(), p.position.clone());
+        }
+        let initial_state = serde_json::to_string(&init_map).unwrap_or_else(|_| "{}".to_string());
+        
         let game_id = Uuid::new_v4().to_string();
         let game_date = current_date_string();
         let game_start_ms = current_timestamp_ms();
@@ -170,6 +176,7 @@ fn run_batch(
                 game_date,
                 winner: final_winner.to_string(),
                 total_turns: gs.turn_counter,
+                initial_state,
                 moves: moves_json,
             });
         }

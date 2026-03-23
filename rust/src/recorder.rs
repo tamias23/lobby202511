@@ -14,7 +14,7 @@ pub struct MoveEvent {
     pub target_pos: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct GameRecord {
     pub game_id: String,
     pub board_id: String,
@@ -22,6 +22,7 @@ pub struct GameRecord {
     pub game_date: String,
     pub winner: String,
     pub total_turns: u32,
+    pub initial_state: String, // JSON serialized HashMap<String, String> (Piece ID -> Polygon ID)
     pub moves: String, // JSON serialized Vec<MoveEvent>
 }
 
@@ -49,6 +50,7 @@ impl Recorder {
         let mut game_dates = Vec::with_capacity(self.records.len());
         let mut winners = Vec::with_capacity(self.records.len());
         let mut total_turns = Vec::with_capacity(self.records.len());
+        let mut initial_states = Vec::with_capacity(self.records.len());
         let mut moves = Vec::with_capacity(self.records.len());
 
         for r in &self.records {
@@ -58,6 +60,7 @@ impl Recorder {
             game_dates.push(r.game_date.as_str());
             winners.push(r.winner.as_str());
             total_turns.push(r.total_turns);
+            initial_states.push(r.initial_state.as_str());
             moves.push(r.moves.as_str());
         }
 
@@ -68,6 +71,7 @@ impl Recorder {
             "game_date" => &game_dates,
             "winner" => &winners,
             "total_turns" => &total_turns,
+            "initial_state" => &initial_states,
             "moves" => &moves,
         )?;
 

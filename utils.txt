@@ -7,6 +7,48 @@
 
 =================================================================================
 
-cargo run -- /home/mat/Bureau/lobby202511/games/data/nt502220148101996_f1b4eb34cc3ccb285ee5fe158bf4284d_board.json --batch 2 --store-parquet /home/mat/Bureau/lobby202511/parquet
-./replay_games.sh parquet/batch_1774258483802.parquet
+implement 
+  alpha beta algorithm + NNUE
+  MCTS
+Graph Convolutional Networks
+Graph Attention Networks
 
+re-code setuprandomy, so that it fires all moves
+
+=================================================================================
+
+cargo run --bin rust -- /home/mat/Bureau/lobby202511/games/data/nt502220148101996_f1b4eb34cc3ccb285ee5fe158bf4284d_board.json --batch 10 --store-parquet /home/mat/Bureau/lobby202511/parquet
+./replay_games.sh parquet/batch_1774266194168.parquet
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Injecting the Initial Board State into Parquet recordings
+recorder.rs
+ to write the serialized initial state to Parquet. I am now looking at the batch runner in 
+main.rs
+ to determine where to inject the state capture logic.
+Examining recorder.rs to determine how to serialize the random initial board state (setup_random_board) into the Parquet output so the Replay viewer can deterministically reproduce the first frame
+Adding initial_state column to the Parquet schema in recorder.rs and main.rs to snapshot the piece positions deterministically
+Modifying rust/src/main.rs to extract the PieceID -> PolygonID map from Turn 0 immediately after setup_random_board completes

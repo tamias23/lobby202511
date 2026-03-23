@@ -12,4 +12,4 @@ RUST_DIR="$SCRIPT_DIR/rust"
 
 cd "$RUST_DIR" || { echo "Cannot find rust/ directory"; exit 1; }
 
-cargo run -- "$BOARD_PATH" --batch "$N_GAMES" --max-turns "$MAX_TURNS"
+cargo run --bin rust -- "$BOARD_PATH" --batch "$N_GAMES" --max-turns "$MAX_TURNS"

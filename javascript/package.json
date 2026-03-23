@@ -1,0 +1,29 @@
+{
+  "name": "lobby202410",
+  "version": "1.0.0",
+  "description": "",
+  "main": "serverD.js",
+  "scripts": {
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "start": "node serverD.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "beautify": "^0.0.8",
+    "express": "^4.21.1",
+    "jsdom": "^25.0.1",
+    "socket.io": "^4.8.3",
+    "xml2js": "^0.6.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.0",
+    "@babel/plugin-transform-modules-commonjs": "^7.28.6",
+    "@eslint/js": "^9.39.1",
+    "babel-jest": "^30.3.0",
+    "eslint": "^9.39.1",
+    "globals": "^16.5.0",
+    "jest": "^30.3.0"
+  }
+}
