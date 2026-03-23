@@ -400,14 +400,12 @@ export function getListOfPossibleTargets(board, boardstate, selectedPieceId) {
               howManyNeighbors = howManyNeighbors + 1;
             }
           }
-          // if (howManyNeighbors == 0 || board.allPieces[selectedPieceId].type !== 'bishop'){
-          if (howManyNeighbors == 0 || !['bishop', 'mage'].includes(board.allPieces[selectedPieceId].type)){
+          if (howManyNeighbors == 0 || board.allPieces[selectedPieceId].type !== 'bishop'){
             toBeReturned.push(p);
           }
         }
 
-        //if(board.allPieces[selectedPieceId].type !== 'bishop'){
-        if(!['bishop', 'mage'].includes(board.allPieces[selectedPieceId].type)){
+        if(board.allPieces[selectedPieceId].type !== 'bishop'){
           let mage0 = board.allPieces[selectedPieceId].side + '_mage_0';
           let mage1 = board.allPieces[selectedPieceId].side + '_mage_1';
           let mage2 = board.allPieces[selectedPieceId].side + '_mage_2';

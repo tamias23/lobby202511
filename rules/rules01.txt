@@ -1,0 +1,287 @@
+# Game Rules (Rust Implementation) — rules01.txt
+
+Comprehensive rules derived exclusively from the Rust codebase
+(engine.rs, models.rs, rules_tests.rs).
+
+## Game Objective
+
+Capture the opponent's **Goddess**. The function `perform_random_turn` returns
+`true` when a Goddess is captured, signalling a game-ending event.
+
+## Players & Sides
+
+Two players: **White** and **Black**. White always takes the first turn.
+
+## The Board
+
+The board is a tessellation of coloured polygons. Each polygon has:
+- A **colour** (e.g. grey, yellow, blue, orange).
+- Two distinct adjacency lists:
+  - **slide neighbours** (`neighbors`): used for Soldier/Ghoul chain movement,
+    Bishop/Mage AoE blasts, Siren pin checks, and deployment adjacency.
+  - **jump neighbours** (`neighbours`): used for leap-based movement ranges
+    (Goddess, Heroe, Mage, Bishop, Siren) and setup distance calculations.
+
+## Pieces & Quantities (per player)
+
+| Piece      | Count |
+|------------|:-----:|
+| Goddess    |   1   |
+| Heroe      |   2   |
+| Bishop     |   4   |
+| Mage       |   1   |
+| Soldier    |   9   |
+| Ghoul      |   9   |
+| Siren      |   9   |
+| Berserker  |   2   |
+| **Total**  | **37**|
+
+## Piece Statuses
+
+A piece is in exactly one of three states:
+- **On the board** — positioned on a polygon.
+- **Returned** — off the board, eligible for re-deployment.
+- **Graveyard** — permanently dead (no legal moves).
+  Note: in the current Rust implementation, captured pieces are set to
+  `"returned"`, so they can always be re-deployed.
+
+---
+
+## 1. Setup Phase (`setup_random_board`)
+
+The board starts empty. Pieces are placed procedurally for each side:
+
+1. **Goddess & Heroes (Edge Anchoring)**
+   - White uses **top-edge** polygons; Black uses **bottom-edge** polygons.
+   - An edge polygon is one where `polygon.points.len() > neighbour_count`
+     and the centre is within board margins.
+   - The Goddess is placed on a random edge polygon.
+   - Each Heroe is placed on a different edge polygon such that:
+     - The two Heroes are **more than 6 jump-hops apart** from each other.
+     - Each Heroe is **between 4 and 6 jump-hops** from the Goddess
+       (not within 3, but within 6).
+
+2. **Berserkers (Protector Placement)**
+   - Placed within **1 jump-hop** of the Goddess (expanded to 2 if needed).
+
+3. **Bishops (Chromatic Spread)**
+   - Placed so each Bishop sits on a polygon of a **different colour**.
+   - Candidate polygons are drawn from sets 1–4 hops away from anchors.
+
+4. **Ghouls & Sirens (Infantry)**
+   - Filled into remaining unoccupied polygons within 1–4 hops of anchors.
+
+5. **Mage & Soldiers (Reserve)**
+   - Remain in the **"returned"** state (off-board) at game start.
+
+---
+
+## 2. The Turn Sequence (`perform_random_turn`)
+
+### 2.1 Colour Choice Phase
+
+At the start of a turn (`is_new_turn == true`):
+
+1. The active player evaluates every polygon colour on the board.
+2. A colour is **valid** only if choosing it would grant at least one legal
+   move for at least one friendly piece (including deployments of "returned"
+   pieces).
+3. One valid colour is chosen. If **no** colour yields any legal move, the
+   turn is skipped entirely and play passes to the opponent.
+
+### 2.2 Piece Activation
+
+After choosing a colour, a piece is **eligible to act** if:
+- It is in the **"returned"** state, **OR**
+- It is on a polygon whose colour matches the **chosen colour**, **OR**
+- It is the **sequence-locked piece** (see §2.3).
+
+### 2.3 Sequence Locking & Turn-End Rules (`apply_move_turnover`)
+
+After every move, the engine checks the colour of the **destination polygon**
+against the **chosen colour**:
+
+#### A. Piece lands on the CHOSEN COLOUR
+
+| Piece type             | Condition                      | Result                                 |
+|------------------------|--------------------------------|----------------------------------------|
+| Deployed from reserve  | (any type)                     | **Turn ends immediately.**             |
+| Heroe                  | captured something, counter==0 | Heroe gets **one extra move** (locked). |
+| Soldier / Berserker    | (always)                       | Piece is **sequence-locked**; only it may move next. It may also choose "PASS_TURN" to voluntarily end. |
+| Any other piece        | (always)                       | **Turn ends immediately.**             |
+
+#### B. Piece lands on a DIFFERENT colour
+
+| Piece type             | Condition                      | Result                                 |
+|------------------------|--------------------------------|----------------------------------------|
+| Heroe                  | captured something, counter==0, not from reserve | Heroe gets **one extra move** (locked). |
+| Any piece              | (otherwise)                    | Sequence lock is **cleared**. The turn does **NOT** end — the player may pick another eligible piece from the chosen colour. |
+
+**Key rule:** landing on a non-chosen colour never ends the turn (unless the
+player has no remaining legal moves).
+
+### 2.4 Turn Transition
+
+When a turn ends:
+- `turn_counter` increments.
+- Active side switches to opponent.
+- Chosen-colour selections are cleared.
+- `locked_sequence_piece` is reset.
+- `heroe_take_counter` is reset to 0.
+
+---
+
+## 3. Movement Rules (`get_legal_moves`)
+
+Movement range is computed via **breadth-first flood-fill** on the jump
+adjacency graph, stopping at `max_dist` hops.
+
+### 3.0 Global Constraints
+
+- A piece can **never** move onto a polygon occupied by a **friendly** piece.
+- A piece can **never** move onto or capture a **Berserker** (any side).
+- **Siren** and **Bishop** can **never capture**; they may only move to
+  **empty** polygons.
+- If a piece is **sequence-locked** to another piece, it has **zero legal
+  moves** (only the locked piece may act).
+
+### 3.1 Siren Pin
+
+Before computing any moves, the engine checks slide-neighbours of the piece's
+current polygon. If any slide-neighbour is occupied by an **enemy Siren**, the
+piece is **pinned** and has **no legal moves** at all.
+
+### 3.2 Goddess
+
+- **Range:** 2 jump-hops.
+- **Constraint:** standard (no landing on friendlies or Berserkers).
+
+### 3.3 Heroe
+
+- **Range:** 3 jump-hops.
+- **Take limit:** if `heroe_take_counter >= 2`, the Heroe has **zero** legal
+  moves (it has already used its bonus move).
+
+### 3.4 Mage
+
+- **Range:** 3 jump-hops.
+- **Colour constraint:** can only land on polygons of a **different colour**
+  than the polygon it starts on.
+
+### 3.5 Bishop
+
+- **Range:** 4 jump-hops.
+- **Colour constraint:** can only land on polygons of the **same colour** as
+  the polygon it starts on.
+- **Cannot capture** (filtered out — empty polygons only).
+
+### 3.6 Siren
+
+- **Range:** 2 jump-hops.
+- **Cannot capture** (filtered out — empty polygons only).
+- **Passive pin aura:** any enemy piece slide-adjacent to a Siren is pinned
+  (see §3.1).
+
+### 3.7 Soldier & Berserker
+
+Movement is computed via **chain traversal** on the **slide** adjacency graph:
+
+1. Starting from the piece's polygon, explore slide-neighbours.
+2. A neighbour can be **traversed through** (added to the chain) if:
+   - It is occupied by a **friendly piece**, **OR**
+   - It is **empty**, its colour matches the **chosen colour**, and it is
+     **not slide-adjacent to an enemy Siren** (Siren pin on intermediate
+     empty polygons).
+3. From every polygon in the chain (including the origin), all
+   slide-neighbours become candidate destination targets.
+4. Standard filters apply (no friendlies, no Berserkers on the target).
+
+This "phalanx" mechanic allows Soldiers and Berserkers to traverse vast
+distances via friendly-piece chains and chosen-colour highways.
+
+### 3.8 Ghoul
+
+Movement uses a **depth-limited chain** on the **slide** adjacency graph:
+
+1. From the current polygon, all slide-neighbours are valid targets (depth 0).
+2. If `depth < 2`, the Ghoul can **chain through** a slide-neighbour if:
+   - The polygon is **empty**, **AND**
+   - Its colour is **not** the chosen colour, **AND**
+   - It is **not slide-adjacent to an enemy Siren**.
+3. From every chained polygon, slide-neighbours are again added as targets.
+4. Maximum chain depth is **2** (so the Ghoul can reach up to 3 slide-hops
+   away via chaining).
+
+---
+
+## 4. Capture & Area-of-Effect Abilities (`apply_move`)
+
+### 4.1 Standard Capture
+
+When a piece moves to an occupied polygon, the defender is set to
+**"returned"** (eligible for re-deployment). The attacker occupies the polygon.
+
+### 4.2 Bishop AoE (Landing Blast)
+
+After a Bishop moves (**whether or not it captured** — though Bishops cannot
+capture, so this always fires on empty landings):
+- All enemy pieces on **slide-adjacent** polygons are destroyed (set to
+  "returned").
+- **Berserkers are immune** to this blast.
+
+### 4.3 Mage AoE (Chain Attack)
+
+After a Mage moves, **only if** the Mage captured a piece on the target
+polygon:
+- All enemy pieces on **slide-adjacent** polygons of the landing site are
+  destroyed (set to "returned").
+- **Berserkers are immune** to this blast.
+
+If the Mage lands on an empty polygon, no AoE triggers.
+
+---
+
+## 5. Deployment / Re-entering the Board
+
+A piece in the **"returned"** state can be placed back on the board. Legal
+deployment targets are empty polygons satisfying **at least one** of:
+
+1. **Chosen-colour match:** the polygon's colour matches the active player's
+   chosen colour for this turn.
+2. **Mage adjacency:** the polygon is **slide-adjacent** to a friendly Mage
+   that is currently on the board.
+
+### 5.1 Bishop Deployment Restriction
+
+If the piece being deployed is a **Bishop**, an additional constraint applies:
+the target polygon must **not** be slide-adjacent to any **enemy** piece. This
+prevents fragile support pieces from deploying into contested zones. The
+**Mage** does *not* have this restriction and may be deployed adjacent to
+enemy pieces.
+
+### 5.2 Deployment & Turn-End
+
+Deploying a piece onto the chosen colour **immediately ends the turn** (see
+§2.3-A). Deploying onto a non-chosen colour does not end the turn.
+
+---
+
+## 6. Berserker Invulnerability
+
+The Berserker is a special defensive piece:
+- **Cannot be targeted:** no piece may move onto or capture a Berserker.
+- **Immune to AoE:** Bishop blasts and Mage chain attacks skip Berserkers.
+- **Can be traversed by friendlies:** friendly Soldiers/Berserkers can chain
+  through a friendly Berserker just like any other friendly piece.
+- **Blocks enemy chaining:** enemy Soldiers/Berserkers cannot chain through
+  a Berserker (same as any enemy piece — only friendly pieces are traversable).
+- **Moves like a Soldier:** same chain/phalanx movement mechanics.
+
+---
+
+## 7. Summary of Topology Usage
+
+| Topology       | Used by                                                     |
+|----------------|-------------------------------------------------------------|
+| Jump (`neighbours`) | Goddess range, Heroe range, Mage range, Bishop range, Siren range, setup distance calculations |
+| Slide (`neighbors`) | Soldier/Berserker chain movement, Ghoul chain movement, Bishop AoE blast, Mage AoE blast, Siren pin check, deployment adjacency (Mage proximity), Bishop deploy safety check |

@@ -1,5 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use crate::models::{BoardMap, PieceType, Side};
+use crate::agents::{Agent, AgentMove};
+
 
 #[derive(Debug, Clone)]
 pub struct GameState {
@@ -141,7 +143,7 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
                 }
                 
                 if valid {
-                    if piece.piece_type == PieceType::Bishop || piece.piece_type == PieceType::Mage {
+                    if piece.piece_type == PieceType::Bishop {
                         let mut enemy_adj = false;
                         for n in state.get_slide_neighbors(poly_id) {
                             if let Some(s) = state.get_occupant_side(&n) {
@@ -213,7 +215,7 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
             while let Some(current) = explore.pop() {
                 for n in state.get_slide_neighbors(&current) {
                     if state.is_occupied(&n) {
-                        if state.get_occupant_side(&n) == Some(piece.side) && state.get_occupant_type(&n) != Some(PieceType::Berserker) {
+                        if state.get_occupant_side(&n) == Some(piece.side) {
                             if friendly_hops.insert(n.clone()) { explore.push(n.clone()); }
                         }
                     } else if Some(state.board.polygons[&n].color.clone()) == chosen_color {
@@ -577,11 +579,16 @@ pub fn setup_random_board(state: &mut GameState) {
 
 /// Executes a completely random physically legal turn. Returns `true` if a Goddess was taken.
 pub fn perform_random_turn(state: &mut GameState) -> bool {
-    let mut rng = rand::rng();
-    
+    use crate::agents::random::RandomAgent;
+    perform_turn(state, &RandomAgent).0
+}
+
+/// Executes one half-step of a turn using the provided agent.
+/// Returns `(goddess_captured, Option<(piece_id, target_pos)>)`.
+pub fn perform_turn(state: &mut GameState, agent: &dyn Agent) -> (bool, Option<(String, String)>) {
     if state.is_new_turn {
         state.moves_this_turn = 0;
-        
+
         let current_turn = state.turn;
 
         let mut color_set = HashSet::new();
@@ -590,8 +597,7 @@ pub fn perform_random_turn(state: &mut GameState) -> bool {
         }
         let colors: Vec<String> = color_set.into_iter().collect();
         let mut valid_colors = Vec::new();
-        
-        // Evaluate which colors strictly permit actual legal plays
+
         for c in colors {
             state.color_chosen.insert(current_turn, c.clone());
             let mut has_move = false;
@@ -600,7 +606,9 @@ pub fn perform_random_turn(state: &mut GameState) -> bool {
                     let mut can_start = false;
                     if p.position == "returned" {
                         can_start = true;
-                    } else if p.position != "graveyard" && state.board.polygons.get(&p.position).map(|x| &x.color) == Some(&c) {
+                    } else if p.position != "graveyard"
+                        && state.board.polygons.get(&p.position).map(|x| &x.color) == Some(&c)
+                    {
                         can_start = true;
                     }
                     if can_start && !get_legal_moves(state, &p.id).is_empty() {
@@ -613,33 +621,30 @@ pub fn perform_random_turn(state: &mut GameState) -> bool {
                 valid_colors.push(c);
             }
         }
-        
+
         if valid_colors.is_empty() {
-            // Unplayable turn; skip sequentially to force the simulation forward organically
             state.turn_counter += 1;
             state.turn = state.get_enemy_side();
             state.color_chosen.clear();
             state.is_new_turn = true;
             state.locked_sequence_piece = None;
             state.heroe_take_counter = 0;
-            return false;
+            return (false, None);
         }
-        
-        let chosen = valid_colors.into_iter().choose(&mut rng).unwrap();
-        state.color_chosen.insert(current_turn, chosen.clone());
+
+        let chosen = agent.choose_color(state, &valid_colors).clone();
+        state.color_chosen.insert(current_turn, chosen);
         state.is_new_turn = false;
-        
-        // Force the engine to explicitly broadcast the UI palette update immediately before
-        // computing the actual physical layout movement tick on the next synchronous frame!
-        return false;
+
+        // Broadcast colour-pick to UI before executing any moves this frame.
+        return (false, None);
     }
 
     let current_turn = state.turn;
     let chosen_color = state.color_chosen.get(&current_turn).unwrap().clone();
-    
-    let mut all_moves = Vec::new();
-    
-    // Harvest contiguous legal evaluations matching dynamic color properties
+
+    let mut all_moves: HashMap<String, Vec<String>> = HashMap::new();
+
     for p in state.board.pieces.values() {
         if p.side == current_turn && p.position != "graveyard" {
             let mut can_start = false;
@@ -648,60 +653,54 @@ pub fn perform_random_turn(state: &mut GameState) -> bool {
             } else if state.board.polygons.get(&p.position).map(|x| &x.color) == Some(&chosen_color) {
                 can_start = true;
             } else if let Some(locked_id) = &state.locked_sequence_piece {
-                // A locked Heroe (after capture on non-chosen color) can continue from any polygon
                 if locked_id == &p.id {
                     can_start = true;
                 }
             }
             if can_start {
-                for target in get_legal_moves(state, &p.id) {
-                    all_moves.push((p.id.clone(), target));
+                let targets = get_legal_moves(state, &p.id);
+                if !targets.is_empty() {
+                    all_moves.entry(p.id.clone()).or_default().extend(targets);
                 }
             }
         }
     }
-    
+
     if all_moves.is_empty() {
-        // AI optimally depleted all combinatoric pathways. Forcing break sequence!
         state.turn_counter += 1;
         state.turn = state.get_enemy_side();
         state.color_chosen.clear();
         state.is_new_turn = true;
         state.locked_sequence_piece = None;
         state.heroe_take_counter = 0;
-        return false;
-    }
-    
-    if let Some(locked_id) = &state.locked_sequence_piece {
-        all_moves.push((locked_id.clone(), "PASS_TURN".to_string()));
+        return (false, None);
     }
 
-    // Group moves by piece to prevent combinatorial explosion skew from 'returned' deployments!
-    let mut moves_by_piece: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
-    for (p, t) in all_moves {
-        moves_by_piece.entry(p).or_default().push(t);
+    let pass_allowed = state.locked_sequence_piece.is_some();
+
+    match agent.choose_move(state, &all_moves, pass_allowed) {
+        AgentMove::Pass => {
+            state.turn_counter += 1;
+            state.turn = state.get_enemy_side();
+            state.color_chosen.clear();
+            state.is_new_turn = true;
+            state.locked_sequence_piece = None;
+            state.heroe_take_counter = 0;
+            (false, None)
+        }
+        AgentMove::Move { piece: chosen_piece, target: chosen_target } => {
+            let was_returned = state.board.pieces[&chosen_piece].position == "returned";
+            let captured = apply_move(state, &chosen_piece, &chosen_target);
+            state.moves_this_turn += 1;
+            let goddess_captured = captured.contains(&PieceType::Goddess);
+            let result = apply_move_turnover(state, &chosen_piece, &chosen_target, goddess_captured, captured.is_empty(), was_returned);
+            (result, Some((chosen_piece, chosen_target)))
+        }
     }
-    
-    let chosen_piece = moves_by_piece.keys().choose(&mut rng).unwrap().clone();
-    let chosen_target = moves_by_piece[&chosen_piece].iter().choose(&mut rng).unwrap().clone();
-    
-    if chosen_target == "PASS_TURN" {
-        state.turn_counter += 1;
-        state.turn = state.get_enemy_side();
-        state.color_chosen.clear();
-        state.is_new_turn = true;
-        state.locked_sequence_piece = None;
-        state.heroe_take_counter = 0;
-        return false;
-    }
-    
-    let was_returned = state.board.pieces[&chosen_piece].position == "returned";
-    let captured = apply_move(state, &chosen_piece, &chosen_target);
-    state.moves_this_turn += 1;
-    let goddess_captured = captured.contains(&PieceType::Goddess);
-    
-    apply_move_turnover(state, &chosen_piece, &chosen_target, goddess_captured, captured.is_empty(), was_returned)
 }
+
+
+
 
 /// Abstracted Turnover Application explicitly processing sequence breaking & logic formally after an active application.
 pub fn apply_move_turnover(state: &mut GameState, chosen_piece: &str, chosen_target: &str, goddess_captured: bool, captured_is_empty: bool, was_returned: bool) -> bool {

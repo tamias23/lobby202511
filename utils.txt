@@ -1,0 +1,12 @@
+2 random players : 
+=== Batch Results (1000 games, White=random, Black=random) ===
+  White wins : 501 (50.1%)
+  Black wins : 499 (49.9%)
+  Draws      : 0 (0.0%)
+  Avg turns  : 152.3
+
+=================================================================================
+
+cargo run -- /home/mat/Bureau/lobby202511/games/data/nt502220148101996_f1b4eb34cc3ccb285ee5fe158bf4284d_board.json --batch 2 --store-parquet /home/mat/Bureau/lobby202511/parquet
+./replay_games.sh parquet/batch_1774258483802.parquet
+

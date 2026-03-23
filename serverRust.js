@@ -21,8 +21,8 @@ const randomFile = files[Math.floor(Math.random() * files.length)];
 const boardPath = path.join(dataDir, randomFile);
 
 // Configure delay via CLI argument or default to 1300ms
-const delay = process.argv[2] || "4000";
-const maxTurns = process.argv[3] || "200";
+const delay = process.argv[2] || "30";
+const maxTurns = process.argv[3] || "600";
 
 console.log('==============================================');
 console.log('🚀 Launching Native Rust Backend Simulator...');
@@ -31,7 +31,7 @@ console.log(`⏱️  Tick Delay: ${delay}ms`);
 console.log(`♾️  Max Turns: ${maxTurns}`);
 console.log('==============================================');
 
-const rustProcess = spawn('cargo', ['run', '--', boardPath, delay, maxTurns], {
+const rustProcess = spawn('cargo', ['run', '--bin', 'rust', '--', boardPath, '--delay', delay, '--max-turns', maxTurns], {
     cwd: path.join(__dirname, 'rust'),
     stdio: 'inherit'
 });
