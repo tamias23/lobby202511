@@ -163,6 +163,10 @@ async fn get_turn(
         gs.moves_this_turn += 1;
         moves_run = gs.moves_this_turn;
 
+        if m.piece_id.is_empty() {
+            continue;
+        }
+
         let piece_opt = gs.board.pieces.get(&m.piece_id);
         if piece_opt.is_none() {
             println!("CRITICAL DEBUG: MISSING PIECE IN gs.board.pieces -> '{}'", m.piece_id);

@@ -334,6 +334,21 @@ function renderBoard(board) {
             pLayer.appendChild(g);
         }
 
+        let oldPos = g.dataset.lastPosition;
+        let newPos = piece.position;
+        
+        if ((newPos === "returned" || newPos === "graveyard") && 
+            oldPos !== "returned" && 
+            oldPos !== "graveyard" &&
+            oldPos !== undefined &&
+            oldPos !== newPos) {
+            g.style.transition = "transform 0.4s ease-in-out 0.4s, opacity 0.3s ease 0.4s";
+        } else {
+            g.style.transition = "transform 0.4s ease-in-out, opacity 0.3s ease";
+        }
+
+        g.dataset.lastPosition = newPos;
+
         scale = parseFloat(g.dataset.scale || "1.0");
         ox = parseFloat(g.dataset.ox || "0");
         oy = parseFloat(g.dataset.oy || "0");

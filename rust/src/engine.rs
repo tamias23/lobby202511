@@ -638,11 +638,11 @@ pub fn perform_turn(state: &mut GameState, agent: &dyn Agent) -> (bool, Option<(
         }
 
         let chosen = agent.choose_color(state, &valid_colors).clone();
-        state.color_chosen.insert(current_turn, chosen);
+        state.color_chosen.insert(current_turn, chosen.clone());
         state.is_new_turn = false;
 
-        // Broadcast colour-pick to UI before executing any moves this frame.
-        return (false, None);
+        // Broadcast colour-pick to UI and Parquet as an independent turn event.
+        return (false, Some(("".to_string(), "".to_string(), chosen.clone())));
     }
 
     let current_turn = state.turn;
