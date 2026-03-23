@@ -23,3 +23,9 @@ The root directory contains bash scripts to quickly orchestrate Rust simulations
 
 - **`replay_games.sh`**: A helper script to replay a saved game sequence from a Parquet file. It navigates to the Rust directory and executes the `replay` binary to parse and process the specific match records.
   - *Usage*: `./replay_games.sh <path_to_parquet_file>`
+
+## Python Scripts
+
+- **`genetic_bob.py`**: A program for evaluating and evolving custom AI agents (`greedy_bob`) through a genetic algorithm, pairing them randomly in parallel matches. It iteratively culls underperformers and generates new generations to discover optimal agent parameters.
+- **`genetic_swiss_bob.py`**: An advanced version of the genetic algorithm that pairs agents using a Swiss tournament system with Buchholz tie-breaks, providing a more robust measure of agent performance during the evolutionary process.
+- **`letsTakeALook.py`**: A helper data science script that reads generated Parquet match logs using Polars and exports data samples into an Excel spreadsheet with Pandas for manual review.
