@@ -30,6 +30,14 @@ def generate_random_weights():
     # 26 parameters initialized dynamically with random bounds 
     return [round(random.uniform(-20.0, 20.0), 3) for _ in range(26)]
 
+def derive_agent_weights(base_weights):
+    new_weights = list(base_weights)
+    num_mutations = random.randint(2, 5)
+    indices_to_mutate = random.sample(range(26), num_mutations)
+    for idx in indices_to_mutate:
+        new_weights[idx] = round(random.uniform(-20.0, 20.0), 3)
+    return new_weights
+
 def weights_to_str(weights):
     return ",".join(map(str, weights))
 
@@ -160,10 +168,19 @@ async def main():
         survivors = population[:cutoff]
         removed = population[cutoff:]
         
+        # Determine amount of derived agents (half of replaced agents, rounded up)
+        num_derived = (len(removed) + 1) // 2
+        top_performers = survivors[:5]
+        
         # Generate random array iterations sequentially mapping dead identifiers exactly per the user's constraints
         new_agents = []
-        for dead_agent in removed:
-            new_agents.append(Agent(dead_agent.id, generation_num=generation + 1))
+        for i, dead_agent in enumerate(removed):
+            if i < num_derived and top_performers:
+                base_agent = random.choice(top_performers)
+                derived_weights = derive_agent_weights(base_agent.weights)
+                new_agents.append(Agent(dead_agent.id, weights=derived_weights, generation_num=generation + 1))
+            else:
+                new_agents.append(Agent(dead_agent.id, generation_num=generation + 1))
             
         population = survivors + new_agents
         generation += 1
