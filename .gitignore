@@ -3,3 +3,4 @@ games/data/*
 games/data/rust
 rust/target/
 ./javascript/node_modules
+./node_modules
