@@ -25,6 +25,16 @@ cd ./rust ; cargo run --bin rust -- /home/mat/Bureau/lobby202511/games/data/nt50
 /home/mat/Bureau/spyder-env/bin/python3 genetic_bob.py --duration 900 --rounds 10 --agents 40 --parallel 10
 /home/mat/Bureau/spyder-env/bin/python3 genetic_bob.py --duration 3600 --rounds 10 --agents 36 --parallel 12
 /home/mat/Bureau/spyder-env/bin/python3 genetic_swiss_bob.py --duration 3600 --rounds 13 --agents 48 --parallel 12
+/home/mat/Bureau/spyder-env/bin/python3 genetic_swiss_bob.py --duration 32400 --rounds 9 --agents 96 --parallel 12
+
+/home/mat/Bureau/spyder-env/bin/python3 swiss_tournament.py --agents my_greedy_bob_agents.txt \
+--rounds 100 \
+--parallel 12 \
+--parquet /home/mat/Bureau/lobby202511/parquet/swiss01.parquet \
+--crosstable /home/mat/Bureau/lobby202511/crosstable_swiss01.csv 
+
+=================================================================================
+
 
 =================================================================================
 
@@ -50,26 +60,7 @@ The weight vector is a parameter of greedy_bob. This will enable us to do grid s
 
 =================================================================================
 
-I would like to find the best greedy_bob possible. For that, I would like you to
-randomly generate 100 weights arrays. this gives you 100 agents with ids 1..100
-repeat for one hour : {
-  organize 20 rounds, keep track of score : {
-    randomly sort those 100 agents
-    make 1 play againts 2, 3 against 4, 5 against 6, ..., 99 against 100 (make this step parralel, 5 matches at the same time. Wait for all to complete)
-  }
-  after 20 rounds, remove the 50 agents that performed badly
-  randomly generate 50 weights arrays (50 new agents). this gives you a total of 100 agents
-  for those new agents, give them the id of an agent that was removed
-}
-write this in Python. Create parameters for the duration (1), 20, 100
-
-/home/mat/Bureau/spyder-env/bin/python3 genetic_bob.py --duration 600 --rounds 20 --agents 100 --parallel 10
-/home/mat/Bureau/spyder-env/bin/python3 genetic_bob.py --duration 900 --rounds 10 --agents 40 --parallel 10
-
-
-
 =================================================================================
-
 
 Injecting the Initial Board State into Parquet recordings
 recorder.rs
@@ -79,3 +70,4 @@ main.rs
 Examining recorder.rs to determine how to serialize the random initial board state (setup_random_board) into the Parquet output so the Replay viewer can deterministically reproduce the first frame
 Adding initial_state column to the Parquet schema in recorder.rs and main.rs to snapshot the piece positions deterministically
 Modifying rust/src/main.rs to extract the PieceID -> PolygonID map from Turn 0 immediately after setup_random_board completes
+
