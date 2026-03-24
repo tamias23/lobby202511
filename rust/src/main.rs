@@ -217,7 +217,8 @@ fn run_batch(
     if let Some(dir) = parquet_dir {
         println!("Writing session games to parquet in {}...", dir);
         if let Some(rec) = recorder {
-            let p = std::path::Path::new(&dir).join(format!("batch_{}.parquet", current_timestamp_ms()));
+            let file_id = Uuid::new_v4().to_string();
+            let p = std::path::Path::new(&dir).join(format!("batch_{}_{}.parquet", current_timestamp_ms(), file_id));
             if let Err(e) = rec.write_parquet(p.to_str().unwrap()) {
                 eprintln!("Failed to write parquet: {}", e);
             } else {

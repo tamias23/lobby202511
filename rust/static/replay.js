@@ -3,6 +3,7 @@ let currentTurn = 0;
 let totalTurns = 0;
 let gameId = null;
 let gamesList = [];
+let currentRequestId = 0;
 
 async function initReplay() {
     try {
@@ -25,9 +26,10 @@ async function initReplay() {
                     gameId = selected.game_id;
                     totalTurns = JSON.parse(selected.moves || "[]").length;
                     
-                    // Clear svg layer state immediately to cleanly switch to new games mapping new paths
                     let piecesLayer = document.getElementById("pieces-layer");
-                    if (piecesLayer) piecesLayer.innerHTML = "";
+                    if (piecesLayer) piecesLayer.remove();
+                    let boardLayer = document.getElementById("board-layer");
+                    if (boardLayer) boardLayer.remove();
                     
                     fetchTurn(0);
                 }
@@ -38,6 +40,7 @@ async function initReplay() {
             await fetchTurn(0);
             
             window.addEventListener('keydown', (e) => {
+                if (e.target && e.target.tagName === 'SELECT') return;
                 if (e.key === 'ArrowRight') fetchTurn(currentTurn + 1);
                 if (e.key === 'ArrowLeft') fetchTurn(currentTurn - 1);
             });
@@ -57,9 +60,13 @@ async function fetchTurn(turn) {
     
     drawHUD();
     
+    const reqId = ++currentRequestId;
     const res = await fetch(`/api/games/${gameId}/turn/${turn}`);
     if (!res.ok) return;
     const boardState = await res.json();
+    
+    if (currentRequestId !== reqId) return; // Drop stale responses
+    
     renderBoard(boardState);
 }
 
@@ -90,14 +97,14 @@ function renderBoard(board) {
     // Initialize SVG canvas on first payload
     if (!svgCanvas) {
         svgCanvas = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        
-        let width = board.width || 600;
-        let height = board.height || 600;
-        
-        // Force the physical viewBox bounds
-        svgCanvas.setAttribute("viewBox", `0 0 ${width} ${height}`);
         container.appendChild(svgCanvas);
     }
+    
+    let width = board.width || 600;
+    let height = board.height || 600;
+    
+    // Force the physical viewBox bounds (update it in case the board dimensions changed)
+    svgCanvas.setAttribute("viewBox", `0 0 ${width} ${height}`);
     
     // Render Color Picker UI Dashboard
     let ui = document.getElementById("color-picker-ui");

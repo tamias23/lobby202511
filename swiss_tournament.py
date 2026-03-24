@@ -7,6 +7,9 @@ import sys
 import sys
 import time
 from pathlib import Path
+import os
+import shutil
+import tempfile
 
 try:
     import pandas as pd
@@ -44,7 +47,7 @@ class Agent:
         self.results = [] # list of int (3, 1, 0)
         self.had_bye = False
 
-async def run_match(sem, agent1, agent2, board_path):
+async def run_match(sem, agent1, agent2, board_path, temp_dir):
     async with sem:
         # Determine who plays white randomly
         white, black = (agent1, agent2) if random.random() > 0.5 else (agent2, agent1)
@@ -59,7 +62,8 @@ async def run_match(sem, agent1, agent2, board_path):
             "--white", "greedy_bob",
             "--black", "greedy_bob",
             "--greedy-weights-white", weights_to_str(white.weights),
-            "--greedy-weights-black", weights_to_str(black.weights)
+            "--greedy-weights-black", weights_to_str(black.weights),
+            "--store-parquet", temp_dir
         ])
         
         proc = await asyncio.create_subprocess_exec(
@@ -124,7 +128,7 @@ def load_agents(filepath):
                 
     return agents
 
-async def run_round(r, agents, sem, board_path):
+async def run_round(r, agents, sem, board_path, temp_dir):
     print(f"\n--- Round {r+1}/{args.rounds} ---")
     
     # Update Buchholz before pairing
@@ -180,7 +184,7 @@ async def run_round(r, agents, sem, board_path):
 
     tasks = []
     for p1, p2 in pairings:
-        tasks.append(run_match(sem, p1, p2, board_path))
+        tasks.append(run_match(sem, p1, p2, board_path, temp_dir))
         
     results = await asyncio.gather(*tasks)
     
@@ -232,6 +236,9 @@ async def main():
             sys.exit(1)
             
     sem = asyncio.Semaphore(args.parallel)
+    temp_dir = tempfile.mkdtemp(prefix="swiss_games_")
+    print(f"Using temporary directory for parquet games: {temp_dir}")
+    
     all_games = []
     start_time = time.time()
     
@@ -241,7 +248,7 @@ async def main():
             current_board = random.choice(board_files)
             print(f"Selected random board for round {r+1}: {current_board}")
             
-        games = await run_round(r, agents, sem, current_board)
+        games = await run_round(r, agents, sem, current_board, temp_dir)
         all_games.extend(games)
         elapsed = time.time() - start_time
         print(f"Completed round {r+1}. Time elapsed: {elapsed:.1f}s")
@@ -304,25 +311,36 @@ async def main():
     
     # Save Games
     if PANDAS_AVAILABLE:
+        summary_csv = args.parquet.replace('.parquet', '_summary.csv')
         games_df = pd.DataFrame(all_games)
-        try:
-            games_df.to_parquet(args.parquet, index=False)
-            print(f"✅ Saved game records to {args.parquet}")
-        except ImportError:
-            print("WARNING: pyarrow or fastparquet is not installed. Saving games as CSV instead.")
-            fallback = args.parquet.replace('.parquet', '.csv')
-            games_df.to_csv(fallback, index=False)
-            print(f"✅ Saved game records to {fallback}")
+        games_df.to_csv(summary_csv, index=False)
+        print(f"✅ Saved game match summaries to {summary_csv}")
+        
+        parquet_files = glob.glob(os.path.join(temp_dir, "*.parquet"))
+        if parquet_files:
+            print(f"Merging {len(parquet_files)} game records into {args.parquet}...")
+            dfs = [pd.read_parquet(f) for f in parquet_files]
+            merged_df = pd.concat(dfs, ignore_index=True)
+            merged_df.to_parquet(args.parquet, index=False)
+            print(f"✅ Saved full game replays to {args.parquet}")
+        else:
+            print("WARNING: No parquet files found in temp_dir. Rust engine might have failed to record games.")
+            
     else:
         print("WARNING: pandas is not installed. Saving games as CSV instead of Parquet.")
         import csv
-        fallback = args.parquet.replace('.parquet', '.csv')
-        with open(fallback, 'w', newline='') as f:
+        summary_csv = args.parquet.replace('.parquet', '_summary.csv')
+        with open(summary_csv, 'w', newline='') as f:
             if all_games:
                 writer = csv.DictWriter(f, fieldnames=all_games[0].keys())
                 writer.writeheader()
                 writer.writerows(all_games)
-        print(f"✅ Saved game records to {fallback}")
+        print(f"✅ Saved game match summaries to {summary_csv}")
+        
+    try:
+        shutil.rmtree(temp_dir)
+    except Exception as e:
+        print(f"Failed to cleanup temp dir: {e}")
 
 if __name__ == "__main__":
     asyncio.run(main())
