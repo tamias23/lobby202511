@@ -22,6 +22,8 @@ pub struct GameRecord {
     pub board_id: String,
     pub timestamp: i64,
     pub game_date: String,
+    pub white_name: String,
+    pub black_name: String,
     pub winner: String,
     pub total_turns: u32,
     pub initial_state: String, // JSON serialized HashMap<String, String> (Piece ID -> Polygon ID)
@@ -50,6 +52,8 @@ impl Recorder {
         let mut board_ids = Vec::with_capacity(self.records.len());
         let mut timestamps = Vec::with_capacity(self.records.len());
         let mut game_dates = Vec::with_capacity(self.records.len());
+        let mut white_names = Vec::with_capacity(self.records.len());
+        let mut black_names = Vec::with_capacity(self.records.len());
         let mut winners = Vec::with_capacity(self.records.len());
         let mut total_turns = Vec::with_capacity(self.records.len());
         let mut initial_states = Vec::with_capacity(self.records.len());
@@ -60,6 +64,8 @@ impl Recorder {
             board_ids.push(r.board_id.as_str());
             timestamps.push(r.timestamp);
             game_dates.push(r.game_date.as_str());
+            white_names.push(r.white_name.as_str());
+            black_names.push(r.black_name.as_str());
             winners.push(r.winner.as_str());
             total_turns.push(r.total_turns);
             initial_states.push(r.initial_state.as_str());
@@ -71,6 +77,8 @@ impl Recorder {
             "board_id" => &board_ids,
             "timestamp" => &timestamps,
             "game_date" => &game_dates,
+            "white_name" => &white_names,
+            "black_name" => &black_names,
             "winner" => &winners,
             "total_turns" => &total_turns,
             "initial_state" => &initial_states,

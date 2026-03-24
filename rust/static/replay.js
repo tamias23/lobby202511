@@ -16,7 +16,7 @@ async function initReplay() {
             gamesList.forEach((g, i) => {
                 const opt = document.createElement("option");
                 opt.value = g.game_id;
-                opt.textContent = `Game ${i+1} (${g.winner}) - ${g.total_turns} turns`;
+                opt.textContent = `Game ${i+1}: ${g.white_name || 'White'} vs ${g.black_name || 'Black'} (${g.winner}) - ${g.total_turns} turns`;
                 selector.appendChild(opt);
             });
             
@@ -118,7 +118,7 @@ function renderBoard(board) {
     // Inject Turn Info Overlay HUD
     let hud = document.getElementById("turn-hud");
     
-    let turnName = board.turn === "white" ? "White" : "Black";
+    let turnName = board.turn === "white" ? (board.white_name || "White") : (board.black_name || "Black");
     hud.innerHTML = `Turn &nbsp;<b style="color: #60a5fa">${board.turn_counter !== undefined ? board.turn_counter : 0}</b>&nbsp; | &nbsp;Playing: <b style="color: #a78bfa">${turnName}</b>&nbsp; | &nbsp;Moves executed: <b style="color: #34d399">${board.moves_this_turn !== undefined ? board.moves_this_turn : 0}</b>`;
     
     // Create Persistent SVG Render Layers safely integrating continuous transform transitions

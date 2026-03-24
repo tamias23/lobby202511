@@ -61,6 +61,8 @@ async def run_match(sem, agent1, agent2, board_path, temp_dir):
             "--max-turns", str(args.max_turns),
             "--white", "greedy_bob",
             "--black", "greedy_bob",
+            "--white-name", white.name,
+            "--black-name", black.name,
             "--greedy-weights-white", weights_to_str(white.weights),
             "--greedy-weights-black", weights_to_str(black.weights),
             "--store-parquet", temp_dir

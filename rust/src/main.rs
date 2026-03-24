@@ -46,6 +46,8 @@ async fn main() {
         println!("  cargo run -- <board.json> [--delay <ms>] [--max-turns <N>] [--white <agent>] [--black <agent>]");
         println!("  cargo run -- <board.json> --batch <n_games> [--max-turns <N>] [--white <agent>] [--black <agent>] [--store-parquet <dir>]");
         println!("  Optional Agent Traits:");
+        println!("      --white-name \"Agent 1\"");
+        println!("      --black-name \"Agent 2\"");
         println!("      --greedy-weights-white \"1.0,1.0,-2.0,...\"");
         println!("      --greedy-weights-black \"1.0,1.0,-2.0,...\"");
         println!();
@@ -66,6 +68,8 @@ async fn main() {
     let max_turns = parse_flag_value(&args, "--max-turns", 500);
     let white_agent_name = parse_flag_str(&args, "--white", "random").to_string();
     let black_agent_name = parse_flag_str(&args, "--black", "random").to_string();
+    let display_white_name = parse_flag_str(&args, "--white-name", &white_agent_name).to_string();
+    let display_black_name = parse_flag_str(&args, "--black-name", &black_agent_name).to_string();
     let parquet_dir = args.iter().position(|a| a == "--store-parquet").and_then(|i| args.get(i + 1)).cloned();
     
     let white_weights = args.iter().position(|a| a == "--greedy-weights-white").and_then(|i| args.get(i + 1));
@@ -83,8 +87,8 @@ async fn main() {
             board, 
             n_games, 
             max_turns, 
-            &white_agent_name, 
-            &black_agent_name, 
+            &display_white_name, 
+            &display_black_name, 
             white_agent.as_ref(), 
             black_agent.as_ref(),
             parquet_dir,
@@ -194,6 +198,8 @@ fn run_batch(
                 board_id: board_id.clone(),
                 timestamp: game_start_ms,
                 game_date,
+                white_name: white_name.to_string(),
+                black_name: black_name.to_string(),
                 winner: final_winner.to_string(),
                 total_turns: gs.turn_counter,
                 initial_state,

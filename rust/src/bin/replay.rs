@@ -23,6 +23,8 @@ struct SocketPayload {
     turn: Side,
     turn_counter: u32,
     moves_this_turn: u32,
+    white_name: String,
+    black_name: String,
 }
 
 struct AppState {
@@ -39,6 +41,8 @@ fn load_parquet(file_path: &str) -> Vec<GameRecord> {
     let board_ids = df.column("board_id").unwrap().str().unwrap();
     let timestamps = df.column("timestamp").unwrap().i64().unwrap();
     let game_dates = df.column("game_date").unwrap().str().unwrap();
+    let white_names = df.column("white_name").and_then(|c| c.str()).ok();
+    let black_names = df.column("black_name").and_then(|c| c.str()).ok();
     let winners = df.column("winner").unwrap().str().unwrap();
     let total_turns = df.column("total_turns").unwrap().u32().unwrap();
     let initial_states = df.column("initial_state").unwrap().str().unwrap();
@@ -50,6 +54,8 @@ fn load_parquet(file_path: &str) -> Vec<GameRecord> {
             board_id: board_ids.get(i).unwrap().to_string(),
             timestamp: timestamps.get(i).unwrap_or(0),
             game_date: game_dates.get(i).unwrap().to_string(),
+            white_name: white_names.and_then(|c| c.get(i)).unwrap_or("White").to_string(),
+            black_name: black_names.and_then(|c| c.get(i)).unwrap_or("Black").to_string(),
             winner: winners.get(i).unwrap().to_string(),
             total_turns: total_turns.get(i).unwrap_or(0),
             initial_state: initial_states.get(i).unwrap_or("{}").to_string(),
@@ -194,6 +200,8 @@ async fn get_turn(
         turn: last_turn_side,
         turn_counter: gs.turn_counter,
         moves_this_turn: moves_run,
+        white_name: game.white_name.clone(),
+        black_name: game.black_name.clone(),
     };
 
     Json(Some(payload)).into_response()
