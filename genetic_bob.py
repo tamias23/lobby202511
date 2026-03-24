@@ -141,7 +141,7 @@ async def main():
     import glob
     board_files = glob.glob("games/data/*board.json")
 
-    while (time.time() - start_time) < args.duration:
+    while True:
         print(f"\n--- Starting Generation {generation} ---")
         
         current_board = args.board
@@ -162,9 +162,27 @@ async def main():
         for i in range(5):
             print(f"  Rank {i+1}: Agent {population[i].id} '{population[i].name}' | Score: {population[i].score}")
             print(f"  Weights: {weights_to_str(population[i].weights)}")
+            
+        elapsed = time.time() - start_time
+        remaining = max(0, args.duration - elapsed)
+        
+        # Calculate statistics
+        cutoff = args.agents // 2
+        top_half = population[:cutoff]
+        nonzero_scores = [a.score for a in top_half if a.score > 0]
+        avg_score = sum(nonzero_scores) / len(nonzero_scores) if nonzero_scores else 0
+        
+        print("\n=== Generation Statistics ===")
+        print(f"Total Matches Played So Far: {total_matches}")
+        print(f"Average Top {cutoff} Score: {avg_score:.2f} Pts")
+        print(f"Time Elapsed: {elapsed:.2f}s | Time Remaining: {remaining:.2f}s")
+        print("=============================")
+        
+        if elapsed >= args.duration:
+            print("\nTime allocated has expired. Ending evolution.")
+            break
         
         # Isolate exactly half bounds executing hard culling cuts securely wiping non-competitive branches immediately
-        cutoff = args.agents // 2
         survivors = population[:cutoff]
         removed = population[cutoff:]
         
@@ -185,19 +203,6 @@ async def main():
         population = survivors + new_agents
         generation += 1
         
-        elapsed = time.time() - start_time
-        remaining = max(0, args.duration - elapsed)
-        
-        # Calculate statistics
-        nonzero_scores = [a.score for a in population if a.score > 0]
-        avg_score = sum(nonzero_scores) / len(nonzero_scores) if nonzero_scores else 0
-        
-        print("\n=== Generation Statistics ===")
-        print(f"Total Matches Played So Far: {total_matches}")
-        print(f"Average Top 50 Score: {avg_score:.2f} Pts")
-        print(f"Time Elapsed: {elapsed:.2f}s | Time Remaining: {remaining:.2f}s")
-        print("=============================")
-        
     print("\n==================================")
     print("=== EVOLUTION SEARCH COMPLETE ===")
     print("==================================")
@@ -205,15 +210,15 @@ async def main():
     elapsed = time.time() - start_time
     print(f"\nExecution Summary:")
     print(f"  Total Time Run: {elapsed:.2f} seconds")
-    print(f"  Total Generations: {generation - 1}")
+    print(f"  Total Generations: {generation}")
     print(f"  Total Matches Played: {total_matches}")
-    print(f"  Total Agent Evaluators Processed: {(generation - 1) * args.agents}")
+    print(f"  Total Agent Evaluators Processed: {generation * args.agents}")
     print(f"  Match Processing Speed: {total_matches / elapsed:.2f} matches/sec")
     
     # Secure maximum bounds extraction natively globally ensuring the master combination iteration survives!
     population.sort(key=lambda a: a.score, reverse=True)
     
-    print("\n--- TOP 30 AGENT CONFIGURATIONS ---")
+    print("\n--- FINAL AGENT CONFIGURATIONS ---")
     
     csv_filename = "greedy_bob_results.csv"
     with open(csv_filename, 'w', newline='') as csvfile:
@@ -223,7 +228,7 @@ async def main():
         header = ["Rank", "AgentID", "Name", "Score"] + [f"Weight_{i}" for i in range(26)]
         csvwriter.writerow(header)
         
-        for i in range(min(30, len(population))):
+        for i in range(len(population)):
             agent = population[i]
             print(f"Rank {i+1} [Agent {agent.id} '{agent.name}'] - Score: {agent.score}")
             print(f"Weights: {weights_to_str(agent.weights)}\n")
@@ -232,7 +237,7 @@ async def main():
             row = [i+1, agent.id, agent.name, agent.score] + agent.weights
             csvwriter.writerow(row)
             
-    print(f"✅ Successfully exported the top {min(30, len(population))} genetic configurations to {csv_filename}!")
+    print(f"✅ Successfully exported all {len(population)} genetic configurations to {csv_filename}!")
 
 if __name__ == "__main__":
     asyncio.run(main())
