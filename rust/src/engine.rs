@@ -64,6 +64,41 @@ impl GameState {
     }
 }
 
+pub fn get_legal_colors(state: &GameState, side: &Side) -> Vec<String> {
+    let mut color_set = HashSet::new();
+    for p in state.board.polygons.values() {
+        color_set.insert(p.color.clone());
+    }
+    let colors: Vec<String> = color_set.into_iter().collect();
+    let mut valid_colors = Vec::new();
+
+    for c in colors {
+        let mut clone_state = state.clone();
+        clone_state.color_chosen.insert(*side, c.clone());
+        let mut has_move = false;
+        for p in clone_state.board.pieces.values() {
+            if p.side == *side {
+                let mut can_start = false;
+                if p.position == "returned" {
+                    can_start = true;
+                } else if p.position != "graveyard"
+                    && clone_state.board.polygons.get(&p.position).map(|x| &x.color) == Some(&c)
+                {
+                    can_start = true;
+                }
+                if can_start && !get_legal_moves(&clone_state, &p.id).is_empty() {
+                    has_move = true;
+                    break;
+                }
+            }
+        }
+        if has_move {
+            valid_colors.push(c);
+        }
+    }
+    valid_colors
+}
+
 pub fn get_polys_within_distance_jump(board: &BoardMap, start: &str, max_dist: usize) -> HashSet<String> {
     let mut visited = HashSet::new();
     visited.insert(start.to_string());

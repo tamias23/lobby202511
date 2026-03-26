@@ -18,9 +18,10 @@ fn parse_flag_str<'a>(args: &'a [String], flag: &str, default: &'a str) -> &'a s
         .unwrap_or(default)
 }
 
-fn make_agent(name: &str, weights_str: Option<&String>) -> Arc<dyn agents::Agent> {
+fn make_agent(name: &str, weights_str: Option<&String>, mcts_budget: u64) -> Arc<dyn agents::Agent> {
     match name {
         "random" => Arc::new(agents::random::RandomAgent),
+        "mcts" => Arc::new(agents::mcts::MctsAgent::new(mcts_budget, Some("./rust/model.onnx".to_string()))), 
         "greedy_bob" => {
             let mut weights = [1.0; 26]; // Default baseline
             if let Some(w_str) = weights_str {
@@ -32,7 +33,7 @@ fn make_agent(name: &str, weights_str: Option<&String>) -> Arc<dyn agents::Agent
             Arc::new(agents::greedy_bob::GreedyBobAgent::new(weights))
         }
         other => {
-            eprintln!("Unknown agent '{}'. Available: random, greedy_bob", other);
+            eprintln!("Unknown agent '{}'. Available: random, greedy_bob, mcts", other);
             std::process::exit(1);
         }
     }
@@ -43,15 +44,15 @@ async fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
         println!("Usage:");
-        println!("  cargo run -- <board.json> [--delay <ms>] [--max-turns <N>] [--white <agent>] [--black <agent>]");
-        println!("  cargo run -- <board.json> --batch <n_games> [--max-turns <N>] [--white <agent>] [--black <agent>] [--store-parquet <dir>]");
+        println!("  cargo run -- <board.json> [--delay <ms>] [--max-turns <N>] [--white <agent>] [--black <agent>] [--mcts-budget <ms>]");
+        println!("  cargo run -- <board.json> --batch <n_games> [--max-turns <N>] [--white <agent>] [--black <agent>] [--store-parquet <dir>] [--mcts-budget <ms>]");
         println!("  Optional Agent Traits:");
         println!("      --white-name \"Agent 1\"");
         println!("      --black-name \"Agent 2\"");
         println!("      --greedy-weights-white \"1.0,1.0,-2.0,...\"");
         println!("      --greedy-weights-black \"1.0,1.0,-2.0,...\"");
         println!();
-        println!("  Agents: random, greedy_bob");
+        println!("  Agents: random, greedy_bob, mcts");
         std::process::exit(1);
     }
 
@@ -66,6 +67,7 @@ async fn main() {
     };
 
     let max_turns = parse_flag_value(&args, "--max-turns", 500);
+    let mcts_budget = parse_flag_value(&args, "--mcts-budget", 100) as u64;
     let white_agent_name = parse_flag_str(&args, "--white", "random").to_string();
     let black_agent_name = parse_flag_str(&args, "--black", "random").to_string();
     let display_white_name = parse_flag_str(&args, "--white-name", &white_agent_name).to_string();
@@ -75,8 +77,8 @@ async fn main() {
     let white_weights = args.iter().position(|a| a == "--greedy-weights-white").and_then(|i| args.get(i + 1));
     let black_weights = args.iter().position(|a| a == "--greedy-weights-black").and_then(|i| args.get(i + 1));
 
-    let white_agent = make_agent(&white_agent_name, white_weights);
-    let black_agent = make_agent(&black_agent_name, black_weights);
+    let white_agent = make_agent(&white_agent_name, white_weights, mcts_budget);
+    let black_agent = make_agent(&black_agent_name, black_weights, mcts_budget);
 
     if let Some(batch_pos) = args.iter().position(|a| a == "--batch") {
         let n_games: u32 = args.get(batch_pos + 1)
@@ -194,7 +196,7 @@ fn run_batch(
         if let Some(mut rec) = recorder.as_mut() {
             let moves_json = serde_json::to_string(&game_moves).unwrap_or_else(|_| "[]".to_string());
             rec.add_game(GameRecord {
-                game_id,
+                game_id: game_id.clone(),
                 board_id: board_id.clone(),
                 timestamp: game_start_ms,
                 game_date,
@@ -211,6 +213,14 @@ fn run_batch(
         if n_games <= 20 || game % report_every == 0 {
             println!("  Game {}/{} done — turns: {}", game, n_games, gs.turn_counter);
         }
+
+        // Structured telemetry for scripts
+        let telemetry_game = serde_json::json!({
+            "winner": final_winner.to_lowercase(),
+            "turns": gs.turn_counter,
+            "game_id": game_id
+        });
+        println!("GAMEOVER: {}", telemetry_game);
     }
 
     let avg_turns = total_turns as f64 / n_games as f64;
@@ -219,6 +229,17 @@ fn run_batch(
     println!("  Black wins : {} ({:.1}%)", black_wins, 100.0 * black_wins as f64 / n_games as f64);
     println!("  Draws      : {} ({:.1}%)", draws, 100.0 * draws as f64 / n_games as f64);
     println!("  Avg turns  : {:.1}", avg_turns);
+
+    // Structured telemetry for batch
+    let telemetry_batch = serde_json::json!({
+        "n_games": n_games,
+        "white_wins": white_wins,
+        "black_wins": black_wins,
+        "draws": draws,
+        "avg_turns": avg_turns,
+        "ts": current_timestamp_ms()
+    });
+    println!("BATCH_STATS: {}", telemetry_batch);
     
     if let Some(dir) = parquet_dir {
         println!("Writing session games to parquet in {}...", dir);
