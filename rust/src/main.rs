@@ -18,10 +18,10 @@ fn parse_flag_str<'a>(args: &'a [String], flag: &str, default: &'a str) -> &'a s
         .unwrap_or(default)
 }
 
-fn make_agent(name: &str, weights_str: Option<&String>, mcts_budget: u64) -> Arc<dyn agents::Agent> {
+fn make_agent(name: &str, weights_str: Option<&String>, mcts_budget: u64, mcts_data_dir: String) -> Arc<dyn agents::Agent> {
     match name {
         "random" => Arc::new(agents::random::RandomAgent),
-        "mcts" => Arc::new(agents::mcts::MctsAgent::new(mcts_budget, Some("./rust/model.onnx".to_string()))), 
+        "mcts" => Arc::new(agents::mcts::MctsAgent::new(mcts_budget, Some("./rust/model.onnx".to_string()), mcts_data_dir)), 
         "greedy_bob" => {
             let mut weights = [1.0; 26]; // Default baseline
             if let Some(w_str) = weights_str {
@@ -44,8 +44,8 @@ async fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
         println!("Usage:");
-        println!("  cargo run -- <board.json> [--delay <ms>] [--max-turns <N>] [--white <agent>] [--black <agent>] [--mcts-budget <ms>]");
-        println!("  cargo run -- <board.json> --batch <n_games> [--max-turns <N>] [--white <agent>] [--black <agent>] [--store-parquet <dir>] [--mcts-budget <ms>]");
+        println!("  cargo run -- <board.json> [--delay <ms>] [--max-turns <N>] [--white <agent>] [--black <agent>] [--mcts-budget <ms>] [--mcts-data-dir <dir>]");
+        println!("  cargo run -- <board.json> --batch <n_games> [--max-turns <N>] [--white <agent>] [--black <agent>] [--store-parquet <dir>] [--mcts-budget <ms>] [--mcts-data-dir <dir>]");
         println!("  Optional Agent Traits:");
         println!("      --white-name \"Agent 1\"");
         println!("      --black-name \"Agent 2\"");
@@ -70,6 +70,7 @@ async fn main() {
     let mcts_budget = parse_flag_value(&args, "--mcts-budget", 100) as u64;
     let white_agent_name = parse_flag_str(&args, "--white", "random").to_string();
     let black_agent_name = parse_flag_str(&args, "--black", "random").to_string();
+    let mcts_data_dir = parse_flag_str(&args, "--mcts-data-dir", "./rust/mcts_temp").to_string();
     let display_white_name = parse_flag_str(&args, "--white-name", &white_agent_name).to_string();
     let display_black_name = parse_flag_str(&args, "--black-name", &black_agent_name).to_string();
     let parquet_dir = args.iter().position(|a| a == "--store-parquet").and_then(|i| args.get(i + 1)).cloned();
@@ -77,8 +78,8 @@ async fn main() {
     let white_weights = args.iter().position(|a| a == "--greedy-weights-white").and_then(|i| args.get(i + 1));
     let black_weights = args.iter().position(|a| a == "--greedy-weights-black").and_then(|i| args.get(i + 1));
 
-    let white_agent = make_agent(&white_agent_name, white_weights, mcts_budget);
-    let black_agent = make_agent(&black_agent_name, black_weights, mcts_budget);
+    let white_agent = make_agent(&white_agent_name, white_weights, mcts_budget, mcts_data_dir.clone());
+    let black_agent = make_agent(&black_agent_name, black_weights, mcts_budget, mcts_data_dir);
 
     if let Some(batch_pos) = args.iter().position(|a| a == "--batch") {
         let n_games: u32 = args.get(batch_pos + 1)

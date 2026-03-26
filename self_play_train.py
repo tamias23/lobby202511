@@ -67,7 +67,8 @@ async def run_self_play_game(sem, board_path):
             "--max-turns", str(args.turns_per_game),
             "--white", "mcts",
             "--black", "mcts",
-            "--mcts-budget", str(args.mcts_budget)
+            "--mcts-budget", str(args.mcts_budget),
+            "--mcts-data-dir", "./rust/mcts_temp"
         ]
         
         # Note: In a real AlphaZero, you would pass the current model path.

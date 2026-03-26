@@ -15,6 +15,8 @@ Graph Attention Networks
 
 re-code setuprandomy, so that it fires all moves
 
+git commit -am "mcts and self-play" && git push
+
 =================================================================================
 
 cd ./rust ; cargo run --bin rust -- /home/mat/Bureau/lobby202511/games/data/nt502220148101996_f1b4eb34cc3ccb285ee5fe158bf4284d_board.json --batch 100 --store-parquet /home/mat/Bureau/lobby202511/parquet
@@ -50,6 +52,8 @@ cargo run --release --bin rust -- /home/mat/Bureau/lobby202511/games/data/nt5022
 
 =================================================================================
 
+I see several folders named mcts_temp. Can you tell me why there is more than one. Is it necessary? Are they all used ?
+Once all games hae been collected in a training set, batches are created for the learning phase : can you check if shuffling is happening ?
 
 =================================================================================
 

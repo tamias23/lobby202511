@@ -4,7 +4,6 @@ use crate::models::{Side, PieceType};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use std::sync::Mutex;
-use rand::seq::IndexedRandom;
 use ort::session::Session;
 use ort::value::Value;
 use ndarray::Array2;
@@ -14,6 +13,7 @@ pub struct MctsAgent {
     pub model_path: Option<String>,
     pub session: Option<Mutex<Session>>,
     pub(crate) game_buffer: Mutex<Vec<serde_json::Value>>,
+    pub data_dir: String,
 }
 
 #[derive(Clone, Debug)]
@@ -25,7 +25,7 @@ struct Node {
 }
 
 impl Node {
-    fn new(prior_prob: f64) -> Self {
+    pub(crate) fn new(prior_prob: f64) -> Self {
         Self {
             visit_count: 0.0,
             value_sum: 0.0,
@@ -48,7 +48,7 @@ impl Node {
 }
 
 impl MctsAgent {
-    pub fn new(time_budget_ms: u64, model_path: Option<String>) -> Self {
+    pub fn new(time_budget_ms: u64, model_path: Option<String>, data_dir: String) -> Self {
         let session = model_path.as_ref().and_then(|path| {
             let bytes = std::fs::read(path).ok()?;
             let session = Session::builder().ok()?
@@ -61,12 +61,15 @@ impl MctsAgent {
             model_path,
             session,
             game_buffer: Mutex::new(Vec::new()),
+            data_dir,
         }
     }
 
     fn ucb_score(&self, parent_visits: f64, child: &Node, c_puct: f64) -> f64 {
+        // Child Q is from child's perspective, so we negate it for the parent
+        let q_value = -child.q_value();
         let u_value = c_puct * child.prior_prob * (parent_visits.sqrt() / (1.0 + child.visit_count));
-        child.q_value() + u_value
+        q_value + u_value
     }
 
     pub(crate) fn get_graph_data(&self, gs: &GameState) -> (Array2<f32>, Array2<i64>, Array2<i64>, Vec<String>) {
@@ -174,13 +177,6 @@ impl MctsAgent {
         (x, edge_index, legal_moves_tensor, legal_move_keys)
     }
 
-    fn check_winner(&self, _gs: &GameState) -> Option<f64> {
-        // Find if any goddess is captured (position == "returned" but we need to know who recently moved)
-        // Simplest: Check if the current player's goddess is missing from board/returned? No.
-        // Let's rely on the simulation loop to tell us if a goddess was captured.
-        // For evaluation, we can check basic heuristics or just return 0.0 if not terminal.
-        None
-    }
 
     pub(crate) fn evaluate(&self, gs: &GameState) -> (f64, HashMap<String, f64>) {
         let (x, edge_index, legal_moves, move_keys) = self.get_graph_data(gs);
@@ -249,21 +245,34 @@ impl MctsAgent {
 
     fn save_search_data(&self, gs: &GameState, root: &Node) {
         let (x, edge_index, legal_moves, move_keys) = self.get_graph_data(gs);
+        
+        // The policy head only supports moves that are edges in the graph.
+        // We must ensure move_keys and legal_moves tensor columns match in size.
+        // If "PASS" is in move_keys, it has no corresponding column in legal_moves.
         let mut pi = HashMap::new();
-        for (m_key, child) in &root.children {
-            pi.insert(m_key.clone(), child.visit_count / root.visit_count);
+        let mut filtered_move_keys = Vec::new();
+        
+        for m_key in move_keys {
+            if m_key == "PASS" {
+                continue;
+            }
+            filtered_move_keys.push(m_key.clone());
+            if let Some(child) = root.children.get(&m_key) {
+                pi.insert(m_key.clone(), child.visit_count / root.visit_count);
+            } else {
+                pi.insert(m_key.clone(), 0.0);
+            }
         }
         
         let data = serde_json::json!({
             "x": x.to_owned().into_raw_vec_and_offset().0,
             "edge_index": edge_index.to_owned().into_raw_vec_and_offset().0,
             "legal_moves": legal_moves.to_owned().into_raw_vec_and_offset().0,
-            "move_keys": move_keys,
+            "move_keys": filtered_move_keys,
             "pi": pi,
-            "turn_side": format!("{:?}", gs.turn), // Exact side at this state
+            "turn_side": format!("{:?}", gs.turn),
         });
         
-        // Push to buffer instead of file
         let mut buffer = self.game_buffer.lock().unwrap();
         buffer.push(data);
     }
@@ -277,7 +286,7 @@ impl Drop for MctsAgent {
             return;
         }
         
-        let data_dir = "./rust/mcts_temp";
+        let data_dir = &self.data_dir;
         let _ = std::fs::create_dir_all(data_dir);
         let filename = format!("{}/residual_{}.json", data_dir, uuid::Uuid::new_v4());
         if let Ok(json_str) = serde_json::to_string(&*buffer) {
@@ -327,26 +336,31 @@ impl Agent for MctsAgent {
 
         while start_time.elapsed() < budget {
             let mut current_gs = gs.clone();
-            let mut path = vec![];
             
-            // 1. Selection
+            // 1. Selection & Expansion
+            let mut path = Vec::new(); // (move_key, turn_flipped_bool)
             let mut current_node = &mut root;
+            let mut terminal_value = None;
+            let mut total_flips = 0;
+
             while current_node.is_expanded() {
                 let parent_visits = current_node.visit_count;
-                let best_child_key = current_node.children.iter()
+                let best_child_key = if let Some(key) = current_node.children.iter()
                     .max_by(|a, b| {
                         let score_a = self.ucb_score(parent_visits, a.1, c_puct);
                         let score_b = self.ucb_score(parent_visits, b.1, c_puct);
                         score_a.partial_cmp(&score_b).unwrap()
                     })
-                    .map(|(k, _)| k.clone())
-                    .unwrap();
-                
-                path.push(best_child_key.clone());
-                
+                    .map(|(k, _)| k.clone()) 
+                {
+                    key
+                } else {
+                    break;
+                };
+
                 // Apply move to state
+                let prev_turn = current_gs.turn;
                 if best_child_key == "PASS" {
-                    // turnover
                     current_gs.turn_counter += 1;
                     current_gs.turn = current_gs.get_enemy_side();
                     current_gs.color_chosen.clear();
@@ -359,79 +373,56 @@ impl Agent for MctsAgent {
                     current_gs.is_new_turn = false;
                 } else {
                     let parts: Vec<&str> = best_child_key.split(':').collect();
-                    if parts.len() < 2 { continue; } // Should not happen
-                    let p_id = parts[0];
-                    let target = parts[1];
-                    
-                    if !current_gs.board.pieces.contains_key(p_id) {
-                        break; // Safety break if piece disappeared (should not happen in MCTS)
-                    }
-
-                    let was_returned = current_gs.board.pieces[p_id].position == "returned";
-                    let captured = apply_move(&mut current_gs, p_id, target);
-                    let goddess_captured = captured.contains(&PieceType::Goddess);
-                    apply_move_turnover(
-                        &mut current_gs,
-                        p_id,
-                        target,
-                        goddess_captured,
-                        captured.is_empty(),
-                        was_returned,
-                    );
-                    
-                    if goddess_captured {
-                        // Game Over!
-                        current_node = current_node.children.get_mut(&best_child_key).unwrap();
-                        path.push(best_child_key); // Just for path length
-                        break; 
+                    if parts.len() >= 2 {
+                        let p_id = parts[0];
+                        let target = parts[1];
+                        if current_gs.board.pieces.contains_key(p_id) {
+                            let was_returned = current_gs.board.pieces[p_id].position == "returned";
+                            let captured = apply_move(&mut current_gs, p_id, target);
+                            let goddess_captured = captured.contains(&PieceType::Goddess);
+                            apply_move_turnover(&mut current_gs, p_id, target, goddess_captured, captured.is_empty(), was_returned);
+                            
+                            if goddess_captured {
+                                terminal_value = Some(1.0); 
+                            }
+                        }
                     }
                 }
+                
+                let flipped = current_gs.turn != prev_turn;
+                if flipped { total_flips += 1; }
+                path.push((best_child_key.clone(), flipped));
                 
                 current_node = current_node.children.get_mut(&best_child_key).unwrap();
+                if terminal_value.is_some() { break; }
             }
 
-            // 2. Expansion & Evaluation
-            let (value, priors) = self.evaluate(&current_gs);
-            for (m_key, prob) in priors {
-                current_node.children.insert(m_key, Node::new(prob));
-            }
-
-            // 3. Backpropagation (Backup)
-            // Value is from the perspective of the player at current_gs
-            let mut val = value;
-            let mut backup_node = &mut root;
-            backup_node.visit_count += 1.0;
-            backup_node.value_sum += val;
-
-            // Track whose turn it was to flip values accordingly
-            let mut _last_side = gs.turn;
-            let mut search_gs = gs.clone();
-
-            for key in path {
-                // Determine if side changed
-                let prev_side = search_gs.turn;
-                
-                // Simulate move to check for side change
-                if key == "PASS" {
-                    search_gs.turn = search_gs.get_enemy_side();
-                } else if !key.starts_with("COLOR:") {
-                    let parts: Vec<&str> = key.split(':').collect();
-                    let p_id = parts[0];
-                    let target = parts[1];
-                    let was_returned = search_gs.board.pieces[p_id].position == "returned";
-                    let captured = apply_move(&mut search_gs, p_id, target);
-                    let goddess_captured = captured.contains(&PieceType::Goddess);
-                    apply_move_turnover(&mut search_gs, p_id, target, goddess_captured, captured.is_empty(), was_returned);
+            // 2. Evaluation & Expansion
+            let v_leaf = if let Some(val) = terminal_value {
+                val // Value for player who just moved
+            } else {
+                let (val, priors) = self.evaluate(&current_gs);
+                if !current_node.is_expanded() {
+                    for (m_key, prob) in priors {
+                        current_node.children.insert(m_key, Node::new(prob));
+                    }
                 }
-                
-                if search_gs.turn != prev_side {
-                    val = -val;
-                }
+                val // Value for current_gs.turn
+            };
 
-                backup_node = backup_node.children.get_mut(&key).unwrap();
-                backup_node.visit_count += 1.0;
-                backup_node.value_sum += val;
-                _last_side = search_gs.turn;
+            // 3. Backpropagation (Safe Loop)
+            let mut curr_v = if total_flips % 2 == 1 { -v_leaf } else { v_leaf };
+            let mut node = &mut root;
+            node.visit_count += 1.0;
+            node.value_sum += curr_v;
+
+            for (key, flipped) in path {
+                if flipped {
+                    curr_v = -curr_v;
+                }
+                node = node.children.get_mut(&key).unwrap();
+                node.visit_count += 1.0;
+                node.value_sum += curr_v;
             }
         }
 
@@ -469,12 +460,74 @@ impl Agent for MctsAgent {
             final_turns.push(turn);
         }
 
-        let data_dir = "./rust/mcts_temp";
+        let data_dir = &self.data_dir;
         let _ = std::fs::create_dir_all(data_dir);
         let filename = format!("{}/game_{}.json", data_dir, uuid::Uuid::new_v4());
         
         if let Ok(json_str) = serde_json::to_string(&final_turns) {
             let _ = std::fs::write(filename, json_str);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::parse_board;
+
+    fn setup_test_board() -> GameState {
+        let json = r#"{
+            "allPolygons": {
+                "p1": {"id": 1, "name": "p1", "color": "Blue", "shape": "hex", "center": [0,0], "points": [], "neighbors": ["p2", "p3"], "neighbours": ["p3"]},
+                "p2": {"id": 2, "name": "p2", "color": "Yellow", "shape": "hex", "center": [1,0], "points": [], "neighbors": ["p1"], "neighbours": []},
+                "p3": {"id": 3, "name": "p3", "color": "Blue", "shape": "hex", "center": [2,0], "points": [], "neighbors": [], "neighbours": ["p1"]}
+            },
+            "allPieces": {
+                "w_goddess": {"id": "w_goddess", "type": "goddess", "side": "white", "position": "p1"},
+                "b_goddess": {"id": "b_goddess", "type": "goddess", "side": "black", "position": "p2"}
+            },
+            "allEdges": {}
+        }"#;
+        let board = parse_board(json).unwrap();
+        GameState::new(board)
+    }
+
+    #[test]
+    fn test_mcts_name() {
+        let agent = MctsAgent::new(100, None, "mcts_temp".to_string());
+        assert_eq!(agent.name(), "MCTS");
+    }
+
+    #[test]
+    fn test_graph_data_shape() {
+        let gs = setup_test_board();
+        let agent = MctsAgent::new(10, None, "mcts_temp".to_string());
+        let (x, edge_index, _, _) = agent.get_graph_data(&gs);
+        assert_eq!(x.dim().0, 3);
+        assert_eq!(x.dim().1, 11);
+        assert_eq!(edge_index.dim().0, 2);
+    }
+
+    #[test]
+    fn test_ucb_score_sanity() {
+        let agent = MctsAgent::new(10, None, "mcts_temp".to_string());
+        let parent_visits: f64 = 1.0;
+        let c_puct = 1.0;
+        let score1 = agent.ucb_score(parent_visits, &Node::new(0.9), c_puct);
+        let score2 = agent.ucb_score(parent_visits, &Node::new(0.1), c_puct);
+        assert!(score1 > score2);
+    }
+
+    #[test]
+    fn test_terminal_win_detection() {
+        let mut gs = setup_test_board();
+        gs.color_chosen.insert(gs.turn, "Blue".to_string());
+        gs.is_new_turn = false;
+        let agent = MctsAgent::new(50, None, "mcts_temp".to_string());
+        let m = agent.choose_move(&gs, &std::collections::HashMap::new(), false);
+        match m {
+            AgentMove::Move { .. } => {},
+            _ => panic!("Expected move"),
         }
     }
 }
