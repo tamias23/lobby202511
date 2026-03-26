@@ -12,8 +12,8 @@ use ndarray::Array2;
 pub struct MctsAgent {
     pub time_budget_ms: u64,
     pub model_path: Option<String>,
-    session: Option<Mutex<Session>>,
-    game_buffer: Mutex<Vec<serde_json::Value>>,
+    pub session: Option<Mutex<Session>>,
+    pub(crate) game_buffer: Mutex<Vec<serde_json::Value>>,
 }
 
 #[derive(Clone, Debug)]
@@ -69,7 +69,7 @@ impl MctsAgent {
         child.q_value() + u_value
     }
 
-    fn get_graph_data(&self, gs: &GameState) -> (Array2<f32>, Array2<i64>, Array2<i64>, Vec<String>) {
+    pub(crate) fn get_graph_data(&self, gs: &GameState) -> (Array2<f32>, Array2<i64>, Array2<i64>, Vec<String>) {
         let mut idx_to_node = Vec::new();
         let mut node_to_idx = HashMap::new();
         
@@ -113,8 +113,13 @@ impl MctsAgent {
         let mut edges = Vec::new();
         for (source, poly) in &gs.board.polygons {
             let u = node_to_idx[source];
-            for target in &poly.neighbors {
-                if let Some(&v) = node_to_idx.get(target) {
+            // Include both slide and jump neighbors for full mobility visibility
+            let mut neighbors_set = std::collections::HashSet::new();
+            for n in &poly.neighbors { neighbors_set.insert(n.clone()); }
+            for n in &poly.neighbours { neighbors_set.insert(n.clone()); }
+
+            for target in neighbors_set {
+                if let Some(&v) = node_to_idx.get(&target) {
                     edges.push([u as i64, v as i64]);
                 }
             }
@@ -130,8 +135,10 @@ impl MctsAgent {
         let mut legal_move_keys = Vec::new();
         let mut moves_flat = Vec::new();
         if gs.is_new_turn {
-             // Colors aren't polygons, but for the GAT to rank them, 
-             // we'd need a different representation. For now, uniform priors for color choice.
+             let colors = get_legal_colors(gs, &gs.turn);
+             for color in colors {
+                 legal_move_keys.push(format!("COLOR:{}", color));
+             }
         } else {
             let mut all_moves = HashMap::new();
             let eligible_ids = gs.get_eligible_piece_ids();
@@ -153,6 +160,10 @@ impl MctsAgent {
                     }
                 }
             }
+            if gs.locked_sequence_piece.is_some() {
+                legal_move_keys.push("PASS".to_string());
+                // PASS doesn't have a source/target on the graph, so we leave moves_flat as is
+            }
         }
         let legal_moves_tensor = if moves_flat.is_empty() {
             Array2::zeros((2, 0))
@@ -163,12 +174,23 @@ impl MctsAgent {
         (x, edge_index, legal_moves_tensor, legal_move_keys)
     }
 
-    fn evaluate(&self, gs: &GameState) -> (f64, HashMap<String, f64>) {
+    fn check_winner(&self, _gs: &GameState) -> Option<f64> {
+        // Find if any goddess is captured (position == "returned" but we need to know who recently moved)
+        // Simplest: Check if the current player's goddess is missing from board/returned? No.
+        // Let's rely on the simulation loop to tell us if a goddess was captured.
+        // For evaluation, we can check basic heuristics or just return 0.0 if not terminal.
+        None
+    }
+
+    pub(crate) fn evaluate(&self, gs: &GameState) -> (f64, HashMap<String, f64>) {
+        let (x, edge_index, legal_moves, move_keys) = self.get_graph_data(gs);
+        
+        let mut priors = HashMap::new();
+        let mut value = 0.0;
+
         if let Some(ref session_mutex) = self.session {
             let mut session = session_mutex.lock().unwrap();
-            let (x, edge_index, legal_moves, move_keys) = self.get_graph_data(gs);
             
-            // In some ort 2.x versions, from_array is the way.
             let x_val = Value::from_array(x).unwrap();
             let edge_val = Value::from_array(edge_index).unwrap();
             let legal_val = Value::from_array(legal_moves).unwrap();
@@ -179,63 +201,29 @@ impl MctsAgent {
                 "legal_moves" => legal_val
             ]; 
             
-            let outputs = match session.run(inputs) {
-                Ok(o) => o,
-                Err(_) => return (0.0, HashMap::new())
-            };
-            
-            let (_v_shape, v_data) = outputs["value"].try_extract_tensor::<f32>().unwrap();
-            let value = v_data[0];
-            let (_p_shape, p_data) = outputs["probs"].try_extract_tensor::<f32>().unwrap();
-            
-            let mut priors = HashMap::new();
-            for (i, key) in move_keys.into_iter().enumerate() {
-                priors.insert(key, p_data[i] as f64);
-            }
-            (value as f64, priors)
-        } else {
-            // Uniform priors if no model
-            let mut priors = HashMap::new();
-            let p_side = gs.turn.clone();
-            
-            if gs.is_new_turn {
-                let colors = get_legal_colors(gs, &p_side);
-                if !colors.is_empty() {
-                    let p = 1.0 / (colors.len() as f64);
-                    for color in colors {
-                        priors.insert(format!("COLOR:{}", color), p);
-                    }
-                }
-            } else {
-                let mut total_moves = 0;
-                let mut moves_list = vec![];
+            if let Ok(outputs) = session.run(inputs) {
+                let (_v_shape, v_data) = outputs["value"].try_extract_tensor::<f32>().unwrap();
+                value = v_data[0] as f64;
+                let (_p_shape, p_data) = outputs["probs"].try_extract_tensor::<f32>().unwrap();
                 
-                let mut all_moves = HashMap::new();
-                let eligible_ids = gs.get_eligible_piece_ids();
-                for id in eligible_ids {
-                     let targets = get_legal_moves(gs, &id);
-                     if !targets.is_empty() {
-                         all_moves.insert(id, targets);
-                     }
-                }
-
-                for (p_id, targets) in all_moves {
-                    for target in targets {
-                        total_moves += 1;
-                        moves_list.push(format!("{}:{}", p_id, target));
+                if !move_keys.is_empty() {
+                    let n_keys = move_keys.len() as f64;
+                    for (i, key) in move_keys.into_iter().enumerate() {
+                        let prob = if i < p_data.len() { p_data[i] as f64 } else { 1.0 / n_keys };
+                        priors.insert(key, prob);
                     }
-                }
-                if total_moves > 0 {
-                    let p = 1.0 / (total_moves as f64);
-                    for m_key in moves_list {
-                        priors.insert(m_key, p);
-                    }
-                } else {
-                    priors.insert("PASS".to_string(), 1.0);
                 }
             }
-            (0.0, priors)
+        } else {
+            // Uniform priors
+            if !move_keys.is_empty() {
+                let p = 1.0 / (move_keys.len() as f64);
+                for m_key in move_keys {
+                    priors.insert(m_key, p);
+                }
+            }
         }
+        (value, priors)
     }
 
     fn get_best_move_key(&self, root: &Node) -> Option<String> {
@@ -272,7 +260,7 @@ impl MctsAgent {
             "legal_moves": legal_moves.to_owned().into_raw_vec_and_offset().0,
             "move_keys": move_keys,
             "pi": pi,
-            "turn": format!("{:?}", gs.turn),
+            "turn_side": format!("{:?}", gs.turn), // Exact side at this state
         });
         
         // Push to buffer instead of file
@@ -283,19 +271,19 @@ impl MctsAgent {
 
 impl Drop for MctsAgent {
     fn drop(&mut self) {
-        let buffer = self.game_buffer.lock().unwrap();
+        // Any remaining data if the game crashed before record_winner
+        let mut buffer = self.game_buffer.lock().unwrap();
         if buffer.is_empty() {
             return;
         }
-
+        
         let data_dir = "./rust/mcts_temp";
         let _ = std::fs::create_dir_all(data_dir);
-        let filename = format!("{}/game_{}.json", data_dir, uuid::Uuid::new_v4());
-        
-        // Save as a JSON list of all buffered turns
+        let filename = format!("{}/residual_{}.json", data_dir, uuid::Uuid::new_v4());
         if let Ok(json_str) = serde_json::to_string(&*buffer) {
             let _ = std::fs::write(filename, json_str);
         }
+        buffer.clear();
     }
 }
 
@@ -304,10 +292,25 @@ impl Agent for MctsAgent {
         "MCTS"
     }
 
-    fn choose_color<'a>(&self, _gs: &GameState, valid_colors: &'a [String]) -> &'a String {
-        // Reuse MCTS logic for color choice too?
-        // For now, just pick randomly to focus on choose_move implementation
-        valid_colors.choose(&mut rand::rng()).expect("valid_colors empty")
+    fn choose_color<'a>(&self, gs: &GameState, valid_colors: &'a [String]) -> &'a String {
+        if valid_colors.len() == 1 { return &valid_colors[0]; }
+        
+        let mut best_color = &valid_colors[0];
+        let mut max_value = -f64::INFINITY;
+        
+        for color in valid_colors {
+            let mut clone_gs = gs.clone();
+            clone_gs.color_chosen.insert(gs.turn, color.clone());
+            clone_gs.is_new_turn = false;
+            
+            // Run a shallow MCTS or just evaluate the state
+            let (val, _) = self.evaluate(&clone_gs);
+            if val > max_value {
+                max_value = val;
+                best_color = color;
+            }
+        }
+        best_color
     }
 
     fn choose_move(
@@ -375,6 +378,13 @@ impl Agent for MctsAgent {
                         captured.is_empty(),
                         was_returned,
                     );
+                    
+                    if goddess_captured {
+                        // Game Over!
+                        current_node = current_node.children.get_mut(&best_child_key).unwrap();
+                        path.push(best_child_key); // Just for path length
+                        break; 
+                    }
                 }
                 
                 current_node = current_node.children.get_mut(&best_child_key).unwrap();
@@ -388,26 +398,83 @@ impl Agent for MctsAgent {
 
             // 3. Backpropagation (Backup)
             // Value is from the perspective of the player at current_gs
-            let val = value;
+            let mut val = value;
             let mut backup_node = &mut root;
             backup_node.visit_count += 1.0;
-            backup_node.value_sum += val; // This is a bit simplified
-            
-            // For a 2-player zero-sum game, we flip value at each step
-            // But we need to be careful about whose turn it is.
-            // Let's just store the path of nodes and their "player at state" side.
-            
-            // Simplified: we'll just backpropagate the value. 
-            // If V is 1.0 for the winner, then everyone on the path gets updated.
+            backup_node.value_sum += val;
+
+            // Track whose turn it was to flip values accordingly
+            let mut _last_side = gs.turn;
+            let mut search_gs = gs.clone();
+
             for key in path {
+                // Determine if side changed
+                let prev_side = search_gs.turn;
+                
+                // Simulate move to check for side change
+                if key == "PASS" {
+                    search_gs.turn = search_gs.get_enemy_side();
+                } else if !key.starts_with("COLOR:") {
+                    let parts: Vec<&str> = key.split(':').collect();
+                    let p_id = parts[0];
+                    let target = parts[1];
+                    let was_returned = search_gs.board.pieces[p_id].position == "returned";
+                    let captured = apply_move(&mut search_gs, p_id, target);
+                    let goddess_captured = captured.contains(&PieceType::Goddess);
+                    apply_move_turnover(&mut search_gs, p_id, target, goddess_captured, captured.is_empty(), was_returned);
+                }
+                
+                if search_gs.turn != prev_side {
+                    val = -val;
+                }
+
                 backup_node = backup_node.children.get_mut(&key).unwrap();
                 backup_node.visit_count += 1.0;
                 backup_node.value_sum += val;
+                _last_side = search_gs.turn;
             }
         }
 
         let best_key = self.get_best_move_key(&root).unwrap_or_else(|| "PASS".to_string());
         self.save_search_data(gs, &root);
         self.key_to_move(&best_key)
+    }
+
+    fn record_winner(&self, winner: Option<crate::models::Side>) {
+        let mut buffer = self.game_buffer.lock().unwrap();
+        if buffer.is_empty() {
+            return;
+        }
+
+        let winner_side_str = match winner {
+            Some(crate::models::Side::White) => "White",
+            Some(crate::models::Side::Black) => "Black",
+            None => "draw",
+        };
+
+        // Assign correct rewards based on who won this specific game
+        let mut final_turns = Vec::new();
+        for mut turn in buffer.drain(..) {
+            let state_side = turn.get("turn_side").and_then(|v| v.as_str()).unwrap_or("White");
+            let z = if winner_side_str == "draw" {
+                0.0
+            } else if winner_side_str == state_side {
+                1.0
+            } else {
+                -1.0
+            };
+            if let Some(obj) = turn.as_object_mut() {
+                obj.insert("z".to_string(), serde_json::json!(z));
+            }
+            final_turns.push(turn);
+        }
+
+        let data_dir = "./rust/mcts_temp";
+        let _ = std::fs::create_dir_all(data_dir);
+        let filename = format!("{}/game_{}.json", data_dir, uuid::Uuid::new_v4());
+        
+        if let Ok(json_str) = serde_json::to_string(&final_turns) {
+            let _ = std::fs::write(filename, json_str);
+        }
     }
 }

@@ -10,3 +10,6 @@ pub mod rules_tests;
 
 #[cfg(test)]
 pub mod agent_tests;
+
+#[cfg(test)]
+pub mod mcts_tests;

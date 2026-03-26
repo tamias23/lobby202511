@@ -107,11 +107,9 @@ def load_data(data_dir):
             if pi_target.sum() > 0:
                 pi_target = pi_target / pi_target.sum()
                 
-            # z_target: game outcome. 
-            # Currently Rust code saves state incrementally without final outcome.
-            # You will need to implement a replay buffer that appends proper Z rewards.
-            # Using 0.0 as a dummy value for compilation and dry-run training.
-            z_target = torch.tensor([0.0], dtype=torch.float32)
+            # z_target: game outcome (+1, -1, or 0)
+            z_val = item.get('z', 0.0)
+            z_target = torch.tensor([z_val], dtype=torch.float32)
             
             pyg_data = Data(x=x, edge_index=edge_index, legal_moves=legal_moves, 
                             pi_target=pi_target, z_target=z_target)
@@ -122,6 +120,15 @@ def load_data(data_dir):
 def train(epochs=10):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = MCTS_GAT(in_channels=11, hidden_channels=64).to(device)
+    
+    checkpoint_path = "./rust/model_weights.pth"
+    if os.path.exists(checkpoint_path):
+        print(f"Loading existing weights from {checkpoint_path}...")
+        try:
+            model.load_state_dict(torch.load(checkpoint_path, map_location=device, weights_only=True))
+        except Exception as e:
+            print(f"Warning: Failed to load checkpoint: {e}. Starting with random weights.")
+
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     
     # Policy Loss: Cross Entropy / KL Divergence
@@ -171,6 +178,10 @@ def train(epochs=10):
         if (epoch + 1) % 5 == 0 or epoch == 0:
             print(f"Epoch {epoch+1}/{epochs} | Loss: {total_loss/len(dataset):.4f} "
                   f"(V: {total_value_loss/len(dataset):.4f}, P: {total_policy_loss/len(dataset):.4f})")
+    
+    # Save PyTorch weights for incremental training
+    torch.save(model.state_dict(), checkpoint_path)
+    print(f"PyTorch weights saved to {checkpoint_path}")
               
     # Export to ONNX
     print("Exporting model to ONNX...")

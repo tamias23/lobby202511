@@ -186,6 +186,10 @@ fn run_batch(
             }
         }
 
+        // Notify agents of results for RL feedback
+        white_agent.record_winner(winner);
+        black_agent.record_winner(winner);
+
         total_turns += gs.turn_counter as u64;
         let final_winner = match winner {
             Some(Side::White) => { white_wins += 1; "White" }

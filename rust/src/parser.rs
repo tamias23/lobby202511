@@ -15,6 +15,12 @@ pub fn load_board<P: AsRef<Path>>(path: P) -> Result<BoardMap, Box<dyn Error>> {
     Ok(board)
 }
 
+pub fn parse_board(json: &str) -> Result<BoardMap, Box<dyn Error>> {
+    let board: BoardMap = serde_json::from_str(json)?;
+    validate_board(&board)?;
+    Ok(board)
+}
+
 fn validate_board(board: &BoardMap) -> Result<(), Box<dyn Error>> {
     // Basic structural validation
     if board.polygons.is_empty() {

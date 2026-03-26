@@ -27,6 +27,9 @@ pub trait Agent: Send + Sync {
         all_moves: &std::collections::HashMap<String, Vec<String>>,
         pass_allowed: bool,
     ) -> AgentMove;
+
+    /// Optional: Notify the agent of the final game result for training purposes.
+    fn record_winner(&self, _winner: Option<crate::models::Side>) {}
 }
 
 pub mod random;
