@@ -18,6 +18,42 @@ pub struct GameState {
 }
 
 impl GameState {
+    /// Returns IDs of pieces currently eligible to start a turn-step (color match or sequence lock).
+    pub fn get_eligible_piece_ids(&self) -> Vec<String> {
+        let current_turn = self.turn;
+        let chosen_color = self.color_chosen.get(&current_turn).cloned();
+        
+        let mut eligible = Vec::new();
+        for p in self.board.pieces.values() {
+            if p.side == current_turn && p.position != "graveyard" {
+                let mut can_start = false;
+                if p.position == "returned" {
+                    can_start = true;
+                } else if let Some(ref color) = chosen_color {
+                    if self.board.polygons.get(&p.position).map(|x| &x.color) == Some(color) {
+                        can_start = true;
+                    }
+                }
+                
+                // If a piece is sequence-locked, it is the ONLY one that can move, 
+                // but we handle that restriction here:
+                if let Some(ref locked_id) = self.locked_sequence_piece {
+                    if locked_id == &p.id {
+                        can_start = true;
+                    } else {
+                        // If someone else is locked, this piece cannot start even if on color
+                        can_start = false;
+                    }
+                }
+                
+                if can_start {
+                    eligible.push(p.id.clone());
+                }
+            }
+        }
+        eligible
+    }
+
     pub fn new(board: BoardMap) -> Self {
         let mut occupancy = HashMap::new();
         for (piece_id, piece) in &board.pieces {
@@ -696,28 +732,15 @@ pub fn perform_turn(state: &mut GameState, agent: &dyn Agent) -> (bool, Option<(
     }
 
     let current_turn = state.turn;
-    let chosen_color = state.color_chosen.get(&current_turn).unwrap().clone();
 
     let mut all_moves: HashMap<String, Vec<String>> = HashMap::new();
+    let eligible_ids = state.get_eligible_piece_ids();
+    let chosen_color_opt = state.color_chosen.get(&current_turn).cloned();
 
-    for p in state.board.pieces.values() {
-        if p.side == current_turn && p.position != "graveyard" {
-            let mut can_start = false;
-            if p.position == "returned" {
-                can_start = true;
-            } else if state.board.polygons.get(&p.position).map(|x| &x.color) == Some(&chosen_color) {
-                can_start = true;
-            } else if let Some(locked_id) = &state.locked_sequence_piece {
-                if locked_id == &p.id {
-                    can_start = true;
-                }
-            }
-            if can_start {
-                let targets = get_legal_moves(state, &p.id);
-                if !targets.is_empty() {
-                    all_moves.entry(p.id.clone()).or_default().extend(targets);
-                }
-            }
+    for id in eligible_ids {
+        let targets = get_legal_moves(state, &id);
+        if !targets.is_empty() {
+            all_moves.insert(id, targets);
         }
     }
 
@@ -745,8 +768,21 @@ pub fn perform_turn(state: &mut GameState, agent: &dyn Agent) -> (bool, Option<(
             (false, None)
         }
         AgentMove::Move { piece: chosen_piece, target: chosen_target } => {
+            // Validation: Ensure the agent's choice was actually in the legal set we provided.
+            if !all_moves.contains_key(&chosen_piece) || !all_moves[&chosen_piece].contains(&chosen_target) {
+                eprintln!("CRITICAL ERROR: Agent {:?} chose illegal move {} to {}. Valid moves: {:?}. Forcing turn end.", 
+                    state.turn, chosen_piece, chosen_target, all_moves.keys().collect::<Vec<_>>());
+                // Force turn end to prevent infinite loop or illegal state
+                state.turn_counter += 1;
+                state.turn = state.get_enemy_side();
+                state.color_chosen.clear();
+                state.is_new_turn = true;
+                state.locked_sequence_piece = None;
+                return (false, None);
+            }
+
             let was_returned = state.board.pieces[&chosen_piece].position == "returned";
-            let played_color = state.color_chosen.get(&current_turn).unwrap().clone();
+            let played_color = chosen_color_opt.unwrap_or_default();
             let captured = apply_move(state, &chosen_piece, &chosen_target);
             state.moves_this_turn += 1;
             let goddess_captured = captured.contains(&PieceType::Goddess);

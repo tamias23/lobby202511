@@ -1292,4 +1292,63 @@ mod tests {
         assert_eq!(gs.turn, Side::Black);
         assert!(gs.is_new_turn);
     }
+
+    #[test]
+    fn test_get_eligible_piece_ids_color_match() {
+        let mut board = create_mock_board();
+        add_poly(&mut board, "p1", "blue", vec![]);
+        add_poly(&mut board, "p2", "yellow", vec![]);
+        add_piece(&mut board, "w_soldier_blue", "p1", Side::White, PieceType::Soldier);
+        add_piece(&mut board, "w_soldier_yellow", "p2", Side::White, PieceType::Soldier);
+        
+        let mut gs = GameState::new(board);
+        gs.turn = Side::White;
+        gs.color_chosen.insert(Side::White, "blue".to_string());
+        
+        let eligible = gs.get_eligible_piece_ids();
+        assert!(eligible.contains(&"w_soldier_blue".to_string()));
+        assert!(!eligible.contains(&"w_soldier_yellow".to_string()));
+    }
+
+    #[test]
+    fn test_get_eligible_piece_ids_sequence_lock() {
+        let mut board = create_mock_board();
+        add_poly(&mut board, "p1", "blue", vec![]);
+        add_poly(&mut board, "p2", "blue", vec![]);
+        add_piece(&mut board, "w_soldier_1", "p1", Side::White, PieceType::Soldier);
+        add_piece(&mut board, "w_soldier_2", "p2", Side::White, PieceType::Soldier);
+        
+        let mut gs = GameState::new(board);
+        gs.turn = Side::White;
+        gs.color_chosen.insert(Side::White, "blue".to_string());
+        gs.locked_sequence_piece = Some("w_soldier_1".to_string());
+        
+        let eligible = gs.get_eligible_piece_ids();
+        assert!(eligible.contains(&"w_soldier_1".to_string()));
+        assert!(!eligible.contains(&"w_soldier_2".to_string()), "Only the locked piece should be eligible");
+    }
+
+    #[test]
+    fn test_berserker_lands_on_different_color_clears_lock() {
+        let mut board = create_mock_board();
+        add_poly(&mut board, "p1", "blue", vec!["p2"]);
+        add_poly(&mut board, "p2", "yellow", vec!["p1"]);
+        add_piece(&mut board, "w_berserker", "p1", Side::White, PieceType::Berserker);
+        
+        let mut gs = GameState::new(board);
+        gs.turn = Side::White;
+        gs.color_chosen.insert(Side::White, "blue".to_string());
+        gs.is_new_turn = false;
+
+        let captured = apply_move(&mut gs, "w_berserker", "p2");
+        apply_move_turnover(&mut gs, "w_berserker", "p2", false, captured.is_empty(), false);
+        
+        // Landed on yellow (not blue), lock should be None
+        assert_eq!(gs.locked_sequence_piece, None);
+        // Turn should NOT have ended
+        assert_eq!(gs.turn, Side::White);
+        // But Berserker should NO LONGER be eligible because it's on yellow
+        let eligible = gs.get_eligible_piece_ids();
+        assert!(!eligible.contains(&"w_berserker".to_string()));
+    }
 }

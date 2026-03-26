@@ -134,13 +134,12 @@ impl MctsAgent {
              // we'd need a different representation. For now, uniform priors for color choice.
         } else {
             let mut all_moves = HashMap::new();
-            for p in gs.board.pieces.values() {
-                if p.side == gs.turn && p.position != "graveyard" {
-                     let targets = get_legal_moves(gs, &p.id);
-                     if !targets.is_empty() {
-                         all_moves.insert(p.id.clone(), targets);
-                     }
-                }
+            let eligible_ids = gs.get_eligible_piece_ids();
+            for id in eligible_ids {
+                 let targets = get_legal_moves(gs, &id);
+                 if !targets.is_empty() {
+                     all_moves.insert(id, targets);
+                 }
             }
             for (p_id, targets) in all_moves {
                 let source_pos = &gs.board.pieces[&p_id].position;
@@ -212,13 +211,12 @@ impl MctsAgent {
                 let mut moves_list = vec![];
                 
                 let mut all_moves = HashMap::new();
-                for p in gs.board.pieces.values() {
-                    if p.side == gs.turn && p.position != "graveyard" {
-                         let targets = get_legal_moves(gs, &p.id);
-                         if !targets.is_empty() {
-                             all_moves.insert(p.id.clone(), targets);
-                         }
-                    }
+                let eligible_ids = gs.get_eligible_piece_ids();
+                for id in eligible_ids {
+                     let targets = get_legal_moves(gs, &id);
+                     if !targets.is_empty() {
+                         all_moves.insert(id, targets);
+                     }
                 }
 
                 for (p_id, targets) in all_moves {
