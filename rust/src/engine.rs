@@ -797,9 +797,20 @@ pub fn perform_turn(state: &mut GameState, agent: &dyn Agent) -> (bool, Option<(
 
 /// Abstracted Turnover Application explicitly processing sequence breaking & logic formally after an active application.
 pub fn apply_move_turnover(state: &mut GameState, chosen_piece: &str, chosen_target: &str, goddess_captured: bool, captured_is_empty: bool, was_returned: bool) -> bool {
-    let target_color = state.board.polygons.get(chosen_target).unwrap().color.clone();
+    let target_color = state.board.polygons.get(chosen_target).map(|p| p.color.clone()).unwrap_or_else(|| {
+        eprintln!("ERROR: Poly ID '{}' not found in polygons map!", chosen_target);
+        "".to_string()
+    });
     let current_turn = state.turn;
-    let chosen_color = state.color_chosen.get(&current_turn).unwrap().clone();
+    let chosen_color = match state.color_chosen.get(&current_turn) {
+        Some(c) => c.clone(),
+        None => {
+            eprintln!("CRITICAL ERROR: No chosen color for side {:?} during Turnover logic evaluation! Turn: {}, Moves this turn: {}, is_new_turn: {}", 
+                current_turn, state.turn_counter, state.moves_this_turn, state.is_new_turn);
+            // Default to empty string to prevent panic, though this indicates an engine bug
+            "".to_string()
+        }
+    };
     
     let piece_type = state.board.pieces[chosen_piece].piece_type.clone();
     let is_heroe = piece_type == PieceType::Heroe;

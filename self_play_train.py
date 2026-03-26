@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # Parse CLI arguments
 parser = argparse.ArgumentParser(description="AlphaZero-style Self-Play Training Loop for MCTS")
-parser.add_argument("--duration", type=int, default=3600, help="Total duration to run the loop in seconds (default: 30mn)")
+parser.add_argument("--duration", type=int, default=30000, help="Total duration to run the loop in seconds (default: 30mn)")
 parser.add_argument("--games_per_batch", type=int, default=80, help="Total number of games to play per training step")
 parser.add_argument("--max_concurrency", type=int, default=12, help="Maximum number of parallel games at once")
 parser.add_argument("--turns_per_game", type=int, default=600, help="Maximum turns per self-play game")
@@ -80,16 +80,30 @@ async def run_self_play_game(sem, board_path):
             stderr=subprocess.PIPE
         )
         stdout, stderr = await proc.communicate()
-        # Data is automatically saved to rust/mcts_temp by the binary
-
+        stdout_str = stdout.decode(errors='ignore')
+        
         # Parse GAMEOVER telemetry
         game_stats = None
-        for line in stdout.decode().splitlines():
-            if line.startswith("GAMEOVER: "):
+        for line in stdout_str.splitlines():
+            if "GAMEOVER: " in line:
                 try:
-                    game_stats = json.loads(line[10:])
-                except:
-                    pass
+                    start_idx = line.find("GAMEOVER: ") + 10
+                    stats_json = line[start_idx:].strip()
+                    game_stats = json.loads(stats_json)
+                    break
+                except Exception as e:
+                    logger.error(f"  Failed to parse GAMEOVER: {e} | Line: {line}")
+        
+        if game_stats is None:
+            # Report failure if no telemetry was found (likely a panic or crash)
+            exit_code = await proc.wait()
+            stderr_str = stderr.decode(errors='ignore')
+            logger.error(f"  Game failed (exit {exit_code}). No GAMEOVER telemetry found.")
+            if stderr_str:
+                # Log last few lines of stderr which usually contain the panic message
+                panic_msg = "\n".join(stderr_str.strip().splitlines()[-5:])
+                logger.error(f"  Panic/Error trace:\n{panic_msg}")
+            
         return game_stats
 
 def cleanup_stale_data(data_dir, max_files):
