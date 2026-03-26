@@ -33,6 +33,21 @@ cd ./rust ; cargo run --bin rust -- /home/mat/Bureau/lobby202511/games/data/nt50
 --parquet /home/mat/Bureau/lobby202511/parquet/swiss01.parquet \
 --crosstable /home/mat/Bureau/lobby202511/crosstable_swiss01.csv 
 
+/home/mat/Bureau/spyder-env/bin/python3 self_play_train.py --duration 1800
+
+cargo run --release --bin rust -- /home/mat/Bureau/lobby202511/games/data/nt502220024101997_fa941cb81820c20d6edf347a93a60ef3_board.json \
+--batch 10 \
+--max-turns 600 \
+--white mcts \
+--black mcts \
+--mcts-budget 100 \
+--white-name "mcts1" \
+--black-name "mcts2" \
+--store-parquet /home/mat/Bureau/lobby202511/parquet
+
+cargo run --release --bin rust -- /home/mat/Bureau/lobby202511/games/data/nt502220024101997_fa941cb81820c20d6edf347a93a60ef3_board.json --batch 10 --max-turns 600 --white mcts --black mcts --white-name "mcts1" --black-name "mcts2" --store-parquet /home/mat/Bureau/lobby202511/parquet --mcts-budget 100
+
+
 =================================================================================
 
 
@@ -60,6 +75,20 @@ The weight vector is a parameter of greedy_bob. This will enable us to do grid s
 
 =================================================================================
 
+I have created a 2 player abstract game similar to chess or go. It plays with pieces over a graph. For each game, the graph is different (95-100 nodes, each node having 2-5 neighbours, 25 pieces each). I was thinking to implement MCTS and have an agent learn to play. The evaluation function would be a Graph Attention network that would output move probabilities and current position expected outcome. My issue is how to have the move probabilities outputs map to the real possible moves ? This is an issue as my graph is always a new graph every game I play. Any idea ?
+
+I would like to create a new agent called mcts, implemented in mcts.rs.
+This agent will use Monte Carlo Tree Search for finding the next move to be played. There will be a time budget parameter, in ms (for example 1000ms).
+The evaluation function will have to be learned : I was thinking about a Graph Attention network (a small one, as I do not have a of lot computing power at my disposition). What do you think ? The output of the evaluation function would be the expected result of the current position (0 for a loss, 1 for a draw, and 3 for a win) + all the move probabilities (to guide the MCTS search). But the graph is different every game (the board is a new board every game) : can I use a Relational Decoder ?
+To learn this evaluation function, I was thinking about self-play reinforcement learning : the agent would play against itself, using MCTS (no roll-outs, like AlphaZero : when MCTS reaches a leaf node, it stops immediately and asks the neural network's Value Head to evaluate the position) during the self-play phase.
+please have a look at ./example_MCTS_GAT.py and propose me an implementation plan (can we do this learning in Rust ? Do we have to use Python ? Please advise)
+Finally, given that I do not have a lot of computing power at my disposition, is it prefable to try to implement Alpha-Beta search with NNUE ?
+
+
+
+
+
+
 =================================================================================
 
 Injecting the Initial Board State into Parquet recordings
@@ -70,4 +99,20 @@ main.rs
 Examining recorder.rs to determine how to serialize the random initial board state (setup_random_board) into the Parquet output so the Replay viewer can deterministically reproduce the first frame
 Adding initial_state column to the Parquet schema in recorder.rs and main.rs to snapshot the piece positions deterministically
 Modifying rust/src/main.rs to extract the PieceID -> PolygonID map from Turn 0 immediately after setup_random_board completes
+
+=================================================================================
+=================================================================================
+=================================================================================
+
+=================================================================================
+=================================================================================
+=================================================================================
+
+=================================================================================
+=================================================================================
+=================================================================================
+
+=================================================================================
+=================================================================================
+=================================================================================
 

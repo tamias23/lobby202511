@@ -22,3 +22,13 @@ cargo run --bin rust -- "$BOARD_PATH" --batch "$N_GAMES" --max-turns "$MAX_TURNS
   --greedy-weights-black "-6.225,-19.605,-11.096,-0.924,-7.244,8.348,-10.21,-13.914,6.621,13.479,18.904,-17.447,15.079,19.088,15.73,17.442,-17.124,12.013,-3.166,-1.364,19.634,16.456,-11.362,19.71,-8.278,-5.211" \
   --store-parquet /home/mat/Bureau/lobby202511/parquet
 
+# cargo run --bin rust -- "$BOARD_PATH" --batch "$N_GAMES" --max-turns "$MAX_TURNS" \
+#   --white mcts \
+#   --black mcts \
+#   --mcts-budget 10
+#   --white-name "mcts1" \
+#   --black-name "mcts2" \
+#   --store-parquet /home/mat/Bureau/lobby202511/parquet
+
+
+
