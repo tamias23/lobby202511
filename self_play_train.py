@@ -30,6 +30,7 @@ parser.add_argument("--max_concurrency", type=int, default=12, help="Maximum num
 parser.add_argument("--turns_per_game", type=int, default=600, help="Maximum turns per self-play game")
 parser.add_argument("--mcts_budget", type=int, default=10, help="MCTS time budget in ms per move")
 parser.add_argument("--train_epochs", type=int, default=3, help="Number of training epochs per batch")
+parser.add_argument("--train_batch_size", type=int, default=64, help="Batch size for training the GAT model")
 parser.add_argument("--max_data_files", type=int, default=160, help="Maximum number of game JSON files to keep in mcts_temp")
 args = parser.parse_args()
 
@@ -57,22 +58,19 @@ def archive_data(data_dir, archive_dir, iteration):
         except:
             pass
 
-async def run_self_play_game(sem, board_path):
+async def run_self_play_games(sem, board_path, n_games):
     async with sem:
-        # Run a single game (batch 1) and generate data
+        # Run multiple games in one process to reduce model loading overhead
         cmd = [
             str(RUST_BIN),
             board_path,
-            "--batch", "1",
+            "--batch", str(n_games),
             "--max-turns", str(args.turns_per_game),
             "--white", "mcts",
             "--black", "mcts",
             "--mcts-budget", str(args.mcts_budget),
             "--mcts-data-dir", "./rust/mcts_temp"
         ]
-        
-        # Note: In a real AlphaZero, you would pass the current model path.
-        # Currently, our MCTS agent in Rust is hardcoded to look forrust/model.onnx
         
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -82,29 +80,28 @@ async def run_self_play_game(sem, board_path):
         stdout, stderr = await proc.communicate()
         stdout_str = stdout.decode(errors='ignore')
         
-        # Parse GAMEOVER telemetry
-        game_stats = None
+        # Parse all GAMEOVER telemetry lines
+        batch_stats = []
         for line in stdout_str.splitlines():
             if "GAMEOVER: " in line:
                 try:
                     start_idx = line.find("GAMEOVER: ") + 10
                     stats_json = line[start_idx:].strip()
                     game_stats = json.loads(stats_json)
-                    break
+                    batch_stats.append(game_stats)
                 except Exception as e:
                     logger.error(f"  Failed to parse GAMEOVER: {e} | Line: {line}")
         
-        if game_stats is None:
-            # Report failure if no telemetry was found (likely a panic or crash)
+        if not batch_stats:
+            # Report failure if no telemetry was found
             exit_code = await proc.wait()
             stderr_str = stderr.decode(errors='ignore')
-            logger.error(f"  Game failed (exit {exit_code}). No GAMEOVER telemetry found.")
+            logger.error(f"  Games failed (exit {exit_code}). No GAMEOVER telemetry found.")
             if stderr_str:
-                # Log last few lines of stderr which usually contain the panic message
                 panic_msg = "\n".join(stderr_str.strip().splitlines()[-5:])
                 logger.error(f"  Panic/Error trace:\n{panic_msg}")
             
-        return game_stats
+        return batch_stats
 
 def cleanup_stale_data(data_dir, max_files):
     files = sorted(glob.glob(os.path.join(data_dir, "*.json")), key=os.path.getmtime)
@@ -144,14 +141,25 @@ async def main():
             logger.info(f"\n--- Iteration {iteration} | Remaining: {remaining/60:.1f}m ---")
             
             # 1. Parallel Self-Play
-            logger.info(f"  Generating {args.games_per_batch} games (max {args.max_concurrency} at once)...")
+            games_per_proc = max(1, args.games_per_batch // args.max_concurrency)
+            num_procs = (args.games_per_batch + games_per_proc - 1) // games_per_proc
+            
+            logger.info(f"  Generating {args.games_per_batch} games using {num_procs} processes ({games_per_proc} games per proc)...")
             sem = asyncio.Semaphore(args.max_concurrency)
             tasks = []
-            for _ in range(args.games_per_batch):
-                board = random.choice(board_files)
-                tasks.append(run_self_play_game(sem, board))
             
-            results = await asyncio.gather(*tasks)
+            remaining_games = args.games_per_batch
+            for _ in range(num_procs):
+                games_to_run = min(remaining_games, games_per_proc)
+                if games_to_run <= 0: break
+                
+                board = random.choice(board_files)
+                tasks.append(run_self_play_games(sem, board, games_to_run))
+                remaining_games -= games_to_run
+            
+            results_lists = await asyncio.gather(*tasks)
+            # Flatten results
+            results = [stats for sublist in results_lists for stats in sublist]
             
             # Aggregate stats
             valid_stats = [r for r in results if r]
@@ -171,7 +179,12 @@ async def main():
             logger.info("  Training GAT model on collected data...")
             try:
                 python_bin = ".venv/bin/python" if os.path.exists(".venv") else "python3"
-                subprocess.run([python_bin, "train_mcts.py", "--epochs", str(args.train_epochs)], check=True)
+                cmd = [
+                    python_bin, "train_mcts.py", 
+                    "--epochs", str(args.train_epochs),
+                    "--batch-size", str(args.train_batch_size)
+                ]
+                subprocess.run(cmd, check=True)
             except Exception as e:
                 logger.error(f"  Training failed: {e}")
             

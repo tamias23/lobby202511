@@ -132,7 +132,7 @@ def load_data(data_dir):
             
     return dataset
 
-def train(epochs=10, batch_size=1):
+def train(epochs=10, batch_size=64):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = MCTS_GAT(in_channels=11, hidden_channels=64).to(device)
     
@@ -234,6 +234,6 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=10)
-    parser.add_argument("--batch-size", type=int, default=1)
+    parser.add_argument("--batch-size", type=int, default=64)
     args = parser.parse_args()
     train(epochs=args.epochs, batch_size=args.batch_size)

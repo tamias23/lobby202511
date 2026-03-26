@@ -4,3 +4,14 @@ games/data/rust
 rust/target/
 ./javascript/node_modules
 ./node_modules
+*.log
+*.onnx
+*.onnx.data
+*.pth
+rust/mcts_temp/
+rust/mcts_old/
+parquet/
+results/
+err.txt
+out.txt
+output.txt
