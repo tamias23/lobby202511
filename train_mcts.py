@@ -73,10 +73,13 @@ class ValueHead(nn.Module):
         return expected_value
 
 class MCTS_GAT(nn.Module):
-    def __init__(self, in_channels=12, hidden_channels=64):
+    def __init__(self, in_channels=12, hidden_channels=128):
         super(MCTS_GAT, self).__init__()
         self.conv1 = GATConv(in_channels, hidden_channels, add_self_loops=False)
         self.conv2 = GATConv(hidden_channels, hidden_channels, add_self_loops=False)
+        self.conv3 = GATConv(hidden_channels, hidden_channels, add_self_loops=False)
+        self.conv4 = GATConv(hidden_channels, hidden_channels, add_self_loops=False)
+        self.conv5 = GATConv(hidden_channels, hidden_channels, add_self_loops=False)
         self.policy_head = RelationalPolicyHead(hidden_channels)
         self.value_head = ValueHead(hidden_channels)
         
@@ -84,10 +87,11 @@ class MCTS_GAT(nn.Module):
         if batch is None:
             batch = torch.zeros(x.size(0), dtype=torch.long, device=x.device)
             
-        node_embeddings = self.conv1(x, edge_index)
-        node_embeddings = torch.relu(node_embeddings)
-        node_embeddings = self.conv2(node_embeddings, edge_index)
-        node_embeddings = torch.relu(node_embeddings)
+        node_embeddings = torch.relu(self.conv1(x, edge_index))
+        node_embeddings = torch.relu(self.conv2(node_embeddings, edge_index))
+        node_embeddings = torch.relu(self.conv3(node_embeddings, edge_index))
+        node_embeddings = torch.relu(self.conv4(node_embeddings, edge_index))
+        node_embeddings = torch.relu(self.conv5(node_embeddings, edge_index))
         
         value = self.value_head(node_embeddings, batch)
         probs = self.policy_head(node_embeddings, legal_moves, batch)
