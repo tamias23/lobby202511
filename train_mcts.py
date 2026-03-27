@@ -1,6 +1,8 @@
 import os
 import glob
 import json
+import warnings
+import logging
 import torch
 import torch.nn as nn
 from torch_geometric.data import Data
@@ -231,6 +233,12 @@ def train(epochs=10, batch_size=64):
     print(f"ONNX model saved successfully to {onnx_path}!")
 
 if __name__ == "__main__":
+    # Suppress noisy exporter warnings and diagnostics
+    warnings.filterwarnings("ignore", category=UserWarning)
+    logging.getLogger("torch.onnx").setLevel(logging.ERROR)
+    logging.getLogger("torch._dynamo").setLevel(logging.ERROR)
+    os.environ["TORCH_LOGS"] = "-dynamic" # Quiet dynamo symbolic shapes
+    
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=10)

@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # Parse CLI arguments
 parser = argparse.ArgumentParser(description="AlphaZero-style Self-Play Training Loop for MCTS")
-parser.add_argument("--duration", type=int, default=30000, help="Total duration to run the loop in seconds (default: 30mn)")
+parser.add_argument("--duration", type=int, default=3600, help="Total duration to run the loop in seconds (default: 30mn)")
 parser.add_argument("--games_per_batch", type=int, default=120, help="Total number of games to play per training step")
 parser.add_argument("--max_concurrency", type=int, default=12, help="Maximum number of parallel games at once")
 parser.add_argument("--turns_per_game", type=int, default=600, help="Maximum turns per self-play game")

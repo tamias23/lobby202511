@@ -22,15 +22,17 @@ struct Node {
     value_sum: f64,
     prior_prob: f64,
     children: HashMap<String, Node>, // move_key -> Node
+    turn: Side, // Whose perspective this node stores
 }
 
 impl Node {
-    pub(crate) fn new(prior_prob: f64) -> Self {
+    pub(crate) fn new(prior_prob: f64, turn: Side) -> Self {
         Self {
             visit_count: 0.0,
             value_sum: 0.0,
             prior_prob,
             children: HashMap::new(),
+            turn,
         }
     }
 
@@ -65,10 +67,15 @@ impl MctsAgent {
         }
     }
 
-    fn ucb_score(&self, parent_visits: f64, child: &Node, c_puct: f64) -> f64 {
-        // Child Q is from child's perspective, so we negate it for the parent
-        let q_value = -child.q_value();
-        let u_value = c_puct * child.prior_prob * (parent_visits.sqrt() / (1.0 + child.visit_count));
+    fn ucb_score(&self, parent: &Node, child: &Node, c_puct: f64) -> f64 {
+        // Child Q is from child's perspective. 
+        // We only negate it if the turn flipped between parent and child.
+        let q_value = if child.turn == parent.turn {
+            child.q_value()
+        } else {
+            -child.q_value()
+        };
+        let u_value = c_puct * child.prior_prob * (parent.visit_count.sqrt() / (1.0 + child.visit_count));
         q_value + u_value
     }
 
@@ -96,7 +103,7 @@ impl MctsAgent {
             }
             if let Some(p_id) = gs.occupancy.get(poly_id) {
                 let p = &gs.board.pieces[p_id];
-                x[[i, 0]] = if p.side == Side::White { 1.0 } else { -1.0 };
+                x[[i, 0]] = if p.side == gs.turn { 1.0 } else { -1.0 };
                 x[[i, 9]] = 1.0; // IsOccupied
                 
                 let type_idx = match p.piece_type {
@@ -243,6 +250,109 @@ impl MctsAgent {
         }
     }
 
+    fn run_mcts(&self, gs: &GameState) -> Node {
+        let start_time = Instant::now();
+        let budget = Duration::from_millis(self.time_budget_ms);
+
+        let mut root = Node::new(1.0, gs.turn);
+        let c_puct = 1.0;
+
+        while start_time.elapsed() < budget {
+            let mut current_gs = gs.clone();
+            
+            // 1. Selection & Expansion
+            let mut path = Vec::new(); // move_key
+            let mut current_node = &mut root;
+            let mut terminal_value = None;
+
+            while current_node.is_expanded() {
+                let best_child_key = {
+                    let parent = &current_node;
+                    if let Some(key) = parent.children.iter()
+                        .max_by(|a, b| {
+                            let score_a = self.ucb_score(parent, a.1, c_puct);
+                            let score_b = self.ucb_score(parent, b.1, c_puct);
+                            score_a.partial_cmp(&score_b).unwrap()
+                        })
+                        .map(|(k, _)| k.clone()) 
+                    {
+                        key
+                    } else {
+                        break;
+                    }
+                };
+
+                // Apply move to state
+                let prev_turn = current_gs.turn;
+                if best_child_key == "PASS" {
+                    current_gs.turn_counter += 1;
+                    current_gs.turn = current_gs.get_enemy_side();
+                    current_gs.color_chosen.clear();
+                    current_gs.is_new_turn = true;
+                    current_gs.locked_sequence_piece = None;
+                    current_gs.heroe_take_counter = 0;
+                } else if best_child_key.starts_with("COLOR:") {
+                    let color = &best_child_key[6..];
+                    current_gs.color_chosen.insert(current_gs.turn, color.to_string());
+                    current_gs.is_new_turn = false;
+                } else {
+                    let parts: Vec<&str> = best_child_key.split(':').collect();
+                    if parts.len() >= 2 {
+                        let p_id = parts[0];
+                        let target = parts[1];
+                        if current_gs.board.pieces.contains_key(p_id) {
+                            let was_returned = current_gs.board.pieces[p_id].position == "returned";
+                            let captured = apply_move(&mut current_gs, p_id, target);
+                            let goddess_captured = captured.contains(&PieceType::Goddess);
+                            apply_move_turnover(&mut current_gs, p_id, target, goddess_captured, captured.is_empty(), was_returned);
+                            
+                            if goddess_captured {
+                                // Important: We assign reward relative to current_gs.turn at the leaf.
+                                terminal_value = Some(if current_gs.turn == prev_turn { 1.0 } else { -1.0 }); 
+                            }
+                        }
+                    }
+                }
+                
+                path.push(best_child_key.clone());
+                current_node = current_node.children.get_mut(&best_child_key).unwrap();
+                current_node.turn = current_gs.turn;
+                if terminal_value.is_some() { break; }
+            }
+
+            // 2. Evaluation & Expansion
+            let v_leaf = if let Some(val) = terminal_value {
+                val
+            } else {
+                let (val, priors) = self.evaluate(&current_gs);
+                if !current_node.is_expanded() {
+                    for (m_key, prob) in priors {
+                        current_node.children.insert(m_key, Node::new(prob, current_gs.turn));
+                    }
+                }
+                val 
+            };
+
+            // 3. Backpropagation
+            let mut curr_v = if root.turn == current_gs.turn { v_leaf } else { -v_leaf };
+            
+            let mut node = &mut root;
+            node.visit_count += 1.0;
+            node.value_sum += curr_v;
+
+            for key in &path {
+                let prev_turn = node.turn;
+                node = node.children.get_mut(key).unwrap();
+                if node.turn != prev_turn {
+                    curr_v = -curr_v;
+                }
+                node.visit_count += 1.0;
+                node.value_sum += curr_v;
+            }
+        }
+        root
+    }
+
     fn save_search_data(&self, gs: &GameState, root: &Node) {
         let (x, edge_index, legal_moves, move_keys) = self.get_graph_data(gs);
         
@@ -304,22 +414,18 @@ impl Agent for MctsAgent {
     fn choose_color<'a>(&self, gs: &GameState, valid_colors: &'a [String]) -> &'a String {
         if valid_colors.len() == 1 { return &valid_colors[0]; }
         
-        let mut best_color = &valid_colors[0];
-        let mut max_value = -f64::INFINITY;
+        let root = self.run_mcts(gs);
+        let best_key = self.get_best_move_key(&root).unwrap_or_else(|| format!("COLOR:{}", valid_colors[0]));
+        self.save_search_data(gs, &root);
         
-        for color in valid_colors {
-            let mut clone_gs = gs.clone();
-            clone_gs.color_chosen.insert(gs.turn, color.clone());
-            clone_gs.is_new_turn = false;
-            
-            // Run a shallow MCTS or just evaluate the state
-            let (val, _) = self.evaluate(&clone_gs);
-            if val > max_value {
-                max_value = val;
-                best_color = color;
-            }
-        }
-        best_color
+        let chosen_color = if best_key.starts_with("COLOR:") {
+             best_key[6..].to_string()
+        } else {
+            valid_colors[0].clone()
+        };
+
+        // Find the matching reference in valid_colors
+        valid_colors.iter().find(|&c| c == &chosen_color).unwrap_or(&valid_colors[0])
     }
 
     fn choose_move(
@@ -328,104 +434,7 @@ impl Agent for MctsAgent {
         _all_moves: &HashMap<String, Vec<String>>,
         _pass_allowed: bool,
     ) -> AgentMove {
-        let start_time = Instant::now();
-        let budget = Duration::from_millis(self.time_budget_ms);
-
-        let mut root = Node::new(1.0);
-        let c_puct = 1.0;
-
-        while start_time.elapsed() < budget {
-            let mut current_gs = gs.clone();
-            
-            // 1. Selection & Expansion
-            let mut path = Vec::new(); // (move_key, turn_flipped_bool)
-            let mut current_node = &mut root;
-            let mut terminal_value = None;
-            let mut total_flips = 0;
-
-            while current_node.is_expanded() {
-                let parent_visits = current_node.visit_count;
-                let best_child_key = if let Some(key) = current_node.children.iter()
-                    .max_by(|a, b| {
-                        let score_a = self.ucb_score(parent_visits, a.1, c_puct);
-                        let score_b = self.ucb_score(parent_visits, b.1, c_puct);
-                        score_a.partial_cmp(&score_b).unwrap()
-                    })
-                    .map(|(k, _)| k.clone()) 
-                {
-                    key
-                } else {
-                    break;
-                };
-
-                // Apply move to state
-                let prev_turn = current_gs.turn;
-                if best_child_key == "PASS" {
-                    current_gs.turn_counter += 1;
-                    current_gs.turn = current_gs.get_enemy_side();
-                    current_gs.color_chosen.clear();
-                    current_gs.is_new_turn = true;
-                    current_gs.locked_sequence_piece = None;
-                    current_gs.heroe_take_counter = 0;
-                } else if best_child_key.starts_with("COLOR:") {
-                    let color = &best_child_key[6..];
-                    current_gs.color_chosen.insert(current_gs.turn, color.to_string());
-                    current_gs.is_new_turn = false;
-                } else {
-                    let parts: Vec<&str> = best_child_key.split(':').collect();
-                    if parts.len() >= 2 {
-                        let p_id = parts[0];
-                        let target = parts[1];
-                        if current_gs.board.pieces.contains_key(p_id) {
-                            let was_returned = current_gs.board.pieces[p_id].position == "returned";
-                            let captured = apply_move(&mut current_gs, p_id, target);
-                            let goddess_captured = captured.contains(&PieceType::Goddess);
-                            apply_move_turnover(&mut current_gs, p_id, target, goddess_captured, captured.is_empty(), was_returned);
-                            
-                            if goddess_captured {
-                                terminal_value = Some(1.0); 
-                            }
-                        }
-                    }
-                }
-                
-                let flipped = current_gs.turn != prev_turn;
-                if flipped { total_flips += 1; }
-                path.push((best_child_key.clone(), flipped));
-                
-                current_node = current_node.children.get_mut(&best_child_key).unwrap();
-                if terminal_value.is_some() { break; }
-            }
-
-            // 2. Evaluation & Expansion
-            let v_leaf = if let Some(val) = terminal_value {
-                val // Value for player who just moved
-            } else {
-                let (val, priors) = self.evaluate(&current_gs);
-                if !current_node.is_expanded() {
-                    for (m_key, prob) in priors {
-                        current_node.children.insert(m_key, Node::new(prob));
-                    }
-                }
-                val // Value for current_gs.turn
-            };
-
-            // 3. Backpropagation (Safe Loop)
-            let mut curr_v = if total_flips % 2 == 1 { -v_leaf } else { v_leaf };
-            let mut node = &mut root;
-            node.visit_count += 1.0;
-            node.value_sum += curr_v;
-
-            for (key, flipped) in path {
-                if flipped {
-                    curr_v = -curr_v;
-                }
-                node = node.children.get_mut(&key).unwrap();
-                node.visit_count += 1.0;
-                node.value_sum += curr_v;
-            }
-        }
-
+        let root = self.run_mcts(gs);
         let best_key = self.get_best_move_key(&root).unwrap_or_else(|| "PASS".to_string());
         self.save_search_data(gs, &root);
         self.key_to_move(&best_key)
@@ -511,10 +520,10 @@ mod tests {
     #[test]
     fn test_ucb_score_sanity() {
         let agent = MctsAgent::new(10, None, "mcts_temp".to_string());
-        let parent_visits: f64 = 1.0;
-        let c_puct = 1.0;
-        let score1 = agent.ucb_score(parent_visits, &Node::new(0.9), c_puct);
-        let score2 = agent.ucb_score(parent_visits, &Node::new(0.1), c_puct);
+        let mut parent = Node::new(1.0, Side::White);
+        parent.visit_count = 1.0;
+        let score1 = agent.ucb_score(&parent, &Node::new(0.9, Side::White), 1.0);
+        let score2 = agent.ucb_score(&parent, &Node::new(0.1, Side::White), 1.0);
         assert!(score1 > score2);
     }
 
@@ -529,5 +538,15 @@ mod tests {
             AgentMove::Move { .. } => {},
             _ => panic!("Expected move"),
         }
+    }
+
+    #[test]
+    fn test_choose_color_mcts() {
+        let mut gs = setup_test_board();
+        gs.is_new_turn = true;
+        let agent = MctsAgent::new(50, None, "mcts_temp".to_string());
+        let valid_colors = vec!["Blue".to_string(), "Yellow".to_string()];
+        let c = agent.choose_color(&gs, &valid_colors);
+        assert!(valid_colors.contains(c));
     }
 }
