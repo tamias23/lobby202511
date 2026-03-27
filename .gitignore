@@ -8,7 +8,7 @@ rust/target/
 *.onnx
 *.onnx.data
 *.pth
-rust/mcts_temp/
+**/mcts_temp/
 rust/mcts_old/
 parquet/
 results/
