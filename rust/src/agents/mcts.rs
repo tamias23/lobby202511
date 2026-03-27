@@ -90,18 +90,68 @@ impl MctsAgent {
             idx_to_node.push(poly_id.clone());
         }
         
+        // Add 16 static Stock nodes (8 PieceTypes * 2 Sides)
+        let sides = vec![Side::White, Side::Black];
+        let types = vec![
+            PieceType::Goddess, PieceType::Heroe, PieceType::Mage, PieceType::Bishop,
+            PieceType::Soldier, PieceType::Siren, PieceType::Ghoul, PieceType::Berserker
+        ];
+        for side in &sides {
+            for p_type in &types {
+                let stock_id = format!("STOCK_{:?}_{:?}", side, p_type);
+                node_to_idx.insert(stock_id.clone(), idx_to_node.len());
+                idx_to_node.push(stock_id);
+            }
+        }
+        
         let n = idx_to_node.len();
-        let num_features = 11; // Side, PieceType (8 types one-hot), IsOccupied, IsActiveColor
+        let num_features = 12; // Side, PieceType (1-8), IsOccupied, IsActiveColor, IsStock (11)
         let mut x = Array2::<f32>::zeros((n, num_features));
         
         let active_color = gs.color_chosen.get(&gs.turn);
 
-        for (i, poly_id) in idx_to_node.iter().enumerate() {
-            let poly = &gs.board.polygons[poly_id];
+        for (i, node_id) in idx_to_node.iter().enumerate() {
+            if node_id.starts_with("STOCK_") {
+                x[[i, 11]] = 1.0; // IsStock
+                
+                // Parse side and type from STOCK_Side_Type
+                let parts: Vec<&str> = node_id.split('_').collect();
+                let side = if parts[1] == "White" { Side::White } else { Side::Black };
+                x[[i, 0]] = if side == gs.turn { 1.0 } else { -1.0 };
+                
+                let p_type = match parts[2] {
+                    "Goddess" => PieceType::Goddess,
+                    "Heroe" => PieceType::Heroe,
+                    "Mage" => PieceType::Mage,
+                    "Bishop" => PieceType::Bishop,
+                    "Soldier" => PieceType::Soldier,
+                    "Siren" => PieceType::Siren,
+                    "Ghoul" => PieceType::Ghoul,
+                    "Berserker" => PieceType::Berserker,
+                    _ => PieceType::Soldier,
+                };
+                let type_idx = match p_type {
+                    PieceType::Goddess => 1, PieceType::Heroe => 2, PieceType::Mage => 3,
+                    PieceType::Bishop => 4, PieceType::Soldier => 5, PieceType::Siren => 6,
+                    PieceType::Ghoul => 7, PieceType::Berserker => 8,
+                };
+                x[[i, type_idx]] = 1.0;
+
+                // IsOccupied (9) if at least one piece of this type is currently in stock
+                let has_in_stock = gs.board.pieces.values().any(|p| 
+                    p.side == side && p.piece_type == p_type && p.position == "returned"
+                );
+                if has_in_stock {
+                    x[[i, 9]] = 1.0;
+                }
+                continue;
+            }
+
+            let poly = &gs.board.polygons[node_id];
             if Some(&poly.color) == active_color {
                 x[[i, 10]] = 1.0;
             }
-            if let Some(p_id) = gs.occupancy.get(poly_id) {
+            if let Some(p_id) = gs.occupancy.get(node_id) {
                 let p = &gs.board.pieces[p_id];
                 x[[i, 0]] = if p.side == gs.turn { 1.0 } else { -1.0 };
                 x[[i, 9]] = 1.0; // IsOccupied
@@ -159,8 +209,15 @@ impl MctsAgent {
                  }
             }
             for (p_id, targets) in all_moves {
-                let source_pos = &gs.board.pieces[&p_id].position;
-                if let Some(&u) = node_to_idx.get(source_pos) {
+                let p = &gs.board.pieces[&p_id];
+                let source_idx = if p.position == "returned" {
+                    let stock_id = format!("STOCK_{:?}_{:?}", p.side, p.piece_type);
+                    node_to_idx.get(&stock_id).copied()
+                } else {
+                    node_to_idx.get(&p.position).copied()
+                };
+
+                if let Some(u) = source_idx {
                     for target in targets {
                         if let Some(&v) = node_to_idx.get(&target) {
                             legal_move_keys.push(format!("{}:{}", p_id, target));
@@ -512,9 +569,40 @@ mod tests {
         let gs = setup_test_board();
         let agent = MctsAgent::new(10, None, "mcts_temp".to_string());
         let (x, edge_index, _, _) = agent.get_graph_data(&gs);
-        assert_eq!(x.dim().0, 3);
-        assert_eq!(x.dim().1, 11);
+        // 3 polygons + 16 stock nodes = 19 nodes
+        assert_eq!(x.dim().0, 19);
+        assert_eq!(x.dim().1, 12);
         assert_eq!(edge_index.dim().0, 2);
+    }
+
+    #[test]
+    fn test_return_moves_in_graph() {
+        let mut gs = setup_test_board();
+        // Move b_goddess to "returned" stock
+        gs.board.pieces.get_mut("b_goddess").unwrap().position = "returned".to_string();
+        gs.occupancy.remove("p2");
+        gs.turn = Side::Black;
+        // Must choose a color to allow deployment from stock
+        gs.color_chosen.insert(Side::Black, "Blue".to_string());
+        gs.is_new_turn = false;
+        
+        let agent = MctsAgent::new(10, None, "mcts_temp".to_string());
+        let (x, _, legal_moves, move_keys) = agent.get_graph_data(&gs);
+        
+        // Find the index of STOCK_Black_Goddess
+        let mut goddess_p3_move_idx = None;
+        for (i, key) in move_keys.iter().enumerate() {
+            if key == "b_goddess:p3" { // Deployment target from engine.rs logic (p3 is Blue)
+                goddess_p3_move_idx = Some(i);
+            }
+        }
+        
+        assert!(goddess_p3_move_idx.is_some(), "Goddess should be able to return to Blue poly p3");
+        if let Some(move_idx) = goddess_p3_move_idx {
+            let src_node_idx = legal_moves[[0, move_idx]];
+            assert!(x[[src_node_idx as usize, 11]] == 1.0); // IsStock must be 1.0
+            assert!(x[[src_node_idx as usize, 1]] == 1.0);  // PieceType::Goddess must be 1.0
+        }
     }
 
     #[test]

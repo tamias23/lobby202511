@@ -16,6 +16,7 @@ Graph Attention Networks
 re-code setuprandomy, so that it fires all moves
 
 git commit -am "mcts and self-play" && git push
+watch -n 1 'for d in mcts_*; do echo "$(find "$d" -type f | wc -l) $d"; done'
 
 =================================================================================
 
@@ -37,7 +38,7 @@ cd ./rust ; cargo run --bin rust -- /home/mat/Bureau/lobby202511/games/data/nt50
 
 /home/mat/Bureau/spyder-env/bin/python3 self_play_train.py --duration 1800
 
-cargo run --release --bin rust -- /home/mat/Bureau/lobby202511/games/data/nt502220024101997_fa941cb81820c20d6edf347a93a60ef3_board.json \
+cargo run --release --bin rust -- /home/mat/Bureau/lobby202511/games/data/nt502220828103999_5682eb28160d64d551de74b14a336a52_board.json \
 --batch 3 \
 --max-turns 300 \
 --white mcts \

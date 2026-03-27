@@ -24,39 +24,17 @@ logger = logging.getLogger(__name__)
 
 # Parse CLI arguments
 parser = argparse.ArgumentParser(description="AlphaZero-style Self-Play Training Loop for MCTS")
-parser.add_argument("--duration", type=int, default=3600, help="Total duration to run the loop in seconds (default: 30mn)")
+parser.add_argument("--duration", type=int, default=1800, help="Total duration to run the loop in seconds (default: 30mn)")
 parser.add_argument("--games_per_batch", type=int, default=120, help="Total number of games to play per training step")
 parser.add_argument("--max_concurrency", type=int, default=12, help="Maximum number of parallel games at once")
 parser.add_argument("--turns_per_game", type=int, default=600, help="Maximum turns per self-play game")
 parser.add_argument("--mcts_budget", type=int, default=10, help="MCTS time budget in ms per move")
 parser.add_argument("--train_epochs", type=int, default=3, help="Number of training epochs per batch")
 parser.add_argument("--train_batch_size", type=int, default=64, help="Batch size for training the GAT model")
-parser.add_argument("--max_data_files", type=int, default=240, help="Maximum number of game JSON files to keep in mcts_temp")
+parser.add_argument("--max_data_files", type=int, default=480, help="Maximum number of game JSON files to keep in mcts_temp")
 args = parser.parse_args()
 
 RUST_BIN = Path("rust/target/release/rust")
-
-def archive_data(data_dir, archive_dir, iteration):
-    """Compresses the data in data_dir and moves it to archive_dir/it_XXXX."""
-    if not os.path.exists(archive_dir):
-        os.makedirs(archive_dir)
-        
-    files = glob.glob(os.path.join(data_dir, "*.json"))
-    if not files:
-        return
-
-    archive_name = os.path.join(archive_dir, f"iteration_{iteration:04d}")
-    logger.info(f"  Archiving {len(files)} files to {archive_name}.tar.gz...")
-    
-    # Create the archive
-    shutil.make_archive(archive_name, 'gztar', data_dir)
-    
-    # Remove original files
-    for f in files:
-        try:
-            os.remove(f)
-        except:
-            pass
 
 async def run_self_play_games(sem, board_path, n_games):
     async with sem:
@@ -120,9 +98,7 @@ async def main():
         return
 
     data_dir = "./rust/mcts_temp"
-    archive_dir = "./rust/mcts_old"
     os.makedirs(data_dir, exist_ok=True)
-    os.makedirs(archive_dir, exist_ok=True)
     
     board_files = glob.glob("games/data/*board.json")
     if not board_files:
@@ -172,7 +148,7 @@ async def main():
                 logger.info(f"  Batch stats: {len(valid_stats)} games | Avg Turns: {avg_turns:.1f}")
                 logger.info(f"  Wins: White {white_wins}, Black {black_wins}, Draws {draws}")
             
-            # 2. Cleanup (now redundant with archive, but keep as safety)
+            # 2. Cleanup old data (Maintain sliding window/replay buffer)
             cleanup_stale_data(data_dir, args.max_data_files)
             
             # 3. Trigger Training
@@ -187,15 +163,6 @@ async def main():
                 subprocess.run(cmd, check=True)
             except Exception as e:
                 logger.error(f"  Training failed: {e}")
-            
-            # 4. ARCHIVE used data
-            archive_data(data_dir, archive_dir, iteration)
-            try:
-                # Correct way to delete with wildcards in Python
-                for f in glob.glob(os.path.join(archive_dir, "*.gz")):
-                    os.remove(f)
-            except:
-                pass
             
             iteration += 1
 

@@ -3,6 +3,13 @@ import glob
 import json
 import warnings
 import logging
+
+# Move all suppression to the absolute top of the file
+warnings.filterwarnings("ignore") 
+logging.getLogger("torch").setLevel(logging.ERROR)
+os.environ["TORCH_LOGS"] = "-all"
+os.environ["TORCHINDUCTOR_REDUCE_OP_LOGGING"] = "0"
+
 import torch
 import torch.nn as nn
 from torch_geometric.data import Data
@@ -66,7 +73,7 @@ class ValueHead(nn.Module):
         return expected_value
 
 class MCTS_GAT(nn.Module):
-    def __init__(self, in_channels=11, hidden_channels=64):
+    def __init__(self, in_channels=12, hidden_channels=64):
         super(MCTS_GAT, self).__init__()
         self.conv1 = GATConv(in_channels, hidden_channels, add_self_loops=False)
         self.conv2 = GATConv(hidden_channels, hidden_channels, add_self_loops=False)
@@ -98,7 +105,7 @@ def load_data(data_dir):
         items = content if isinstance(content, list) else [content]
         
         for item in items:
-            x = torch.tensor(item['x'], dtype=torch.float32).view(-1, 11)
+            x = torch.tensor(item['x'], dtype=torch.float32).view(-1, 12)
             
             # Handle empty edge_index properly
             if len(item["edge_index"]) == 0:
@@ -115,10 +122,15 @@ def load_data(data_dir):
             move_keys = item['move_keys']
             pi_dict = item['pi']
             
-            # Create target distribution
-            pi_target = torch.zeros(len(move_keys), dtype=torch.float32)
+            # Create target distribution ONLY for graph-based moves (piece_id:target)
+            # This ensures len(pi_target) matches legal_moves.size(1) in the batch.
+            # We skip "COLOR:X" and "PASS" moves for the Policy Head for now.
+            valid_pi = []
             for i, key in enumerate(move_keys):
-                pi_target[i] = pi_dict.get(key, 0.0)
+                if ":" in key and not key.startswith("COLOR:"):
+                    valid_pi.append(pi_dict.get(key, 0.0))
+            
+            pi_target = torch.tensor(valid_pi, dtype=torch.float32)
                 
             # For simplicity we normalize pi_target if it doesn't sum to 1
             if pi_target.sum() > 0:
@@ -136,7 +148,7 @@ def load_data(data_dir):
 
 def train(epochs=10, batch_size=64):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = MCTS_GAT(in_channels=11, hidden_channels=64).to(device)
+    model = MCTS_GAT(in_channels=12, hidden_channels=64).to(device)
     
     checkpoint_path = "./rust/model_weights.pth"
     if os.path.exists(checkpoint_path):
@@ -183,8 +195,10 @@ def train(epochs=10, batch_size=64):
             v_loss = mse_loss(value_pred.view(-1), data.z_target)
             
             # Policy loss
-            epsilon = 1e-8
-            p_loss = -torch.sum(data.pi_target * torch.log(policy_probs + epsilon))
+            p_loss = torch.tensor(0.0, device=device)
+            if data.pi_target.size(0) > 0:
+                epsilon = 1e-8
+                p_loss = -torch.sum(data.pi_target * torch.log(policy_probs + epsilon))
             
             loss = v_loss + p_loss
             loss.backward()
@@ -233,12 +247,6 @@ def train(epochs=10, batch_size=64):
     print(f"ONNX model saved successfully to {onnx_path}!")
 
 if __name__ == "__main__":
-    # Suppress noisy exporter warnings and diagnostics
-    warnings.filterwarnings("ignore", category=UserWarning)
-    logging.getLogger("torch.onnx").setLevel(logging.ERROR)
-    logging.getLogger("torch._dynamo").setLevel(logging.ERROR)
-    os.environ["TORCH_LOGS"] = "-dynamic" # Quiet dynamo symbolic shapes
-    
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=10)
