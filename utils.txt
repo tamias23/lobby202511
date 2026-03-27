@@ -39,8 +39,8 @@ cd ./rust ; cargo run --bin rust -- /home/mat/Bureau/lobby202511/games/data/nt50
 /home/mat/Bureau/spyder-env/bin/python3 self_play_train.py --duration 1800
 
 cargo run --release --bin rust -- /home/mat/Bureau/lobby202511/games/data/nt502220828103999_5682eb28160d64d551de74b14a336a52_board.json \
---batch 3 \
---max-turns 300 \
+--batch 10 \
+--max-turns 200 \
 --white mcts \
 --black mcts \
 --mcts-budget 100 \
