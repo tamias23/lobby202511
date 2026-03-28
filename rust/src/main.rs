@@ -18,10 +18,13 @@ fn parse_flag_str<'a>(args: &'a [String], flag: &str, default: &'a str) -> &'a s
         .unwrap_or(default)
 }
 
-fn make_agent(name: &str, weights_str: Option<&String>, mcts_budget: u64, mcts_data_dir: String) -> Arc<dyn agents::Agent> {
+fn make_agent(name: &str, weights_str: Option<&String>, mcts_budget: u64, mcts_data_dir: String, model_path: Option<String>) -> Arc<dyn agents::Agent> {
     match name {
         "random" => Arc::new(agents::random::RandomAgent),
-        "mcts" => Arc::new(agents::mcts::MctsAgent::new(mcts_budget, Some("./rust/model.onnx".to_string()), mcts_data_dir)), 
+        "mcts" => {
+            let path = model_path.unwrap_or_else(|| "./rust/model.onnx".to_string());
+            Arc::new(agents::mcts::MctsAgent::new(mcts_budget, Some(path), mcts_data_dir))
+        }, 
         "greedy_bob" => {
             let mut weights = [1.0; 26]; // Default baseline
             if let Some(w_str) = weights_str {
@@ -49,6 +52,8 @@ async fn main() {
         println!("  Optional Agent Traits:");
         println!("      --white-name \"Agent 1\"");
         println!("      --black-name \"Agent 2\"");
+        println!("      --white-model-path \"/path/to/model.onnx\"");
+        println!("      --black-model-path \"/path/to/model.onnx\"");
         println!("      --greedy-weights-white \"1.0,1.0,-2.0,...\"");
         println!("      --greedy-weights-black \"1.0,1.0,-2.0,...\"");
         println!();
@@ -78,8 +83,11 @@ async fn main() {
     let white_weights = args.iter().position(|a| a == "--greedy-weights-white").and_then(|i| args.get(i + 1));
     let black_weights = args.iter().position(|a| a == "--greedy-weights-black").and_then(|i| args.get(i + 1));
 
-    let white_agent = make_agent(&white_agent_name, white_weights, mcts_budget, mcts_data_dir.clone());
-    let black_agent = make_agent(&black_agent_name, black_weights, mcts_budget, mcts_data_dir);
+    let white_model_path = args.iter().position(|a| a == "--white-model-path").and_then(|i| args.get(i + 1)).cloned();
+    let black_model_path = args.iter().position(|a| a == "--black-model-path").and_then(|i| args.get(i + 1)).cloned();
+
+    let white_agent = make_agent(&white_agent_name, white_weights, mcts_budget, mcts_data_dir.clone(), white_model_path);
+    let black_agent = make_agent(&black_agent_name, black_weights, mcts_budget, mcts_data_dir, black_model_path);
 
     if let Some(batch_pos) = args.iter().position(|a| a == "--batch") {
         let n_games: u32 = args.get(batch_pos + 1)

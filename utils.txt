@@ -48,6 +48,18 @@ cargo run --release --bin rust -- /home/mat/Bureau/lobby202511/games/data/nt5022
 --black-name "mcts2" \
 --store-parquet /home/mat/Bureau/lobby202511/parquet
 
+cargo run --release --bin rust -- /home/mat/Bureau/lobby202511/games/data/nt502220828103999_5682eb28160d64d551de74b14a336a52_board.json \
+--batch 10 \
+--max-turns 200 \
+--mcts-budget 100 \
+--white mcts \
+--black mcts \
+--white-name "mcts1" \
+--black-name "mcts2" \
+--white-model-path /home/mat/Bureau/lobby202511/rust/nets/a \
+--black-model-path /home/mat/Bureau/lobby202511/rust/nets/b \
+--store-parquet /home/mat/Bureau/lobby202511/parquet
+
 cargo run --release --bin rust -- /home/mat/Bureau/lobby202511/games/data/nt502220024101997_fa941cb81820c20d6edf347a93a60ef3_board.json --batch 10 --max-turns 600 --white mcts --black mcts --white-name "mcts1" --black-name "mcts2" --store-parquet /home/mat/Bureau/lobby202511/parquet --mcts-budget 100
 
 
