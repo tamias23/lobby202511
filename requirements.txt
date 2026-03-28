@@ -2,3 +2,4 @@ torch
 torch_geometric
 onnx
 onnxruntime
+tqdm

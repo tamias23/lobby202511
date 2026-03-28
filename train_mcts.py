@@ -3,6 +3,7 @@ import glob
 import json
 import warnings
 import logging
+from tqdm import tqdm
 
 # Move all suppression to the absolute top of the file
 warnings.filterwarnings("ignore") 
@@ -152,7 +153,8 @@ def load_data(data_dir):
 
 def train(epochs=10, batch_size=64):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = MCTS_GAT(in_channels=12, hidden_channels=64).to(device)
+    print(f"--- Training Device: {device.type.upper()} ({torch.cuda.get_device_name(0) if device.type == 'cuda' else 'CPU'}) ---")
+    model = MCTS_GAT(in_channels=12, hidden_channels=128).to(device)
     
     checkpoint_path = "./rust/model_weights.pth"
     if os.path.exists(checkpoint_path):
@@ -173,6 +175,7 @@ def train(epochs=10, batch_size=64):
         print(f"Data directory {data_dir} does not exist. Run MCTS agents first!")
         return
 
+    print(f"Loading data from {data_dir}...")
     dataset = load_data(data_dir)
     if len(dataset) == 0:
         print(f"No training data found in {data_dir}. Run MCTS against itself to generate self-play data.")
@@ -189,7 +192,9 @@ def train(epochs=10, batch_size=64):
         total_value_loss = 0
         total_policy_loss = 0
         
-        for data in loader:
+        # Use tqdm for the batch progress bar
+        pbar = tqdm(loader, desc=f"Epoch {epoch+1}/{epochs}", unit="batch")
+        for data in pbar:
             data = data.to(device)
             optimizer.zero_grad()
             
@@ -208,11 +213,13 @@ def train(epochs=10, batch_size=64):
             loss.backward()
             optimizer.step()
             
-            # Use data.num_graphs to correctly average loss over samples
             num_graphs = getattr(data, 'num_graphs', 1)
             total_loss += loss.item() * num_graphs
             total_value_loss += v_loss.item() * num_graphs
             total_policy_loss += p_loss.item() * num_graphs
+            
+            # Update progress bar with current average loss
+            pbar.set_postfix({"loss": f"{loss.item():.4f}"})
             
         print(f"Epoch {epoch+1}/{epochs} | Loss: {total_loss/len(dataset):.4f} "
               f"(V: {total_value_loss/len(dataset):.4f}, P: {total_policy_loss/len(dataset):.4f})")
