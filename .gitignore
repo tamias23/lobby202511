@@ -17,4 +17,6 @@ out.txt
 output.txt
 .venv/
 .vscode/
+__pycache__/
+temp/
 
