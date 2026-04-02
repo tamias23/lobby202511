@@ -18,12 +18,12 @@ fn parse_flag_str<'a>(args: &'a [String], flag: &str, default: &'a str) -> &'a s
         .unwrap_or(default)
 }
 
-fn make_agent(name: &str, weights_str: Option<&String>, mcts_budget: u64, mcts_data_dir: String, model_path: Option<String>) -> Arc<dyn agents::Agent> {
+fn make_agent(name: &str, weights_str: Option<&String>, mcts_budget: u64, mcts_data_dir: String, model_path: Option<String>, mcts_record: bool) -> Arc<dyn agents::Agent> {
     match name {
         "random" => Arc::new(agents::random::RandomAgent),
         "mcts" => {
             let path = model_path.unwrap_or_else(|| "./rust/model.onnx".to_string());
-            Arc::new(agents::mcts::MctsAgent::new(mcts_budget, Some(path), mcts_data_dir))
+            Arc::new(agents::mcts::MctsAgent::new(mcts_budget, Some(path), mcts_data_dir, mcts_record))
         }, 
         "greedy_bob" => {
             let mut weights = [1.0; 26]; // Default baseline
@@ -90,6 +90,8 @@ async fn main() {
         println!("      --greedy-weights-black \"1.0,1.0,-2.0,...\"");
         println!();
         println!("  Agents: random, greedy_bob, greedy_jack, mcts");
+        println!("  Flags:");
+        println!("      --mcts-no-record  Disable search data collection for MCTS");
         std::process::exit(1);
     }
 
@@ -117,9 +119,11 @@ async fn main() {
 
     let white_model_path = args.iter().position(|a| a == "--white-model-path").and_then(|i| args.get(i + 1)).cloned();
     let black_model_path = args.iter().position(|a| a == "--black-model-path").and_then(|i| args.get(i + 1)).cloned();
+    
+    let mcts_record = !args.contains(&"--mcts-no-record".to_string());
 
-    let white_agent = make_agent(&white_agent_name, white_weights, mcts_budget, mcts_data_dir.clone(), white_model_path);
-    let black_agent = make_agent(&black_agent_name, black_weights, mcts_budget, mcts_data_dir, black_model_path);
+    let white_agent = make_agent(&white_agent_name, white_weights, mcts_budget, mcts_data_dir.clone(), white_model_path, mcts_record);
+    let black_agent = make_agent(&black_agent_name, black_weights, mcts_budget, mcts_data_dir, black_model_path, mcts_record);
 
     if let Some(batch_pos) = args.iter().position(|a| a == "--batch") {
         let n_games: u32 = args.get(batch_pos + 1)

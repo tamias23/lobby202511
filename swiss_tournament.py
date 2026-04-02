@@ -19,13 +19,15 @@ except ImportError:
 
 
 parser = argparse.ArgumentParser(description="Swiss Tournament Organizer")
-parser.add_argument("--agents", type=str, required=True, help="Path to input text file with agents (e.g. my_greedy_bob_agents.txt)")
+parser.add_argument("--agents", type=str, required=True, help="Path to input CSV with agents (Name,Type,Data)")
 parser.add_argument("--rounds", type=int, default=5, help="Number of rounds in the tournament")
 parser.add_argument("--parallel", type=int, default=5, help="Number of parallel matches to run")
 parser.add_argument("--parquet", type=str, default="games.parquet", help="Path to save the output games .parquet file")
 parser.add_argument("--crosstable", type=str, default="crosstable.csv", help="Path to save the crosstable file")
 parser.add_argument("--board", type=str, default=None, help="Path to the board JSON. If not provided, a random one is used.")
 parser.add_argument("--max_turns", type=int, default=200, help="Maximum turns per game")
+parser.add_argument("--mcts_budget", type=int, default=100, help="MCTS budget in ms")
+parser.add_argument("--mcts_data_dir", type=str, default="./rust/mcts_temp", help="MCTS data directory")
 args = parser.parse_args()
 
 RUST_BIN = Path("rust/target/release/rust")
@@ -38,9 +40,10 @@ def weights_to_str(weights):
     return ",".join(map(str, weights))
 
 class Agent:
-    def __init__(self, name, weights):
+    def __init__(self, name, agent_type, data):
         self.name = name
-        self.weights = weights
+        self.type = agent_type # greedy_bob, greedy_jack, mcts
+        self.data = data # weights list or model path string
         self.score = 0
         self.buchholz = 0
         self.opponents = [] # list of Agent or None (for bye)
@@ -59,14 +62,24 @@ async def run_match(sem, agent1, agent2, board_path, temp_dir):
         cmd.extend([
             "--batch", "1",
             "--max-turns", str(args.max_turns),
-            "--white", "greedy_bob",
-            "--black", "greedy_bob",
+            "--white", white.type,
+            "--black", black.type,
             "--white-name", white.name,
             "--black-name", black.name,
-            "--greedy-weights-white", weights_to_str(white.weights),
-            "--greedy-weights-black", weights_to_str(black.weights),
             "--store-parquet", temp_dir
         ])
+
+        # Add agent-specific arguments
+        for side, agent in [("white", white), ("black", black)]:
+            if agent.type == "greedy_bob":
+                cmd.extend([f"--greedy-weights-{side}", weights_to_str(agent.data)])
+            elif agent.type == "greedy_jack":
+                cmd.extend([f"--{side}-model-path", agent.data])
+            elif agent.type == "mcts":
+                cmd.extend([f"--{side}-model-path", agent.data])
+                cmd.extend(["--mcts-budget", str(args.mcts_budget)])
+                cmd.extend(["--mcts-data-dir", args.mcts_data_dir])
+                cmd.append("--mcts-no-record")
         
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -104,29 +117,36 @@ async def run_match(sem, agent1, agent2, board_path, temp_dir):
 def load_agents(filepath):
     agents = []
     with open(filepath, 'r') as f:
-        lines = f.readlines()
-        if not lines: return agents
-        
-        # Skip header if present
-        start_idx = 0
-        if "Name" in lines[0] or "name" in lines[0].lower():
-            start_idx = 1
+        reader = csv.reader(f)
+        try:
+            header = next(reader)
+        except StopIteration:
+            return agents
             
-        for line in lines[start_idx:]:
-            line = line.strip()
+        # Check if header is actually data or header
+        if "Name" not in header and "name" not in header[0].lower():
+            # If no header, we assume Name,Type,Data format
+            line = header
+            name = line[0]
+            agent_type = line[1]
+            if agent_type == "greedy_bob":
+                data = [float(x) for x in line[2:]]
+            else:
+                data = line[2]
+            agents.append(Agent(name, agent_type, data))
+
+        for line in reader:
             if not line: continue
-            
-            # support comma or space separation
-            parts = line.split(',')
-            if len(parts) < 2:
-                parts = line.split()
-                
-            name = parts[0]
+            name = line[0]
+            agent_type = line[1]
             try:
-                weights = [float(x) for x in parts[1:]]
-                agents.append(Agent(name, weights))
-            except ValueError:
-                print(f"Skipping line due to parse error: {line}")
+                if agent_type == "greedy_bob":
+                    data = [float(x) for x in line[2:]]
+                else:
+                    data = line[2]
+                agents.append(Agent(name, agent_type, data))
+            except (ValueError, IndexError) as e:
+                print(f"Skipping line due to parse error: {line} -> {e}")
                 
     return agents
 

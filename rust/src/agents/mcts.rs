@@ -125,6 +125,7 @@ pub struct MctsAgent {
     pub session: Option<Mutex<Session>>,
     pub(crate) game_buffer: Mutex<Vec<serde_json::Value>>,
     pub data_dir: String,
+    pub record_data: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -161,7 +162,7 @@ impl Node {
 }
 
 impl MctsAgent {
-    pub fn new(time_budget_ms: u64, model_path: Option<String>, data_dir: String) -> Self {
+    pub fn new(time_budget_ms: u64, model_path: Option<String>, data_dir: String, record_data: bool) -> Self {
         let session = model_path.as_ref().and_then(|path| {
             let bytes = std::fs::read(path).ok()?;
             let session = Session::builder().ok()?
@@ -175,6 +176,7 @@ impl MctsAgent {
             session,
             game_buffer: Mutex::new(Vec::new()),
             data_dir,
+            record_data,
         }
     }
 
@@ -504,7 +506,9 @@ impl Agent for MctsAgent {
         
         let root = self.run_mcts(gs);
         let best_key = self.get_best_move_key(&root).unwrap_or_else(|| format!("COLOR:{}", valid_colors[0]));
-        self.save_search_data(gs, &root);
+        if self.record_data {
+            self.save_search_data(gs, &root);
+        }
         
         let chosen_color = if best_key.starts_with("COLOR:") {
              best_key[6..].to_string()
@@ -524,11 +528,16 @@ impl Agent for MctsAgent {
     ) -> AgentMove {
         let root = self.run_mcts(gs);
         let best_key = self.get_best_move_key(&root).unwrap_or_else(|| "PASS".to_string());
-        self.save_search_data(gs, &root);
+        if self.record_data {
+            self.save_search_data(gs, &root);
+        }
         self.key_to_move(&best_key)
     }
 
     fn record_winner(&self, winner: Option<crate::models::Side>) {
+        if !self.record_data {
+            return;
+        }
         let mut buffer = self.game_buffer.lock().unwrap();
         if buffer.is_empty() {
             return;
@@ -591,14 +600,14 @@ mod tests {
 
     #[test]
     fn test_mcts_name() {
-        let agent = MctsAgent::new(100, None, "mcts_temp".to_string());
+        let agent = MctsAgent::new(100, None, "mcts_temp".to_string(), true);
         assert_eq!(agent.name(), "MCTS");
     }
 
     #[test]
     fn test_graph_data_shape() {
         let gs = setup_test_board();
-        let agent = MctsAgent::new(10, None, "mcts_temp".to_string());
+        let agent = MctsAgent::new(10, None, "mcts_temp".to_string(), true);
         let (x, edge_index, _, _) = agent.get_graph_data(&gs);
         // 3 polygons + 16 stock nodes = 19 nodes
         assert_eq!(x.dim().0, 19);
@@ -629,7 +638,7 @@ mod tests {
         gs.color_chosen.insert(Side::Black, "Blue".to_string());
         gs.is_new_turn = false;
         
-        let agent = MctsAgent::new(10, None, "mcts_temp".to_string());
+        let agent = MctsAgent::new(10, None, "mcts_temp".to_string(), true);
         let (x, _, legal_moves, move_keys) = agent.get_graph_data(&gs);
         
         // Find the index of STOCK_Black_Goddess
@@ -650,7 +659,7 @@ mod tests {
 
     #[test]
     fn test_ucb_score_sanity() {
-        let agent = MctsAgent::new(10, None, "mcts_temp".to_string());
+        let agent = MctsAgent::new(10, None, "mcts_temp".to_string(), true);
         let mut parent = Node::new(1.0, Side::White);
         parent.visit_count = 1.0;
         let score1 = agent.ucb_score(&parent, &Node::new(0.9, Side::White), 1.0);
@@ -664,7 +673,7 @@ mod tests {
         gs.phase = GamePhase::Playing;
         gs.color_chosen.insert(gs.turn, "Blue".to_string());
         gs.is_new_turn = false;
-        let agent = MctsAgent::new(300, None, "mcts_temp".to_string());
+        let agent = MctsAgent::new(300, None, "mcts_temp".to_string(), true);
         let m = agent.choose_move(&gs, &std::collections::HashMap::new(), false);
         match m {
             AgentMove::Move { .. } => {},
@@ -676,7 +685,7 @@ mod tests {
     fn test_choose_color_mcts() {
         let mut gs = setup_test_board();
         gs.is_new_turn = true;
-        let agent = MctsAgent::new(50, None, "mcts_temp".to_string());
+        let agent = MctsAgent::new(50, None, "mcts_temp".to_string(), true);
         let valid_colors = vec!["Blue".to_string(), "Yellow".to_string()];
         let c = agent.choose_color(&gs, &valid_colors);
         assert!(valid_colors.contains(c));
