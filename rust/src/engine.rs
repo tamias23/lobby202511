@@ -3,6 +3,12 @@ use crate::models::{BoardMap, PieceType, Side};
 use crate::agents::{Agent, AgentMove};
 
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GamePhase {
+    Setup,
+    Playing,
+}
+
 #[derive(Debug, Clone)]
 pub struct GameState {
     pub board: BoardMap,
@@ -15,6 +21,9 @@ pub struct GameState {
     pub locked_sequence_piece: Option<String>,
     pub heroe_take_counter: u32,
     pub visited_polygons: HashSet<String>,
+    pub phase: GamePhase,
+    pub setup_step: u8, // 0=goddess, 1=heroe, 2=berserker, 3=bishop, 4=ghoul_siren
+    pub setup_placements_this_turn: u32,
 }
 
 impl GameState {
@@ -72,6 +81,9 @@ impl GameState {
             locked_sequence_piece: None,
             heroe_take_counter: 0,
             visited_polygons: HashSet::new(),
+            phase: GamePhase::Setup,
+            setup_step: 0,
+            setup_placements_this_turn: 0,
         }
     }
 
@@ -97,6 +109,10 @@ impl GameState {
 
     pub fn get_enemy_side(&self) -> Side {
         if self.turn == Side::White { Side::Black } else { Side::White }
+    }
+
+    pub fn get_piece_by_id(&self, id: &str) -> Option<&crate::models::Piece> {
+        self.board.pieces.get(id)
     }
 }
 
@@ -663,6 +679,327 @@ pub fn setup_random_board(state: &mut GameState) {
         }
         
         // D. Reserve Mages & Soldiers implicitly remain "returned" without board positions!
+    }
+    state.phase = GamePhase::Playing;
+}
+
+pub fn get_setup_legal_placements(state: &GameState) -> HashMap<String, Vec<String>> {
+    let mut placements = HashMap::new();
+    let current_side = state.turn;
+
+    // Get unplaced pieces of the current step
+    let pieces_to_place: Vec<_> = state.board.pieces.values()
+        .filter(|p| p.side == current_side && p.position == "returned")
+        .collect();
+
+    let (step_type, count_needed) = match state.setup_step {
+        0 => (PieceType::Goddess, 1),
+        1 => (PieceType::Heroe, 2),
+        2 => (PieceType::Berserker, 2),
+        3 => (PieceType::Bishop, 4),
+        4 => (PieceType::Ghoul, 18), // Ghouls + Sirens
+        _ => return placements,
+    };
+
+    let p_ids: Vec<_> = pieces_to_place.iter()
+        .filter(|p| {
+            if state.setup_step == 4 {
+                p.piece_type == PieceType::Ghoul || p.piece_type == PieceType::Siren
+            } else {
+                p.piece_type == step_type
+            }
+        })
+        .map(|p| p.id.clone())
+        .collect();
+
+    if p_ids.is_empty() {
+        return placements;
+    }
+
+    // Determine target polygons based on step
+    let mut targets = Vec::new();
+    let width = state.board.width.unwrap_or(1000.0);
+    let height = state.board.height.unwrap_or(1000.0);
+
+    match state.setup_step {
+        0 => { // Goddess on edge
+            let edges = get_edge_polys(&state.board, current_side, width, height);
+            for e in edges {
+                if !state.is_occupied(&e) {
+                    // Goddess must allow at least one Hero configuration
+                    if can_place_heroes_from_goddess(&state.board, &e, current_side, width, height) {
+                        targets.push(e);
+                    }
+                }
+            }
+        },
+        1 => { // Heroes on edge
+            let goddess_pos = get_piece_pos_by_type(state, current_side, PieceType::Goddess);
+            if let Some(g_pos) = goddess_pos {
+                let edges = get_edge_polys(&state.board, current_side, width, height);
+                let g_near_2 = get_polys_within_distance_jump(&state.board, &g_pos, 2);
+                let g_near_6 = get_polys_within_distance_jump(&state.board, &g_pos, 6);
+                
+                let already_hero = get_placed_piece_ids_by_type(state, current_side, PieceType::Heroe);
+                
+                for e in edges {
+                    if !state.is_occupied(&e) && g_near_6.contains(&e) && !g_near_2.contains(&e) {
+                        if already_hero.is_empty() {
+                            // First Hero look-ahead: ensures at least one slot remains for Hero 2
+                            let e_near_6 = get_polys_within_distance_jump(&state.board, &e, 6);
+                            let goddess_pos = g_pos.clone();
+                            let can_fit_second_hero = get_edge_polys(&state.board, current_side, width, height).iter().any(|e2| {
+                                e2 != &e && e2 != &goddess_pos && !state.is_occupied(e2) &&
+                                g_near_6.contains(e2) && !g_near_2.contains(e2) &&
+                                !e_near_6.contains(e2)
+                            });
+                            if can_fit_second_hero {
+                                targets.push(e);
+                            }
+                        } else {
+                            // dist(H1, H2) > 6
+                            let h1_pos = &state.board.pieces[&already_hero[0]].position;
+                            let h1_near_6 = get_polys_within_distance_jump(&state.board, h1_pos, 6);
+                            if !h1_near_6.contains(&e) {
+                                targets.push(e);
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        2 => { // Berserkers near Goddess
+            let goddess_pos = get_piece_pos_by_type(state, current_side, PieceType::Goddess);
+            if let Some(g_pos) = goddess_pos {
+                let mut near = get_polys_within_distance_jump(&state.board, &g_pos, 1);
+                if near.iter().filter(|p| !state.is_occupied(p)).count() < 2 {
+                    near = get_polys_within_distance_jump(&state.board, &g_pos, 2);
+                }
+                for p in near {
+                    if !state.is_occupied(&p) {
+                        targets.push(p);
+                    }
+                }
+            }
+        },
+        3 => { // Bishops on unique colors - closest possible ring (dist 1-4)
+            let anchors = get_anchor_positions(state, current_side);
+            let placed_bishops = get_placed_piece_ids_by_type(state, current_side, PieceType::Bishop);
+            let used_colors: HashSet<_> = placed_bishops.iter()
+                .map(|id| state.board.polygons[&state.board.pieces[id].position].color.clone())
+                .collect();
+            
+            for d in 1..=15 {
+                let mut ring_d = HashSet::new();
+                for a in &anchors {
+                    ring_d.extend(get_polys_within_distance_jump(&state.board, a, d));
+                }
+                
+                let mut candidates = Vec::new();
+                for p in ring_d {
+                    if !state.is_occupied(&p) {
+                        let color = &state.board.polygons[&p].color;
+                        if !used_colors.contains(color) {
+                            candidates.push(p);
+                        }
+                    }
+                }
+
+                if !candidates.is_empty() {
+                    targets = candidates;
+                    break;
+                }
+            }
+        },
+        4 => { // Ghouls/Sirens within rings
+            let anchors = get_anchor_positions(state, current_side);
+            let mut ring = HashSet::new();
+            for d in 1..=15 {
+                for a in &anchors {
+                    ring.extend(get_polys_within_distance_jump(&state.board, a, d));
+                }
+                let available: Vec<_> = ring.iter().filter(|p| !state.is_occupied(p)).collect();
+                if !available.is_empty() {
+                    for p in available {
+                        targets.push(p.clone());
+                    }
+                    break;
+                }
+            }
+        },
+        _ => {}
+    }
+
+    if !targets.is_empty() {
+        for id in p_ids {
+            placements.insert(id, targets.clone());
+        }
+    }
+
+    placements
+}
+
+fn get_edge_polys(board: &BoardMap, side: Side, width: f64, height: f64) -> Vec<String> {
+    let mut edges = Vec::new();
+    for (k, poly) in &board.polygons {
+        let n_count = if !poly.neighbors.is_empty() { poly.neighbors.len() } else { poly.neighbours.len() };
+        if poly.points.len() > n_count {
+            if poly.center[0] > 1.0 && poly.center[0] < (width - 1.0) {
+                if side == Side::White && poly.center[1] < 63.0 {
+                    edges.push(k.clone());
+                } else if side == Side::Black && poly.center[1] > (height - 63.0) {
+                    edges.push(k.clone());
+                }
+            }
+        }
+    }
+    edges
+}
+
+fn can_place_heroes_from_goddess(board: &BoardMap, g_pos: &str, side: Side, width: f64, height: f64) -> bool {
+    let edges = get_edge_polys(board, side, width, height);
+    let g_near_2 = get_polys_within_distance_jump(board, g_pos, 2);
+    let g_near_6 = get_polys_within_distance_jump(board, g_pos, 6);
+    
+    let valid_heroe_edges: Vec<_> = edges.iter()
+        .filter(|&e| e != g_pos && g_near_6.contains(e) && !g_near_2.contains(e))
+        .collect();
+    
+    if valid_heroe_edges.len() < 2 { return false; }
+    
+    for i in 0..valid_heroe_edges.len() {
+        for j in i+1..valid_heroe_edges.len() {
+            let h1 = valid_heroe_edges[i];
+            let h2 = valid_heroe_edges[j];
+            let h1_near_6 = get_polys_within_distance_jump(board, h1, 6);
+            if !h1_near_6.contains(h2) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn get_piece_pos_by_type(state: &GameState, side: Side, ptype: PieceType) -> Option<String> {
+    state.board.pieces.values()
+        .find(|p| p.side == side && p.piece_type == ptype && p.position != "returned")
+        .map(|p| p.position.clone())
+}
+
+fn get_placed_piece_ids_by_type(state: &GameState, side: Side, ptype: PieceType) -> Vec<String> {
+    state.board.pieces.values()
+        .filter(|p| p.side == side && p.piece_type == ptype && p.position != "returned")
+        .map(|p| p.id.clone())
+        .collect()
+}
+
+fn get_anchor_positions(state: &GameState, side: Side) -> Vec<String> {
+    let mut anchors = Vec::new();
+    if let Some(pos) = get_piece_pos_by_type(state, side, PieceType::Goddess) {
+        anchors.push(pos);
+    }
+    for id in get_placed_piece_ids_by_type(state, side, PieceType::Heroe) {
+        anchors.push(state.board.pieces[&id].position.clone());
+    }
+    anchors
+}
+
+pub fn apply_setup_placement(state: &mut GameState, piece_id: &str, target_poly: &str) {
+    let source_poly = state.board.pieces[piece_id].position.clone();
+    if source_poly != "returned" {
+        state.occupancy.remove(&source_poly);
+    }
+    state.board.pieces.get_mut(piece_id).unwrap().position = target_poly.to_string();
+    state.occupancy.insert(target_poly.to_string(), piece_id.to_string());
+    state.setup_placements_this_turn += 1;
+}
+
+pub fn apply_setup_placement_turnover(state: &mut GameState, piece_id: &str, target_poly: &str) {
+    let current_side = state.turn;
+    apply_setup_placement(state, piece_id, target_poly);
+    if check_setup_step_complete(state, current_side) {
+        state.turn = state.get_enemy_side();
+        state.setup_placements_this_turn = 0;
+        advance_setup_step(state);
+    }
+}
+
+pub fn perform_setup_turn(state: &mut GameState, agent: &dyn Agent) -> (bool, Option<(String, String)>) {
+    let _current_side = state.turn;
+    
+    // Check if both sides finished the whole thing
+    if state.setup_step > 4 {
+        state.phase = GamePhase::Playing;
+        return (true, None);
+    }
+
+    let legal = get_setup_legal_placements(state);
+    
+    // If no legal placements for this side/step, skip turn or advance
+    if legal.is_empty() {
+        state.turn = state.get_enemy_side();
+        state.setup_placements_this_turn = 0;
+        advance_setup_step(state);
+        return (state.setup_step > 4, None);
+    }
+
+    let pass_allowed = state.setup_placements_this_turn > 0;
+    
+    match agent.choose_move(state, &legal, pass_allowed) {
+        AgentMove::Pass => {
+            state.turn = state.get_enemy_side();
+            state.setup_placements_this_turn = 0;
+            (false, None)
+        },
+        AgentMove::Move { piece, target } => {
+            if legal.contains_key(&piece) && legal[&piece].contains(&target) {
+                let move_data = Some((piece.clone(), target.clone()));
+                apply_setup_placement_turnover(state, &piece, &target);
+                (state.setup_step > 4, move_data)
+            } else {
+                // Illegal move from agent, force pass
+                state.turn = state.get_enemy_side();
+                state.setup_placements_this_turn = 0;
+                (false, None)
+            }
+        }
+    }
+}
+
+fn check_setup_step_complete(state: &GameState, side: Side) -> bool {
+    let (step_type, count) = match state.setup_step {
+        0 => (PieceType::Goddess, 1),
+        1 => (PieceType::Heroe, 2),
+        2 => (PieceType::Berserker, 2),
+        3 => (PieceType::Bishop, 4),
+        4 => (PieceType::Ghoul, 18), // Ghouls + Sirens
+        _ => return true,
+    };
+    
+    let placed = state.board.pieces.values()
+        .filter(|p| {
+            if side != p.side { return false; }
+            if p.position == "returned" { return false; }
+            if state.setup_step == 4 {
+                p.piece_type == PieceType::Ghoul || p.piece_type == PieceType::Siren
+            } else {
+                p.piece_type == step_type
+            }
+        })
+        .count();
+    
+    placed >= count
+}
+
+fn advance_setup_step(state: &mut GameState) {
+    if check_setup_step_complete(state, Side::White) && check_setup_step_complete(state, Side::Black) {
+        state.setup_step += 1;
+        state.setup_placements_this_turn = 0;
+        if state.setup_step > 4 {
+            state.phase = GamePhase::Playing;
+            state.is_new_turn = true;
+            state.turn = Side::White; // Main game starts with White
+        }
     }
 }
 

@@ -1,7 +1,7 @@
 import { board, whoAmI } from './state.js';
 import { store } from './store.js';
 import { getMousePosition, iterTransformGetTranslate } from './utils.js';
-import { highlightPossibleMoves, removePossibleMoves } from './gameLogic.js';
+import { highlightPossibleMoves, removePossibleMoves, updateSetupVisibility } from './gameLogic.js';
 import { getListOfPossibleTargetsForSetup, getListOfPossibleTargets } from './rules.js';
 import { setPieceToPoly } from './boardUtils.js';
 import { sendMessageFromClient } from './socketHandler.js';
@@ -35,7 +35,14 @@ function mouseDownBeforeSetupIsDone(evt) {
   let state = store.getState();
   if (evt.target.parentNode.classList.contains('draggable')) {
     state.selectedElement = evt.target.parentNode;
-    if(board.allPieces[state.selectedElement.id].position === 'returned'){
+    const piece = board.allPieces[state.selectedElement.id];
+    if(piece.position === 'returned' && piece.side === state.whoseTurnItIs){
+      const possibleTargets = getListOfPossibleTargetsForSetup(board, state, state.selectedElement.id);
+      if (possibleTargets.length === 0) {
+        state.selectedElement = false;
+        return;
+      }
+
       store.setOffset(getMousePosition(evt, document.getElementById('board')));
 
       const _transform = getOrCreateTranslateTransform(state.selectedElement);
@@ -47,7 +54,7 @@ function mouseDownBeforeSetupIsDone(evt) {
       state.dragging = 1;
       state.piece = state.selectedElement.id;
 
-      store.setHighlightedMoves(getListOfPossibleTargetsForSetup(board, state, state.piece));
+      store.setHighlightedMoves(possibleTargets);
       highlightPossibleMoves();
     } else {
       state.selectedElement = false;
@@ -128,42 +135,91 @@ export function getElementClosestToMouse(evt) {
   }
   return state.draggedOn;
 }
-
 export function mouseUp(evt) {
   let state = store.getState();
   if(state.setupIsDone === 'yes'){
     mouseUpAfterSetupIsDone(evt);
   } else {
     mouseUpBeforeSetupIsDone(evt);
-    let howManyPiecesSet = 0;
+    
+    // Check if setup is actually finished
+    let count = 0;
     for (const id in board.allPieces){
-      if(board.allPieces[id].position === 'returned'){
-        howManyPiecesSet = howManyPiecesSet + 1;
+      if(board.allPieces[id].position !== 'returned'){
+        count++;
       }
     }
-    let myButtonSetupRandomly = document.getElementById('myButtonSetupRandomly');
-    let myButtonNewBoardRequested = document.getElementById('myButtonNewBoardRequested');
-    if (howManyPiecesSet < 67) {
+    // Total: 2 (G) + 4 (H) + 4 (B) + 8 (Bishops) + 36 (Inf) = 54
+    if (count === 54) {
       store.setSetupIsDone('yes');
       showColorSelectors();
-      if (myButtonSetupRandomly && myButtonSetupRandomly.style.visibility == 'visible'){
-        toggleButtonVisibility(myButtonSetupRandomly);
-        if(myButtonNewBoardRequested) toggleButtonVisibility(myButtonNewBoardRequested);
+      let btnSetup = document.getElementById('myButtonSetupRandomly');
+      let btnNewBoard = document.getElementById('myButtonNewBoardRequested');
+      if (btnSetup && btnSetup.style.visibility === 'visible'){
+        toggleButtonVisibility(btnSetup);
+        if(btnNewBoard) toggleButtonVisibility(btnNewBoard);
       }
       state.whoseTurnItIs = 'white';
       setButtonAndFooterColor();
+      updateSetupVisibility();
     }
   }
 }
 
 function mouseUpBeforeSetupIsDone(evt) {
   let state = store.getState();
+  if (!state.selectedElement) return;
   const mySelectPieceId = state.selectedElement.id;
   state.selectedElement = false;
   getElementClosestToMouse(evt);
   if(state.draggedOn !== '' && state.highlighted.includes(state.draggedOn)){
     setPieceToPoly(mySelectPieceId, state.draggedOn);
+    state.setupPlacementsThisTurn += 1;
     sendMessageFromClient(JSON.stringify({'legalMoveA' : {'mySelectPieceId' : mySelectPieceId, 'draggedOn' : state.draggedOn}, 'randomHash' : state.randomHash, 'whoAmI' : whoAmI, 'timeInfo' : state.timeInfo}));
+    
+    // Check if step is complete for this side
+    let pieceType = board.allPieces[mySelectPieceId].type;
+    let stepComplete = false;
+    const side = board.allPieces[mySelectPieceId].side;
+
+    if (state.setupStep === 0) stepComplete = true; // Goddess
+    else if (state.setupStep === 1) {
+        // Hero
+        const heroes = [];
+        for (const id in board.allPieces) {
+           if (board.allPieces[id].side === side && board.allPieces[id].type === 'heroe' && board.allPieces[id].position !== 'returned') heroes.push(id);
+        }
+        if (heroes.length === 2) stepComplete = true;
+    } else if (state.setupStep === 2) {
+        // Berserker
+        const berserkers = [];
+        for (const id in board.allPieces) {
+           if (board.allPieces[id].side === side && board.allPieces[id].type === 'berserker' && board.allPieces[id].position !== 'returned') berserkers.push(id);
+        }
+        if (berserkers.length === 2) stepComplete = true;
+    } else if (state.setupStep === 3) {
+        // Bishop
+        const bishops = [];
+        for (const id in board.allPieces) {
+           if (board.allPieces[id].side === side && board.allPieces[id].type === 'bishop' && board.allPieces[id].position !== 'returned') bishops.push(id);
+        }
+        if (bishops.length === 4) stepComplete = true;
+    } else if (state.setupStep === 4) {
+        // Infantry
+        const inf = [];
+        for (const id in board.allPieces) {
+           if (board.allPieces[id].side === side && (board.allPieces[id].type === 'ghoul' || board.allPieces[id].type === 'siren') && board.allPieces[id].position !== 'returned') inf.push(id);
+        }
+        if (inf.length === 18) stepComplete = true;
+    }
+
+    if (stepComplete) {
+       sendMessageFromClient(JSON.stringify({'endOfTurn' : {'whoseTurnItIs' : state.whoseTurnItIs}, 'randomHash' : state.randomHash, 'whoAmI' : whoAmI, 'timeInfo' : state.timeInfo}));
+    } else {
+       // Show "End Turn" button since they placed at least one
+       let btnEnd = document.getElementById('myButtonEndTurn');
+       if (btnEnd && btnEnd.style.visibility !== 'visible') toggleButtonVisibility(btnEnd);
+    }
   } else {
     if ((mySelectPieceId in board.allPieces) && board.allPieces[mySelectPieceId].position == 'returned'){
       let e = document.getElementById(mySelectPieceId);

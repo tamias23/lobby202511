@@ -3,7 +3,7 @@ import { store } from './store.js';
 const boardstate = store.getState();
 import { toggleButtonVisibility, setButtonAndFooterColor } from './ui.js';
 import { rotate, setPieceToPoly, removePieceFromGame, removeConnex, removeAdjacent } from './boardUtils.js';
-import { endOfTurn, setSirenNeighbors } from './gameLogic.js';
+import { endOfTurn, setSirenNeighbors, updateSetupVisibility } from './gameLogic.js';
 import { sleep, getDistanceBetweenPoly, shuffleArray } from './utils.js';
 import { showColorSelectors } from './ui.js';
 
@@ -69,6 +69,7 @@ export function playAction(typeOfMessage, message) {
         }
       }
       boardstate.setupIsDone = 'yes';
+      updateSetupVisibility();
       showColorSelectors();
       let myButtonSetupRandomly = document.getElementById('myButtonSetupRandomly');
       let myButtonNewBoardRequested = document.getElementById('myButtonNewBoardRequested');
@@ -138,12 +139,13 @@ export function playAction(typeOfMessage, message) {
 
         let howManyPiecesSet = 0;
         for (const id in board.allPieces){
-          if(board.allPieces[id].position === 'returned'){
+          if(board.allPieces[id].position !== 'returned'){
             howManyPiecesSet = howManyPiecesSet + 1;
           }
         }
-        if (boardstate.setupIsDone === 'no' && howManyPiecesSet == 0) {
+        if (boardstate.setupIsDone === 'no' && howManyPiecesSet == 54) {
           boardstate.setupIsDone = 'yes';
+          updateSetupVisibility();
           showColorSelectors();
           let btnSetup = document.getElementById('myButtonSetupRandomly');
           let btnNewBoard = document.getElementById('myButtonNewBoardRequested');

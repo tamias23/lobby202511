@@ -6,7 +6,7 @@ import { sendMessageFromClient } from './socketHandler.js';
 import { hideColorSelectors, updateClock, updateClockRotated, toggleButtonVisibility } from './ui.js';
 import { rotate } from './boardUtils.js';
 import { mouseDown, mouseMove, mouseUp } from './dragDrop.js';
-import { endOfTurn } from './gameLogic.js';
+import { endOfTurn, updateSetupVisibility } from './gameLogic.js';
 
 window.onload = function firstLaunch(evt) {
   boardstate.fullboardid = document.getElementById('board').getAttribute('fullboardid');
@@ -159,6 +159,9 @@ function afterLoadingData(_board) {
     }
     boardstate.timeInfo['timeSetOnClient'] = tempDateNow;
   }, 130);
+  
+  // Initial setup visibility
+  updateSetupVisibility();
 }
 
 function bindEventListeners() {

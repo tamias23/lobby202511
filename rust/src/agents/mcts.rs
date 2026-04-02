@@ -1,5 +1,5 @@
 use crate::agents::{Agent, AgentMove};
-use crate::engine::{get_legal_moves, GameState, apply_move, apply_move_turnover, get_legal_colors};
+use crate::engine::{get_legal_moves, GameState, apply_move, apply_move_turnover, get_legal_colors, GamePhase, get_setup_legal_placements, apply_setup_placement_turnover, perform_setup_turn};
 use crate::models::{Side, PieceType};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -7,6 +7,117 @@ use std::sync::Mutex;
 use ort::session::Session;
 use ort::value::Value;
 use ndarray::Array2;
+use std::collections::HashSet;
+
+/// Shared graph construction: encodes the game state as a graph.
+/// Returns (node_features [N×12], edge_index [2×E], node_to_idx mapping).
+pub fn build_graph_data(gs: &GameState) -> (Array2<f32>, Array2<i64>, HashMap<String, usize>) {
+    let mut idx_to_node = Vec::new();
+    let mut node_to_idx = HashMap::new();
+
+    let mut sorted_polys: Vec<_> = gs.board.polygons.keys().collect();
+    sorted_polys.sort(); // Deterministic ordering
+    for poly_id in sorted_polys {
+        node_to_idx.insert(poly_id.clone(), idx_to_node.len());
+        idx_to_node.push(poly_id.clone());
+    }
+
+    // Add 16 static Stock nodes (8 PieceTypes × 2 Sides)
+    let sides = vec![Side::White, Side::Black];
+    let types = vec![
+        PieceType::Goddess, PieceType::Heroe, PieceType::Mage, PieceType::Bishop,
+        PieceType::Soldier, PieceType::Siren, PieceType::Ghoul, PieceType::Berserker,
+    ];
+    for side in &sides {
+        for p_type in &types {
+            let stock_id = format!("STOCK_{:?}_{:?}", side, p_type);
+            node_to_idx.insert(stock_id.clone(), idx_to_node.len());
+            idx_to_node.push(stock_id);
+        }
+    }
+
+    let n = idx_to_node.len();
+    let num_features = 12;
+    let mut x = Array2::<f32>::zeros((n, num_features));
+
+    let active_color = gs.color_chosen.get(&gs.turn);
+
+    for (i, node_id) in idx_to_node.iter().enumerate() {
+        if node_id.starts_with("STOCK_") {
+            x[[i, 11]] = 1.0; // IsStock
+            let parts: Vec<&str> = node_id.split('_').collect();
+            let side = if parts[1] == "White" { Side::White } else { Side::Black };
+            x[[i, 0]] = if side == gs.turn { 1.0 } else { -1.0 };
+
+            let p_type = match parts[2] {
+                "Goddess" => PieceType::Goddess,
+                "Heroe" => PieceType::Heroe,
+                "Mage" => PieceType::Mage,
+                "Bishop" => PieceType::Bishop,
+                "Soldier" => PieceType::Soldier,
+                "Siren" => PieceType::Siren,
+                "Ghoul" => PieceType::Ghoul,
+                "Berserker" => PieceType::Berserker,
+                _ => PieceType::Soldier,
+            };
+            let type_idx = match p_type {
+                PieceType::Goddess => 1, PieceType::Heroe => 2, PieceType::Mage => 3,
+                PieceType::Bishop => 4, PieceType::Soldier => 5, PieceType::Siren => 6,
+                PieceType::Ghoul => 7, PieceType::Berserker => 8,
+            };
+            x[[i, type_idx]] = 1.0;
+
+            let has_in_stock = gs.board.pieces.values().any(|p|
+                p.side == side && p.piece_type == p_type && p.position == "returned"
+            );
+            if has_in_stock {
+                x[[i, 9]] = 1.0;
+            }
+            continue;
+        }
+
+        let poly = &gs.board.polygons[node_id];
+        if Some(&poly.color) == active_color {
+            x[[i, 10]] = 1.0;
+        }
+        if let Some(p_id) = gs.occupancy.get(node_id) {
+            let p = &gs.board.pieces[p_id];
+            x[[i, 0]] = if p.side == gs.turn { 1.0 } else { -1.0 };
+            x[[i, 9]] = 1.0;
+            let type_idx = match p.piece_type {
+                PieceType::Goddess => 1, PieceType::Heroe => 2, PieceType::Mage => 3,
+                PieceType::Bishop => 4, PieceType::Soldier => 5, PieceType::Siren => 6,
+                PieceType::Ghoul => 7, PieceType::Berserker => 8,
+            };
+            x[[i, type_idx]] = 1.0;
+        }
+    }
+
+    let mut edges = Vec::new();
+    for (source, poly) in &gs.board.polygons {
+        let u = node_to_idx[source];
+        let mut neighbors_set = HashSet::new();
+        for n in &poly.neighbors { neighbors_set.insert(n.clone()); }
+        for n in &poly.neighbours { neighbors_set.insert(n.clone()); }
+        for target in neighbors_set {
+            if let Some(&v) = node_to_idx.get(&target) {
+                edges.push([u as i64, v as i64]);
+            }
+        }
+    }
+    let edge_index = if edges.is_empty() {
+        Array2::zeros((2, 0))
+    } else {
+        Array2::from_shape_vec(
+            (edges.len(), 2),
+            edges.iter().flat_map(|e| vec![e[0], e[1]]).collect(),
+        )
+        .unwrap()
+        .reversed_axes()
+    };
+
+    (x, edge_index, node_to_idx)
+}
 
 pub struct MctsAgent {
     pub time_budget_ms: u64,
@@ -80,121 +191,29 @@ impl MctsAgent {
     }
 
     pub(crate) fn get_graph_data(&self, gs: &GameState) -> (Array2<f32>, Array2<i64>, Array2<i64>, Vec<String>) {
-        let mut idx_to_node = Vec::new();
-        let mut node_to_idx = HashMap::new();
-        
-        let mut sorted_polys: Vec<_> = gs.board.polygons.keys().collect();
-        sorted_polys.sort(); // Deterministic ordering
-        for poly_id in sorted_polys {
-            node_to_idx.insert(poly_id.clone(), idx_to_node.len());
-            idx_to_node.push(poly_id.clone());
-        }
-        
-        // Add 16 static Stock nodes (8 PieceTypes * 2 Sides)
-        let sides = vec![Side::White, Side::Black];
-        let types = vec![
-            PieceType::Goddess, PieceType::Heroe, PieceType::Mage, PieceType::Bishop,
-            PieceType::Soldier, PieceType::Siren, PieceType::Ghoul, PieceType::Berserker
-        ];
-        for side in &sides {
-            for p_type in &types {
-                let stock_id = format!("STOCK_{:?}_{:?}", side, p_type);
-                node_to_idx.insert(stock_id.clone(), idx_to_node.len());
-                idx_to_node.push(stock_id);
-            }
-        }
-        
-        let n = idx_to_node.len();
-        let num_features = 12; // Side, PieceType (1-8), IsOccupied, IsActiveColor, IsStock (11)
-        let mut x = Array2::<f32>::zeros((n, num_features));
-        
-        let active_color = gs.color_chosen.get(&gs.turn);
-
-        for (i, node_id) in idx_to_node.iter().enumerate() {
-            if node_id.starts_with("STOCK_") {
-                x[[i, 11]] = 1.0; // IsStock
-                
-                // Parse side and type from STOCK_Side_Type
-                let parts: Vec<&str> = node_id.split('_').collect();
-                let side = if parts[1] == "White" { Side::White } else { Side::Black };
-                x[[i, 0]] = if side == gs.turn { 1.0 } else { -1.0 };
-                
-                let p_type = match parts[2] {
-                    "Goddess" => PieceType::Goddess,
-                    "Heroe" => PieceType::Heroe,
-                    "Mage" => PieceType::Mage,
-                    "Bishop" => PieceType::Bishop,
-                    "Soldier" => PieceType::Soldier,
-                    "Siren" => PieceType::Siren,
-                    "Ghoul" => PieceType::Ghoul,
-                    "Berserker" => PieceType::Berserker,
-                    _ => PieceType::Soldier,
-                };
-                let type_idx = match p_type {
-                    PieceType::Goddess => 1, PieceType::Heroe => 2, PieceType::Mage => 3,
-                    PieceType::Bishop => 4, PieceType::Soldier => 5, PieceType::Siren => 6,
-                    PieceType::Ghoul => 7, PieceType::Berserker => 8,
-                };
-                x[[i, type_idx]] = 1.0;
-
-                // IsOccupied (9) if at least one piece of this type is currently in stock
-                let has_in_stock = gs.board.pieces.values().any(|p| 
-                    p.side == side && p.piece_type == p_type && p.position == "returned"
-                );
-                if has_in_stock {
-                    x[[i, 9]] = 1.0;
-                }
-                continue;
-            }
-
-            let poly = &gs.board.polygons[node_id];
-            if Some(&poly.color) == active_color {
-                x[[i, 10]] = 1.0;
-            }
-            if let Some(p_id) = gs.occupancy.get(node_id) {
-                let p = &gs.board.pieces[p_id];
-                x[[i, 0]] = if p.side == gs.turn { 1.0 } else { -1.0 };
-                x[[i, 9]] = 1.0; // IsOccupied
-                
-                let type_idx = match p.piece_type {
-                    PieceType::Goddess => 1,
-                    PieceType::Heroe => 2,
-                    PieceType::Mage => 3,
-                    PieceType::Bishop => 4,
-                    PieceType::Soldier => 5,
-                    PieceType::Siren => 6,
-                    PieceType::Ghoul => 7,
-                    PieceType::Berserker => 8,
-                };
-                x[[i, type_idx]] = 1.0;
-            }
-        }
-
-        let mut edges = Vec::new();
-        for (source, poly) in &gs.board.polygons {
-            let u = node_to_idx[source];
-            // Include both slide and jump neighbors for full mobility visibility
-            let mut neighbors_set = std::collections::HashSet::new();
-            for n in &poly.neighbors { neighbors_set.insert(n.clone()); }
-            for n in &poly.neighbours { neighbors_set.insert(n.clone()); }
-
-            for target in neighbors_set {
-                if let Some(&v) = node_to_idx.get(&target) {
-                    edges.push([u as i64, v as i64]);
-                }
-            }
-        }
-        let edge_index = if edges.is_empty() {
-            Array2::zeros((2, 0))
-        } else {
-            Array2::from_shape_vec((edges.len(), 2), 
-                edges.iter().flat_map(|e| vec![e[0], e[1]]).collect()
-            ).unwrap().reversed_axes()
-        };
+        let (x, edge_index, node_to_idx) = build_graph_data(gs);
 
         let mut legal_move_keys = Vec::new();
         let mut moves_flat = Vec::new();
-        if gs.is_new_turn {
+        if gs.phase == GamePhase::Setup {
+            let placements = get_setup_legal_placements(gs);
+            for (p_id, targets) in placements {
+                let p = &gs.board.pieces[&p_id];
+                let stock_id = format!("STOCK_{:?}_{:?}", p.side, p.piece_type);
+                if let Some(&u) = node_to_idx.get(&stock_id) {
+                    for target in targets {
+                        if let Some(&v) = node_to_idx.get(&target) {
+                            legal_move_keys.push(format!("{}:{}", p_id, target));
+                            moves_flat.push(u as i64);
+                            moves_flat.push(v as i64);
+                        }
+                    }
+                }
+            }
+            if gs.setup_placements_this_turn > 0 {
+                legal_move_keys.push("PASS".to_string());
+            }
+        } else if gs.is_new_turn {
              let colors = get_legal_colors(gs, &gs.turn);
              for color in colors {
                  legal_move_keys.push(format!("COLOR:{}", color));
@@ -352,6 +371,18 @@ impl MctsAgent {
                     let color = &best_child_key[6..];
                     current_gs.color_chosen.insert(current_gs.turn, color.to_string());
                     current_gs.is_new_turn = false;
+                } else if current_gs.phase == GamePhase::Setup {
+                    if best_child_key == "PASS" {
+                        current_gs.turn = current_gs.get_enemy_side();
+                        current_gs.setup_placements_this_turn = 0;
+                    } else {
+                        let parts: Vec<&str> = best_child_key.split(':').collect();
+                        if parts.len() >= 2 {
+                            let p_id = parts[0];
+                            let target = parts[1];
+                            apply_setup_placement_turnover(&mut current_gs, p_id, target);
+                        }
+                    }
                 } else {
                     let parts: Vec<&str> = best_child_key.split(':').collect();
                     if parts.len() >= 2 {
@@ -579,9 +610,21 @@ mod tests {
     fn test_return_moves_in_graph() {
         let mut gs = setup_test_board();
         // Move b_goddess to "returned" stock
+        // Black needs a Hero on the board to serve as an anchor for the Goddess to return
+        gs.board.pieces.insert("b_heroe".to_string(), crate::models::Piece {
+            id: "b_heroe".to_string(),
+            piece_type: PieceType::Heroe,
+            side: Side::Black,
+            position: "p1".to_string(),
+        });
+        gs.occupancy.insert("p1".to_string(), "b_heroe".to_string());
+        
+        gs.occupancy.insert("p1".to_string(), "b_heroe".to_string());
+        
         gs.board.pieces.get_mut("b_goddess").unwrap().position = "returned".to_string();
         gs.occupancy.remove("p2");
         gs.turn = Side::Black;
+        gs.phase = GamePhase::Playing;
         // Must choose a color to allow deployment from stock
         gs.color_chosen.insert(Side::Black, "Blue".to_string());
         gs.is_new_turn = false;
@@ -618,9 +661,10 @@ mod tests {
     #[test]
     fn test_terminal_win_detection() {
         let mut gs = setup_test_board();
+        gs.phase = GamePhase::Playing;
         gs.color_chosen.insert(gs.turn, "Blue".to_string());
         gs.is_new_turn = false;
-        let agent = MctsAgent::new(50, None, "mcts_temp".to_string());
+        let agent = MctsAgent::new(300, None, "mcts_temp".to_string());
         let m = agent.choose_move(&gs, &std::collections::HashMap::new(), false);
         match m {
             AgentMove::Move { .. } => {},

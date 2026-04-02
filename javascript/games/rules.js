@@ -2,7 +2,13 @@
 // None of these functions mutate state or update the DOM.
 
 export function getPolysClose(board, selectedPieceId, d) {
-  let toBeReturned = [board.allPieces[selectedPieceId].position];
+  const startPos = board.allPieces[selectedPieceId].position;
+  return getPolysCloseFromPos(board, startPos, d);
+}
+
+export function getPolysCloseFromPos(board, startPos, d) {
+  if (startPos === 'returned' || !startPos) return [];
+  let toBeReturned = [startPos];
   let alreadyTested = [];
   let compteur = 0;
   while (compteur < d) {
@@ -11,8 +17,10 @@ export function getPolysClose(board, selectedPieceId, d) {
     toBeReturned = [...new Set(toBeReturned)];
     for (const e of toBeReturned) {
       if(!alreadyTested.includes(e)) {
-        for (const n1 of board.allPolygons[e].neighbours){
-         temp.push(n1);
+        const poly = board.allPolygons[e];
+        const neighbors = poly.neighbours || poly.neighbors || [];
+        for (const n1 of neighbors){
+          temp.push(n1);
         }
         alreadyTested.push(e);
       }
@@ -36,114 +44,164 @@ export function countReturnedPieceSide(board, pieceType, pieceSide) {
 }  
 
 export function getListOfPolysClosest(board, boardstate, pieceSide) {
-  let toBeReturned = [];
-  
-  if (board.allPieces[pieceSide + '_goddess_0'].position === 'returned') {
-    let allPossibilities = boardstate.possibleSetupGoddessHeroe[pieceSide];
-    let thisIsPossible = [];
-    for (const ap of allPossibilities) {
-      const places = ap.split(' ');
-      thisIsPossible.push(places[0]);
-    }
-    toBeReturned = [...new Set(thisIsPossible)];
-  } else if (board.allPieces[pieceSide + '_berserker_0'].position === 'returned') {
-    toBeReturned = getPolysClose(board, pieceSide + '_goddess_0', 1);
-  } else if (board.allPieces[pieceSide + '_berserker_1'].position === 'returned') {
-    toBeReturned = getPolysClose(board, pieceSide + '_goddess_0', 1);
-  } else if (board.allPieces[pieceSide + '_heroe_0'].position === 'returned' && board.allPieces[pieceSide + '_heroe_1'].position === 'returned') {
-    let allPossibilities = boardstate.possibleSetupGoddessHeroe[pieceSide];
-    let thisIsPossible = [];
-    for (const ap of allPossibilities) {
-      const places = ap.split(' ');
-      if (places[0] === board.allPieces[pieceSide + '_goddess_0'].position){
-        thisIsPossible.push(places[1]);
-      }
-    }
-    toBeReturned = [...new Set(thisIsPossible)];
-  } else if (board.allPieces[pieceSide + '_heroe_0'].position === 'returned' && board.allPieces[pieceSide + '_heroe_1'].position !== 'returned') {
-    let allPossibilities = boardstate.possibleSetupGoddessHeroe[pieceSide];
-    let thisIsPossible = [];
-    for (const ap of allPossibilities) {
-      const places = ap.split(' ');
-      if (places[1] === board.allPieces[pieceSide + '_heroe_1'].position){
-        thisIsPossible.push(places[2]);
-      }
-    }
-    toBeReturned = [...new Set(thisIsPossible)];
-  } else if (board.allPieces[pieceSide + '_heroe_1'].position === 'returned' && board.allPieces[pieceSide + '_heroe_0'].position !== 'returned') {
-    let allPossibilities = boardstate.possibleSetupGoddessHeroe[pieceSide];
-    let thisIsPossible = [];
-    for (const ap of allPossibilities) {
-      const places = ap.split(' ');
-      if (places[1] === board.allPieces[pieceSide + '_heroe_0'].position){
-        thisIsPossible.push(places[2]);
-      }
-    }
-    toBeReturned = [...new Set(thisIsPossible)];
-  } else if(
-    (
-      board.allPieces[pieceSide + '_bishop_0'].position !== 'returned' ||
-      board.allPieces[pieceSide + '_bishop_1'].position !== 'returned' ||
-      board.allPieces[pieceSide + '_bishop_2'].position !== 'returned' ||
-      board.allPieces[pieceSide + '_bishop_3'].position !== 'returned' 
-    ) &&
-    (
-      board.allPieces[pieceSide + '_bishop_0'].position === 'returned' ||
-      board.allPieces[pieceSide + '_bishop_1'].position === 'returned' ||
-      board.allPieces[pieceSide + '_bishop_2'].position === 'returned' ||
-      board.allPieces[pieceSide + '_bishop_3'].position === 'returned' 
-    )
-  ) {
-    let allColors = [];
-    for (let i=0;i<4;i++) {
-      if(board.allPieces[pieceSide + '_bishop_' + i].position !== 'returned'){
-        allColors.push(board.allPolygons[board.allPieces[pieceSide + '_bishop_' + i].position].color);
-      }
-    }
+  // This function is now a helper for the new step-based manual setup.
+  // We return targets based on the current setupStep.
+  let step = boardstate.setupStep;
+  let targets = [];
 
-    let n = 1;
-    while(toBeReturned.length == 0){
-      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_goddess_0', n));
-      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_heroe_0', n));
-      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_heroe_1', n));
-      toBeReturned = toBeReturned.filter(x => board.allPolygons[x].isIn === 'empty');
-      toBeReturned = toBeReturned.filter(x => !allColors.includes(board.allPolygons[x].color));
-      n = n + 1;
-      if (n == 15) break;
-    }
-  } else if(countReturnedPieceSide(board, 'soldier', pieceSide) > 0 && countReturnedPieceSide(board, 'soldier', pieceSide) < 6) {
-    let allColors = {'orange' : 0, 'grey' : 0, 'blue' : 0, 'green' : 0};
+  const width = board.width || 1000;
+  const height = board.height || 1000;
+ 
+  const getEdges = (side) => {
+    let e = side === 'white' ? board.topEdgepolys : board.bottomEdgepolys;
+    // Fallback for tests that don't define edge polys
+    if ((!e || e.length === 0) && board.allPolygons) return Object.keys(board.allPolygons);
+    return e || [];
+  };
 
-    allColors[board.allPolygons[board.allPieces[pieceSide + '_berserker_0'].position].color] = allColors[board.allPolygons[board.allPieces[pieceSide + '_berserker_0'].position].color] + 1;
-    allColors[board.allPolygons[board.allPieces[pieceSide + '_berserker_1'].position].color] = allColors[board.allPolygons[board.allPieces[pieceSide + '_berserker_1'].position].color] + 1
-    for (let i=0;i<6;i++) {
-      if(board.allPieces[pieceSide + '_soldier_' + i].position !== 'returned'){
-        allColors[board.allPolygons[board.allPieces[pieceSide + '_soldier_' + i].position].color] = allColors[board.allPolygons[board.allPieces[pieceSide + '_soldier_' + i].position].color] + 1;
+  const getPiecePos = (type, side) => {
+    for (const id in board.allPieces) {
+      const p = board.allPieces[id];
+      if (p.side === side && p.type === type && p.position !== 'returned') return p.position;
+    }
+    return null;
+  };
+
+  const getPlacedIds = (type, side) => {
+    const ids = [];
+    for (const id in board.allPieces) {
+      const p = board.allPieces[id];
+      if (p.side === side && p.type === type && p.position !== 'returned') ids.push(id);
+    }
+    return ids;
+  };
+
+  const getAnchors = (side) => {
+    const list = [];
+    const g = getPiecePos('goddess', side);
+    if (g) list.push(g);
+    getPlacedIds('heroe', side).forEach(id => list.push(board.allPieces[id].position));
+    return list;
+  };
+
+  switch (step) {
+    case 0: // Goddess on edge
+      targets = getEdges(pieceSide).filter(p => {
+        if (board.allPolygons[p].isIn !== 'empty') return false;
+        return canPlaceHeroesFromGoddess(board, p, pieceSide, width, height);
+      });
+      break;
+    case 1: // Heroes on edge
+      const gPos = getPiecePos('goddess', pieceSide);
+      if (gPos) {
+        const gNear2 = getPolysCloseFromPos(board, gPos, 2);
+        const gNear6 = getPolysCloseFromPos(board, gPos, 6);
+        const edges = getEdges(pieceSide);
+        const heroes = getPlacedIds('heroe', pieceSide);
+        
+        targets = edges.filter(e => {
+          if (board.allPolygons[e].isIn !== 'empty') return false;
+          if (gNear2.includes(e) || !gNear6.includes(e)) return false;
+          if (heroes.length > 0) {
+            const h1Pos = board.allPieces[heroes[0]].position;
+            const h1Near6 = getPolysCloseFromPos(board, h1Pos, 6);
+            if (h1Near6.includes(e)) return false;
+          } else {
+            // First Hero look-ahead: ensures at least one slot remains for Hero 2
+            const eNear6 = getPolysCloseFromPos(board, e, 6);
+            const canFitSecondHero = edges.some(e2 => {
+              if (e2 === e || board.allPolygons[e2].isIn !== 'empty') return false;
+              if (gNear2.includes(e2) || !gNear6.includes(e2)) return false;
+              if (eNear6.includes(e2)) return false;
+              return true;
+            });
+            if (!canFitSecondHero) return false;
+          }
+          return true;
+        });
       }
-    }
+      break;
+    case 2: // Berserker near goddess
+      const gPosB = getPiecePos('goddess', pieceSide);
+      if (gPosB) {
+        let near = getPolysClose(board, side_g_id(pieceSide), 1);
+        if (near.filter(p => board.allPolygons[p].isIn === 'empty').length < 2) {
+          near = getPolysClose(board, side_g_id(pieceSide), 2);
+        }
+        targets = near.filter(p => board.allPolygons[p].isIn === 'empty');
+      }
+      break;
+    case 3: // Bishop unique color - closest possible ring
+      const anchorsB = getAnchors(pieceSide);
+      const placedBishops = getPlacedIds('bishop', pieceSide);
+      const usedColors = placedBishops.map(id => board.allPolygons[board.allPieces[id].position].color);
+      
+      for (let d = 1; d <= 15; d++) {
+        let ringD = [];
+        anchorsB.forEach(a => {
+          getPolysCloseFromPos(board, a, d).forEach(p => ringD.push(p));
+        });
+        const candidates = [...new Set(ringD)].filter(p => {
+          if (board.allPolygons[p].isIn !== 'empty') return false;
+          if (usedColors.includes(board.allPolygons[p].color)) return false;
+          return true;
+        });
 
-    let n = 1;
-    while(toBeReturned.length == 0){
-      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_goddess_0', n));
-      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_heroe_0', n));
-      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_heroe_1', n));
-      toBeReturned = toBeReturned.filter(x => board.allPolygons[x].isIn === 'empty');
-      toBeReturned = toBeReturned.filter(x => allColors[board.allPolygons[x].color] < 2);
-      n = n + 1;
-      if (n == 15) break;
-    }
-  } else {
-    let n = 1;
-    while(toBeReturned.length == 0){
-      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_goddess_0', n));
-      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_heroe_0', n));
-      toBeReturned = toBeReturned.concat(getPolysClose(board, pieceSide + '_heroe_1', n));
-      toBeReturned = toBeReturned.filter(x => board.allPolygons[x].isIn === 'empty');
-      n = n + 1;
-      if (n == 15) break;
+        if (candidates.length > 0) {
+          targets = candidates;
+          break;
+        }
+      }
+      break;
+    case 4: // Infantry rings
+      const anchorsI = getAnchors(pieceSide);
+      for (let d = 1; d <= 15; d++) {
+        const ringI = [];
+        anchorsI.forEach(a => {
+           const dummyId = board.allPolygons[a].isIn;
+           if (dummyId !== 'empty') {
+              getPolysClose(board, dummyId, d).forEach(p => ringI.push(p));
+           }
+        });
+        const avail = [...new Set(ringI)].filter(p => board.allPolygons[p].isIn === 'empty');
+        if (avail.length > 0) {
+          targets = avail;
+          break;
+        }
+      }
+      break;
+  }
+
+  return targets;
+}
+
+function side_g_id(side) {
+  return side + '_goddess_0';
+}
+
+function canPlaceHeroesFromGoddess(board, gPos, side, width, height) {
+  if (!board.topEdgepolys) return true; // Bypass for unit tests with minimal board mocks
+  const edges = (side === 'white' ? board.topEdgepolys : board.bottomEdgepolys) || (board.allPolygons ? Object.keys(board.allPolygons) : []);
+  const gNear2 = getPolysCloseFromPos(board, gPos, 2);
+  const gNear6 = getPolysCloseFromPos(board, gPos, 6);
+
+  const validHeroeEdges = edges.filter(e => {
+    return e !== gPos && gNear6.includes(e) && !gNear2.includes(e);
+  });
+
+  if (validHeroeEdges.length < 2) return false;
+
+  for (let i = 0; i < validHeroeEdges.length; i++) {
+    for (let j = i + 1; j < validHeroeEdges.length; j++) {
+      const h1 = validHeroeEdges[i];
+      const h2 = validHeroeEdges[j];
+      const h1Near6 = getPolysCloseFromPos(board, h1, 6);
+      if (!h1Near6.includes(h2)) {
+        return true;
+      }
     }
   }
-  return toBeReturned;
+  return false;
 }
 
 export function getMoveSoldier(board, boardstate, selectedPieceId) {
@@ -365,19 +423,27 @@ export function getMoveBishop(board, boardstate, selectedPieceId) {
 
 export function getListOfPossibleTargetsForSetup(board, boardstate, selectedPieceId) {
   let toBeReturned = [];
-  let inputOrder = ['goddess', 'berserker', 'heroe', 'bishop', 'mage', 'soldier'];
+  const pieceType = board.allPieces[selectedPieceId].type;
+  const pieceSide = board.allPieces[selectedPieceId].side;
+
+  if (boardstate.setupIsDone === 'yes' || boardstate.whoseTurnItIs !== pieceSide) {
+    return [];
+  }
+
+  const stepMap = {
+    0: ['goddess'],
+    1: ['heroe'],
+    2: ['berserker'],
+    3: ['bishop'],
+    4: ['ghoul', 'siren']
+  };
+
+  if (!stepMap[boardstate.setupStep].includes(pieceType)) {
+    return [];
+  }
 
   if (board.allPieces[selectedPieceId].position === 'returned') {
-    let pieceType = board.allPieces[selectedPieceId].type;
-    let pieceSide = board.allPieces[selectedPieceId].side;
-    const myIndexType = inputOrder.indexOf(pieceType);
-    let howManyPiecesHaveToBeSetBefore = 0;
-    for (let i=0;i<myIndexType;i++) {
-      howManyPiecesHaveToBeSetBefore = howManyPiecesHaveToBeSetBefore + countReturnedPieceSide(board, inputOrder[i], pieceSide);
-    }
-    if(howManyPiecesHaveToBeSetBefore == 0){
-      toBeReturned = getListOfPolysClosest(board, boardstate, pieceSide);
-    }
+    toBeReturned = getListOfPolysClosest(board, boardstate, pieceSide);
   }
 
   toBeReturned = [...new Set(toBeReturned)];

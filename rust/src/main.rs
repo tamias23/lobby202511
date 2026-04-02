@@ -35,8 +35,40 @@ fn make_agent(name: &str, weights_str: Option<&String>, mcts_budget: u64, mcts_d
             }
             Arc::new(agents::greedy_bob::GreedyBobAgent::new(weights))
         }
+        "greedy_jack" => {
+            let num = agents::greedy_jack::NUM_PARAMS;
+            let weights = if let Some(path) = model_path {
+                // Load weights from JSON file (as produced by genetic_jack.py)
+                match std::fs::read_to_string(&path) {
+                    Ok(content) => {
+                        let json: serde_json::Value = serde_json::from_str(&content)
+                            .unwrap_or_else(|e| { eprintln!("Failed to parse JSON from {}: {}", path, e); std::process::exit(1); });
+                        let arr = json["weights"].as_array()
+                            .unwrap_or_else(|| { eprintln!("No 'weights' array in {}", path); std::process::exit(1); });
+                        let w: Vec<f64> = arr.iter().filter_map(|v| v.as_f64()).collect();
+                        if w.len() < num {
+                            eprintln!("Expected {} weights in {}, got {}", num, path, w.len());
+                            std::process::exit(1);
+                        }
+                        println!("Loaded GreedyJack weights from {} ({} params)", path, w.len());
+                        w
+                    }
+                    Err(e) => { eprintln!("Failed to read {}: {}", path, e); std::process::exit(1); }
+                }
+            } else if let Some(w_str) = weights_str {
+                let mut weights = vec![0.01_f64; num];
+                let parsed: Vec<f64> = w_str.split(',').filter_map(|s| s.parse().ok()).collect();
+                for (i, val) in parsed.into_iter().enumerate().take(num) {
+                    weights[i] = val;
+                }
+                weights
+            } else {
+                vec![0.01_f64; num]
+            };
+            Arc::new(agents::greedy_jack::GreedyJackAgent::new(weights))
+        }
         other => {
-            eprintln!("Unknown agent '{}'. Available: random, greedy_bob, mcts", other);
+            eprintln!("Unknown agent '{}'. Available: random, greedy_bob, greedy_jack, mcts", other);
             std::process::exit(1);
         }
     }
@@ -57,7 +89,7 @@ async fn main() {
         println!("      --greedy-weights-white \"1.0,1.0,-2.0,...\"");
         println!("      --greedy-weights-black \"1.0,1.0,-2.0,...\"");
         println!();
-        println!("  Agents: random, greedy_bob, mcts");
+        println!("  Agents: random, greedy_bob, greedy_jack, mcts");
         std::process::exit(1);
     }
 
@@ -126,7 +158,7 @@ fn run_batch(
     parquet_dir: Option<String>,
     board_path: &str,
 ) {
-    use crate::engine::{GameState, perform_turn, setup_random_board};
+    use crate::engine::{GameState, GamePhase, perform_turn, perform_setup_turn, setup_pieces};
     use crate::models::Side;
     use uuid::Uuid;
     use crate::recorder::{Recorder, GameRecord, MoveEvent, current_timestamp_ms, current_date_string};
@@ -151,18 +183,42 @@ fn run_batch(
 
     for game in 1..=n_games {
         let mut gs = GameState::new(board.clone());
-        setup_random_board(&mut gs);
-        
+        setup_pieces(&mut gs);
+
+        // Capture state before any setup moves are made
         let mut init_map = std::collections::HashMap::new();
         for (pid, p) in &gs.board.pieces {
             init_map.insert(pid.clone(), p.position.clone());
         }
         let initial_state = serde_json::to_string(&init_map).unwrap_or_else(|_| "{}".to_string());
-        
         let game_id = Uuid::new_v4().to_string();
         let game_date = current_date_string();
         let game_start_ms = current_timestamp_ms();
+
         let mut game_moves = Vec::new();
+
+        // 1. Setup Phase
+        while gs.phase == GamePhase::Setup {
+            let active_side = gs.turn;
+            let agent: &dyn agents::Agent = match active_side {
+                Side::White => white_agent,
+                Side::Black => black_agent,
+            };
+            let (_, move_made) = perform_setup_turn(&mut gs, agent);
+            
+            if recorder.is_some() {
+                if let Some((piece, target)) = move_made {
+                    game_moves.push(MoveEvent {
+                        turn_number: 0, // Setup is turn 0
+                        active_side: format!("{:?}", active_side),
+                        chosen_color: "setup".to_string(),
+                        piece_id: piece,
+                        target_pos: target,
+                        timestamp_ms: current_timestamp_ms(),
+                    });
+                }
+            }
+        }
 
         let mut winner: Option<Side> = None;
         while gs.turn_counter < max_turns {

@@ -24,7 +24,9 @@ export const store = {
     animation_duration_lastMove: -1,
     animation_delay: -1,
     setupIsDone: 'no',
-    possibleSetupGoddessHeroe: { yellow: [], white: [] },
+    setupStep: 0, // 0=goddess, 1=heroe, 2=berserker, 3=bishop, 4=ghoul_siren
+    setupPlacementsThisTurn: 0,
+    possibleSetupGoddessHeroe: { black: [], white: [] },
     timeInfo: {},
     board: null,
     transform: '',
@@ -106,5 +108,10 @@ export const store = {
 
   setTimeInfo(timeInfo) {
     this.state.timeInfo = timeInfo;
+  },
+
+  advanceSetupStep() {
+    this.state.setupStep += 1;
+    this.state.setupPlacementsThisTurn = 0;
   }
 };

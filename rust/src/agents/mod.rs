@@ -34,4 +34,5 @@ pub trait Agent: Send + Sync {
 
 pub mod random;
 pub mod greedy_bob;
+pub mod greedy_jack;
 pub mod mcts;
