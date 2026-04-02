@@ -182,6 +182,10 @@ fn run_batch(
         .to_string();
 
     for game in 1..=n_games {
+        println!("  --- Game {}/{} starting ---", game, n_games);
+        use std::io::{self, Write};
+        io::stdout().flush().unwrap();
+
         let mut gs = GameState::new(board.clone());
         setup_pieces(&mut gs);
 
@@ -231,6 +235,12 @@ fn run_batch(
             };
             
             let (goddess_captured, move_made) = perform_turn(&mut gs, agent);
+
+            if gs.turn_counter > 0 && gs.turn_counter % 50 == 0 {
+                use std::io::{self, Write};
+                println!("      [Game {}] Turn {}...", game, gs.turn_counter);
+                io::stdout().flush().unwrap();
+            }
             
             if recorder.is_some() {
                 if let Some((piece, target, chosen_color)) = move_made {

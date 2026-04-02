@@ -90,24 +90,24 @@ impl TinyGNN {
 
         // === Layer 1: (N, F) -> (N, H) ===
         let mut h1 = Array2::<f32>::zeros((n, H));
+        let mut agg_f = Array1::<f32>::zeros(F);
+        let mut concat_f = Array1::<f32>::zeros(2 * F);
+
         for i in 0..n {
-            // Aggregate: mean of neighbor features
+            agg_f.fill(0.0);
             let neighbors = &adj[i];
-            let mut agg = Array1::<f32>::zeros(F);
             if !neighbors.is_empty() {
                 for &j in neighbors {
-                    agg += &x.row(j).to_owned();
+                    agg_f += &x.row(j);
                 }
-                agg /= neighbors.len() as f32;
+                agg_f /= neighbors.len() as f32;
             }
-            // Concat self features + aggregated neighbor features: (2*F,)
-            let mut concat = Array1::<f32>::zeros(2 * F);
-            concat.slice_mut(ndarray::s![..F]).assign(&x.row(i));
-            concat.slice_mut(ndarray::s![F..]).assign(&agg);
-            // Message: ReLU(concat @ l1_msg_w + l1_msg_b)
-            let msg = concat.dot(&self.l1_msg_w) + &self.l1_msg_b;
+            
+            concat_f.slice_mut(ndarray::s![..F]).assign(&x.row(i));
+            concat_f.slice_mut(ndarray::s![F..]).assign(&agg_f);
+            
+            let msg = concat_f.dot(&self.l1_msg_w) + &self.l1_msg_b;
             let msg = msg.mapv(|v| v.max(0.0));
-            // Update: ReLU(msg @ l1_upd_w + l1_upd_b)
             let upd = msg.dot(&self.l1_upd_w) + &self.l1_upd_b;
             let upd = upd.mapv(|v| v.max(0.0));
             h1.row_mut(i).assign(&upd);
@@ -115,19 +115,23 @@ impl TinyGNN {
 
         // === Layer 2: (N, H) -> (N, H) ===
         let mut h2 = Array2::<f32>::zeros((n, H));
+        let mut agg_h = Array1::<f32>::zeros(H);
+        let mut concat_h = Array1::<f32>::zeros(2 * H);
+
         for i in 0..n {
+            agg_h.fill(0.0);
             let neighbors = &adj[i];
-            let mut agg = Array1::<f32>::zeros(H);
             if !neighbors.is_empty() {
                 for &j in neighbors {
-                    agg += &h1.row(j).to_owned();
+                    agg_h += &h1.row(j);
                 }
-                agg /= neighbors.len() as f32;
+                agg_h /= neighbors.len() as f32;
             }
-            let mut concat = Array1::<f32>::zeros(2 * H);
-            concat.slice_mut(ndarray::s![..H]).assign(&h1.row(i));
-            concat.slice_mut(ndarray::s![H..]).assign(&agg);
-            let msg = concat.dot(&self.l2_msg_w) + &self.l2_msg_b;
+            
+            concat_h.slice_mut(ndarray::s![..H]).assign(&h1.row(i));
+            concat_h.slice_mut(ndarray::s![H..]).assign(&agg_h);
+            
+            let msg = concat_h.dot(&self.l2_msg_w) + &self.l2_msg_b;
             let msg = msg.mapv(|v| v.max(0.0));
             let upd = msg.dot(&self.l2_upd_w) + &self.l2_upd_b;
             let upd = upd.mapv(|v| v.max(0.0));
@@ -135,6 +139,7 @@ impl TinyGNN {
         }
 
         // === Global mean pool ===
+        // Using average across nodes for simplicity
         let pooled = h2.mean_axis(Axis(0)).unwrap();
 
         // === Readout: tanh(pooled · rd_w + rd_b) ===
@@ -186,10 +191,12 @@ impl Agent for GreedyJackAgent {
         let mut best_score = std::f64::NEG_INFINITY;
         let perspective = state.turn;
 
+        // Clone state once and update in-place for all color evaluations
+        let mut clone_state = state.clone();
+        clone_state.is_new_turn = false;
+
         for (idx, color) in valid_colors.iter().enumerate() {
-            let mut clone_state = state.clone();
             clone_state.color_chosen.insert(perspective, color.clone());
-            clone_state.is_new_turn = false;
 
             let score = self.score_state(&clone_state);
             if score > best_score {
@@ -233,14 +240,18 @@ impl Agent for GreedyJackAgent {
                 let captured = apply_move(&mut clone_state, p_id, target);
 
                 let goddess_captured = captured.contains(&PieceType::Goddess);
-                apply_move_turnover(
-                    &mut clone_state,
-                    p_id,
-                    target,
-                    goddess_captured,
-                    captured.is_empty(),
-                    was_returned,
-                );
+                if clone_state.phase == crate::engine::GamePhase::Playing {
+                    apply_move_turnover(
+                        &mut clone_state,
+                        p_id,
+                        target,
+                        goddess_captured,
+                        captured.is_empty(),
+                        was_returned,
+                    );
+                } else {
+                    crate::engine::apply_setup_placement_turnover(&mut clone_state, p_id, target);
+                }
 
                 let score = if goddess_captured {
                     std::f64::INFINITY

@@ -260,11 +260,11 @@ async def main():
     csv_filename = "greedy_jack_results_swiss.csv"
     with open(csv_filename, "w", newline="") as csvfile:
         csvwriter = csv.writer(csvfile)
-        header = ["Rank", "AgentID", "Name", "Score", "Buchholz"] + [f"W{i}" for i in range(NUM_WEIGHTS)]
+        header = ["Rank", "AgentID", "Name", "Score", "Buchholz"]
         csvwriter.writerow(header)
         for i, agent in enumerate(population):
             buchholz = sum(opp.score for opp in agent.opponents)
-            row = [i + 1, agent.id, agent.name, agent.score, buchholz] + agent.weights
+            row = [i + 1, agent.id, agent.name, agent.score, buchholz]
             csvwriter.writerow(row)
     print(f"✅ Exported CSV summary to {csv_filename}")
 

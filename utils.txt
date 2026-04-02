@@ -1,21 +1,19 @@
-I want to remove the automatic random setup of pieces that occurs at the beginning of the game : I want to make it optional (any real/human player will be able to chose this option : engines will not). 
-Instead players will alternate turns placing their pieces on their starting place in the board, following the exact same rules as defined in the current random setup (also summarized in ./setup.txt).
-This phase of the game will be called the setup phase.
-At the start of this setup phase, the board is empty : only the goddess is visible on the side of the board. White can move. Players alternate turns.
-In this setup phase (in all the turns in this phase), players can add as many pieces they want during their turn, with a minimum of one piece being placed during each turn, to a maximum of all (of course without the mage and soldiers).
-Once the goddess is placed, then Heroes become visible on the side of the board. 
-Once the Heroes are placed, then Berserkers become visible on the side of the board. 
-Once the Berserkers are placed, then Bishops become visible on the side of the board. 
-Once the Bishops are placed, then Ghouls and Sirens become visible on the side of the board. 
-At the end, all pieces are placed on the board (similar to the result of a random setup), except for mage and soldiers who are kept on the side of the board.
-Please draft an implementation plan (maybe in two halves : one for Rust, one for JavaScript ?) : do not forget the agent learning/playing parts of the code. Verify your work extensively as this will affect the whole codebase.
 
-I would like to create a new greedy agent named greedy jack (GreedyJackAgent), very similar to greedy bib.
-The difference will be the score function : it will be a very small Graph neural network with around 5000 parameters.
-As input is the whole state of the game (board + pieces), as output is a normalized score.
-The agent will use this network to chose a move (like Greedy Bob does).
-There will be no retro-propagation : the learning of this agent will be the same as for greedy bob : random initialising of the 5000 parameters, then selection through play with the other greedy jack agents.
-Please propose an implementation. Re-use as much as you can from greedy bob (which remains the same)
+I would like to be able to train a mcts agent not by self play like in self_play_train.py, but playing against a population of already existing greedy jacks agents, found in ./results/jack_nets/
+while duration
+  start collection period
+    The mcts agent plays n games against greedy jacks agents found in ./results/jack_nets/, chosen randomly each game. Each new game the board is chosen randomly.
+    at the end of the collection period, the mcts GAN is trained against the collected JSON samples, as in self_play_train.py
+The parameters of this mcts_against_greedy_jack_train.py new script will be :
+duration
+games_per_batch (above n)
+max_concurrency
+turns_per_game
+mcts_budget
+train_epochs
+train_batch_size
+max_data_files
+This new script is very similar to self_play_train.py
 
 =================================================================================
 
@@ -48,7 +46,7 @@ cd ./rust ; cargo run --bin rust -- /home/mat/Bureau/lobby202511/games/data/nt50
 /home/mat/Bureau/spyder-env/bin/python3 genetic_swiss_bob.py --duration 3600 --rounds 13 --agents 48 --parallel 12
 /home/mat/Bureau/spyder-env/bin/python3 genetic_swiss_bob.py --duration 32400 --rounds 9 --agents 96 --parallel 12
 
-/home/mat/Bureau/spyder-env/bin/python3 genetic_jack.py --duration 900 --agents 100 --rounds 11 --parallel 10
+/home/mat/Bureau/spyder-env/bin/python3 genetic_jack.py --duration 3600 --agents 60 --rounds 7 --parallel 10
 
 /home/mat/Bureau/spyder-env/bin/python3 swiss_tournament.py --agents my_greedy_bob_agents.txt \
 --rounds 100 \
@@ -84,14 +82,18 @@ cargo run --bin rust /home/mat/Bureau/lobby202511/games/data/nt502220828103999_5
 --greedy-weights-black "4.714,-5.786,18.902,13.989,13.037,-8.554,10.924,-9.579,-13.535,-16.572,14.193,19.013,-17.583,16.541,0.62,-16.851,-2.288,13.857,3.739,-16.453,-6.151,19.483,8.442,3.457,18.559,11.345" \
 --store-parquet /home/mat/Bureau/lobby202511/parquet
 
-cargo run --release -- board.json 
+cargo run --release --bin rust /home/mat/Bureau/lobby202511/games/data/nt502220828103999_5682eb28160d64d551de74b14a336a52_board.json \
 --batch 10 \
 --max-turns 200 \
 --white greedy_jack \
---white-model-path ./results/jack_nets/rank_001_AbCdEfGh01.json \
+--white-model-path ../results/jack_nets/rank_001_zjqRttxm03.json \
+--white-name "g_a" \
 --black greedy_jack \
---black-model-path ./results/jack_nets/rank_002_XyZwQrSt01.json
+--black-model-path ../results/jack_nets/rank_002_ScGwYXNl09.json \
+--black-name "g_b" \
 --store-parquet /home/mat/Bureau/lobby202511/parquet
+
+/home/mat/Bureau/spyder-env/bin/python3 mcts_against_greedy_jack_train.py --duration 3600 --max_concurrency 10
 
 =================================================================================
 

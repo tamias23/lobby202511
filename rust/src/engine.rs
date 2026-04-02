@@ -1044,6 +1044,7 @@ pub fn perform_turn(state: &mut GameState, agent: &dyn Agent) -> (bool, Option<(
                     }
                 }
             }
+            state.color_chosen.remove(&current_turn);
             if has_move {
                 valid_colors.push(c);
             }
