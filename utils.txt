@@ -1,19 +1,11 @@
 
-I would like to be able to train a mcts agent not by self play like in self_play_train.py, but playing against a population of already existing greedy jacks agents, found in ./results/jack_nets/
-while duration
-  start collection period
-    The mcts agent plays n games against greedy jacks agents found in ./results/jack_nets/, chosen randomly each game. Each new game the board is chosen randomly.
-    at the end of the collection period, the mcts GAN is trained against the collected JSON samples, as in self_play_train.py
-The parameters of this mcts_against_greedy_jack_train.py new script will be :
-duration
-games_per_batch (above n)
-max_concurrency
-turns_per_game
-mcts_budget
-train_epochs
-train_batch_size
-max_data_files
-This new script is very similar to self_play_train.py
+I have developped a 2 player game similar to chess/go/shogi. 
+I have a 100% JavaScript PoC implementation with node.js and websockets where a game can be created, then real users can play the game over the network. Rules of the games are implemented but that's pretty much it.
+This PoC is not perfect because the whole game is created as an svg in html on the server side, then passed to the client browser for execution.
+I also have a Rust implementation where I can train agents to learn to play the game, where I can replay past games stored in .parquet files.
+I want to re-create the whole implementation using React.js : please provide me with a plan.
+
+WebAssembly (Wasm) ?
 
 =================================================================================
 
@@ -94,6 +86,8 @@ cargo run --release --bin rust /home/mat/Bureau/lobby202511/games/data/nt5022208
 --store-parquet /home/mat/Bureau/lobby202511/parquet
 
 /home/mat/Bureau/spyder-env/bin/python3 mcts_against_greedy_jack_train.py --duration 3600 --max_concurrency 10
+
+/home/mat/Bureau/spyder-env/bin/python3 swiss_tournament.py --agents agents_mixed.txt --rounds 13 --parallel 10 --max_turns 300
 
 =================================================================================
 
