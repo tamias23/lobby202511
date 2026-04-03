@@ -4,6 +4,8 @@ pub mod engine;
 pub mod server;
 pub mod agents;
 pub mod recorder;
+#[cfg(feature = "napi")]
+pub mod napi_tutorial;
 
 #[cfg(test)]
 pub mod rules_tests;

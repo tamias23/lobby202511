@@ -3,7 +3,12 @@ name = "rust"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
+napi = { version = "2.16.14", features = ["serde-json"], optional = true }
+napi-derive = { version = "2.16.13", optional = true }
 axum = { version = "0.8.8", features = ["ws"] }
 axum-extra = "0.12.5"
 futures = "0.3.32"
@@ -17,3 +22,8 @@ tower-http = { version = "0.6.8", features = ["fs"] }
 uuid = { version = "1.22.0", features = ["v4"] }
 ort = { version = "2.0.0-rc.12", default-features = false, features = ["ndarray", "download-binaries", "tls-rustls"] }
 ndarray = { version = "0.17.2", features = ["std"] }
+
+[features]
+default = []
+napi = ["dep:napi", "dep:napi-derive"]
+
