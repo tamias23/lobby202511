@@ -1,0 +1,20 @@
+{
+  "name": "lobby202511-unified",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "dev:backend": "npm run dev --workspace=backend",
+    "build:napi": "npm run build:napi --workspace=backend",
+    "build:wasm": "npm run build:wasm --workspace=frontend",
+    "build:all": "npm run build:napi --workspace=backend && npm run build:wasm --workspace=frontend && npm run build --workspaces"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "uuid": "^13.0.0"
+  }
+}

@@ -1,0 +1,115 @@
+graph TD
+    subgraph Client [Browser / React]
+        RU[React UI]
+        WS_C[WebSocket Client]
+        Wasm[Game Logic Wasm]
+    end
+
+    subgraph Server [Node.js + Rust]
+        WS_S[WebSocket Server]
+        API[Express/Fastify API]
+        NAPI[napi-rs / Rust Engine]
+        DB[DuckDB]
+        Email[Email Service]
+    end
+
+    RU <--> WS_C
+    WS_C <--> WS_S
+    WS_S <--> NAPI
+    API <--> NAPI
+    NAPI <--> DB
+    API <--> Email
+    RU -.-> Wasm
+
+# [Implementation Plan] New Main Unified Project
+
+## Phase 1: Foundation & Project Setup
+1.  **Initialize `./new_main`**:
+    *   Initialize a Workspace-based project (Monorepo style) with `frontend/` (React) and `backend/` (Node/Rust).
+    *   Set up `napi-rs` for the backend to bridge existing Rust logic.
+    *   Configure Wasm build pipeline for sharing rules with the frontend.
+2.  **DuckDB Integration**:
+    *   Initialize `./new_main/db/gaming.db`.
+    *   Define schemas for `users`, `profiles`, and `game_history`.
+
+## Phase 2: User Authentication & Profiles
+1.  **Backend API**:
+    *   Implement user registration with password hashing (Argon2/bcrypt).
+    *   Integrate an email verification flow (Mock service or Nodemailer).
+2.  **Database Layer**:
+    *   Implement DuckDB queries for user CRUD and profile updates.
+3.  **Frontend Auth**:
+    *   Create Login/Register pages in React with validated forms.
+
+## Phase 3: Game Core & NAPI/Wasm Migration
+1.  **Rust Refactoring**:
+    *   Extract core game logic from `rust/src/engine.rs` into a shared library.
+    *   Expose this library via `napi` for Node.js and `wasm-bindgen` for React.
+2.  **Wasm Feedback Layer**:
+    *   Integrate Wasm in React to enable instant move validation and UI highlights.
+
+## Phase 4: Real-time Lobby & Game State
+1.  **State-Oriented WebSockets**:
+    *   Develop a WebSocket handler that transmits structured JSON game state (Positions, Captured Pieces, Turn Phase) instead of SVG strings.
+2.  **Lobby Implementation**:
+    *   Create a "Game Offers" system where users can create or join matches.
+3.  **Game Session Management**:
+    *   Handle session timeouts, reconnections, and game-over state.
+
+## Phase 5: Game Storage & Analytics
+1.  **Game Persistence**:
+    *   Automatically save completed games from the Rust engine/Node server to DuckDB.
+2.  **Replay System**:
+    *   Implement a "Match History" view in React that fetches past games for replay.
+
+Open Questions for the USER
+Wasm Strategy: Do you want the Wasm module to handle all UI rendering (e.g., via Canvas), or just provide logical data for React to render via DOM components? => only provide logical data for React to render via DOM components 
+Email Verification: For the tutorial/initial phase, would you like a simulated email log in the terminal, or a full integration with a service like Resend/SendGrid? => no, Nodemailer + Gmail/Outlook
+Lobby Features: Should the lobby support ranked matchmaking or just public "open invitations"? => it should support ranked matchmaking
+
+
+====================================================================
+
+# [Refined Implementation Plan] New Main Unified Project — v3
+
+## Phase 1: Foundation & Project Setup
+1.  **Initialize `./new_main`**:
+    *   Initialize a Workspace-based project (Monorepo style) with `frontend/` (React) and `backend/` (Node/Rust).
+    *   Set up `napi-rs` for the backend to bridge existing Rust logic.
+    *   Configure Wasm build pipeline for sharing rules with the frontend.
+2.  **DuckDB Integration**:
+    *   Initialize `./new_main/db/gaming.db`.
+    *   Define schemas for `users` (with login, rating, role, and verified status), `profiles`, and `game_history`.
+
+## Phase 2: User Support & Guest Generation
+1.  **Backend Auth Layer**:
+    *   Implement user registration with password hashing.
+    *   Integrate email verification using **Nodemailer** for registered users.
+    *   **Guest ID Generator**: Implement a utility that creates a 500+ character random string and hashes it with SHA-256 to generate unique guest IDs.
+2.  **Database Layer**:
+    *   Implement DuckDB queries for both user types and rating history.
+3.  **Frontend Onboarding**:
+    *   Create Login/Register pages and a "Play as Guest" button.
+
+## Phase 3: Game Core & Logic Migration
+1.  **Rust Refactoring**:
+    *   Extract core game logic from `rust/src/engine.rs` into a shared library.
+    *   Expose logic via `napi` for the backend and `wasm-bindgen` for React move validation.
+2.  **Wasm Logic Layer**:
+    *   Integrate Wasm in React to provide logical data for move highlighting and illegal move warnings in real-time.
+
+## Phase 4: Lobby & Ranked Matchmaking
+1.  **State-Oriented WebSockets**:
+    *   Develop a WebSocket handler that transmits structured JSON game state (Positions, Captured Pieces, Turn Phase) instead of SVG strings.
+2.  **Ranked Lobby**:
+    *   A "Matchmaking Pool" that supports Elo-based ranked matches for registered users and standard play for guests.
+3.  **Game Session Management**:
+    *   Handle session timeouts, reconnections, and ranking updates upon completion.
+
+## Phase 5: Game Storage & History
+1.  **Game Persistence**:
+    *   Automatically save completed games from the Rust engine/Node server to DuckDB.
+2.  **Match History**:
+    *   Implement a "Match History" view in React that allows users (and guests) to fetch past games for replay.
+
+

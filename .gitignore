@@ -19,4 +19,13 @@ output.txt
 .vscode/
 __pycache__/
 temp/
-
+new_main/rust-core/target/
+new_main/frontend/rust-wasm/target/
+new_main/backend/rust-napi/target/
+new_main/backend/rust-napi/node_modules/
+**/target/
+**/node_modules/
+new_main/backend/.env
+new_main/backend/.env.*
+new_main/backend/db/
+utils.txt
