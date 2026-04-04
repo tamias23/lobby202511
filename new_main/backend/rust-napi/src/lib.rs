@@ -144,7 +144,7 @@ pub fn randomize_setup_napi(req: RandomizeRequest) -> napi::Result<RandomizeResp
 
     for (s, c) in req.color_chosen.clone() {
         let side = if s.to_lowercase() == "white" { Side::White } else { Side::Black };
-        state.color_chosen.insert(side, c);
+        state.color_chosen.insert(side, c.to_lowercase());
     }
 
     let side_to_randomize = match req.side.to_lowercase().as_str() {
@@ -309,7 +309,7 @@ pub fn get_legal_moves_napi(req: MoveRequest) -> napi::Result<MoveResponse> {
     
     for (s, c) in req.color_chosen.clone() {
         let side = if s.to_lowercase() == "white" { Side::White } else { Side::Black };
-        state.color_chosen.insert(side, c);
+        state.color_chosen.insert(side, c.to_lowercase());
     }
 
     let mut targets = Vec::new();
@@ -368,6 +368,31 @@ pub struct ApplyMoveRequest {
 }
 
 #[napi(object)]
+pub struct SelectColorRequest {
+    #[napi(js_name = "boardJson")]
+    pub board_json: String,
+    #[napi(js_name = "piecesJson")]
+    pub pieces_json: String,
+    pub color: String,
+    pub turn: String,
+    pub phase: String,
+    #[napi(js_name = "setupStep")]
+    pub setup_step: u8,
+    #[napi(js_name = "colorChosen")]
+    pub color_chosen: HashMap<String, String>,
+    #[napi(js_name = "turnCounter")]
+    pub turn_counter: u32,
+    #[napi(js_name = "isNewTurn")]
+    pub is_new_turn: bool,
+    #[napi(js_name = "movesThisTurn")]
+    pub moves_this_turn: u32,
+    #[napi(js_name = "lockedSequencePiece")]
+    pub locked_sequence_piece: Option<String>,
+    #[napi(js_name = "heroeTakeCounter")]
+    pub heroe_take_counter: u32,
+}
+
+#[napi(object)]
 pub struct ApplyMoveResponse {
     pub pieces_json: String,
     pub captured: Vec<String>, 
@@ -377,8 +402,11 @@ pub struct ApplyMoveResponse {
     #[napi(js_name = "setupStep")]
     pub setup_step: u8,
     pub turn: String,
+    #[napi(js_name = "turnCounter")]
     pub turn_counter: u32,
+    #[napi(js_name = "isNewTurn")]
     pub is_new_turn: bool,
+    #[napi(js_name = "movesThisTurn")]
     pub moves_this_turn: u32,
     #[napi(js_name = "lockedSequencePiece")]
     pub locked_sequence_piece: Option<String>,
@@ -455,7 +483,7 @@ pub fn end_turn_setup_napi(req: EndTurnSetupRequest) -> napi::Result<ApplyMoveRe
 
     for (s, c) in req.color_chosen.clone() {
         let side = if s.to_lowercase() == "white" { Side::White } else { Side::Black };
-        state.color_chosen.insert(side, c);
+        state.color_chosen.insert(side, c.to_lowercase());
     }
 
     // Logic: Switch turn, potentially advance setup step, with auto-skipping randomized players
@@ -562,7 +590,7 @@ pub fn apply_move_napi(req: ApplyMoveRequest) -> napi::Result<ApplyMoveResponse>
     
     for (s, c) in req.color_chosen.clone() {
         let side = if s.to_lowercase() == "white" { Side::White } else { Side::Black };
-        state.color_chosen.insert(side, c);
+        state.color_chosen.insert(side, c.to_lowercase());
     }
 
     state.turn_counter = req.turn_counter;
@@ -571,14 +599,22 @@ pub fn apply_move_napi(req: ApplyMoveRequest) -> napi::Result<ApplyMoveResponse>
     state.locked_sequence_piece = req.locked_sequence_piece.clone();
     state.heroe_take_counter = req.heroe_take_counter;
 
+    // Authoritative Legality Check
+    let legal_targets = get_legal_moves(&state, &req.piece_id);
+    if !legal_targets.contains(&req.target_poly) {
+        return Err(napi::Error::from_reason(format!(
+            "Illegal move: Piece {} to {}. Legal targets: {:?}", 
+            req.piece_id, req.target_poly, legal_targets
+        )));
+    }
+
     let was_returned = state.board.pieces.get(&req.piece_id).map(|p| p.position == "returned").unwrap_or(false);
     let captured = apply_move(&mut state, &req.piece_id, &req.target_poly);
     let captured_is_empty = captured.is_empty();
     let goddess_captured = captured.contains(&PieceType::Goddess);
     
-    // Increment moves this turn
-    state.moves_this_turn += 1;
-    state.is_new_turn = false;
+    // (state.moves_this_turn already incremented inside apply_move)
+    // (state.is_new_turn handled inside apply_move_turnover)
 
     // Apply turnover logic to handle branch turn breaking vs sequence locking
     rust_core::engine::apply_move_turnover(
@@ -657,10 +693,73 @@ pub fn pass_turn_playing_napi(req: ApplyMoveRequest) -> napi::Result<ApplyMoveRe
     
     for (s, c) in req.color_chosen.clone() {
         let side = if s.to_lowercase() == "white" { Side::White } else { Side::Black };
-        state.color_chosen.insert(side, c);
+        state.color_chosen.insert(side, c.to_lowercase());
     }
 
     pass_turn(&mut state);
+
+    let updated_pieces: Vec<Piece> = state.board.pieces.into_values().collect();
+    let updated_pieces_json = serde_json::to_string(&updated_pieces)
+        .map_err(|e| napi::Error::from_reason(format!("Failed to serialize updated pieces: {}", e)))?;
+
+    let colors = state.color_chosen.iter().map(|(s, c)| (format!("{:?}", s).to_lowercase(), c.clone())).collect();
+
+    Ok(ApplyMoveResponse { 
+        pieces_json: updated_pieces_json,
+        captured: Vec::new(),
+        color_chosen: colors,
+        phase: if state.phase == GamePhase::Setup { "Setup".to_string() } else { "Playing".to_string() },
+        setup_step: state.setup_step,
+        turn: format!("{:?}", state.turn).to_lowercase(),
+        turn_counter: state.turn_counter,
+        is_new_turn: state.is_new_turn,
+        moves_this_turn: state.moves_this_turn,
+        locked_sequence_piece: state.locked_sequence_piece.clone(),
+        heroe_take_counter: state.heroe_take_counter,
+    })
+}
+
+#[napi]
+pub fn select_color_napi(req: SelectColorRequest) -> napi::Result<ApplyMoveResponse> {
+    let board: BoardMap = serde_json::from_str(&req.board_json)
+        .map_err(|e| napi::Error::from_reason(format!("Failed to parse board: {}", e)))?;
+    
+    let pieces: Vec<Piece> = serde_json::from_str(&req.pieces_json)
+        .map_err(|e| napi::Error::from_reason(format!("Failed to parse pieces: {}", e)))?;
+
+    let mut pieces_map = HashMap::new();
+    for p in pieces {
+        pieces_map.insert(p.id.clone(), p);
+    }
+    
+    let mut state = GameState::new(board);
+    state.board.pieces = pieces_map;
+    
+    state.turn = match req.turn.to_lowercase().as_str() {
+        "white" => Side::White,
+        "black" | "yellow" => Side::Black,
+        _ => Side::White,
+    };
+    
+    state.phase = match req.phase.to_lowercase().as_str() {
+        "setup" => GamePhase::Setup,
+        "playing" => GamePhase::Playing,
+        _ => GamePhase::Setup,
+    };
+    
+    state.setup_step = req.setup_step;
+    state.turn_counter = req.turn_counter;
+    state.is_new_turn = req.is_new_turn;
+    state.moves_this_turn = req.moves_this_turn;
+    state.locked_sequence_piece = req.locked_sequence_piece.clone();
+    state.heroe_take_counter = req.heroe_take_counter;
+    
+    for (s, c) in req.color_chosen.clone() {
+        let side = if s.to_lowercase() == "white" { Side::White } else { Side::Black };
+        state.color_chosen.insert(side, c.to_lowercase());
+    }
+
+    state.set_color_chosen(state.turn, &req.color.to_lowercase());
 
     let updated_pieces: Vec<Piece> = state.board.pieces.into_values().collect();
     let updated_pieces_json = serde_json::to_string(&updated_pieces)

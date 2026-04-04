@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { socket } from "../socket";
-import init, { get_legal_moves_wasm } from "../wasm_pkg/frontend_wasm";
+import init, { get_legal_moves_wasm, get_eligible_pieces_wasm } from "../wasm_pkg/frontend_wasm";
 
 const PieceIcon = ({ type, side }) => {
   const isBlack = side === "black" || side === "yellow";
@@ -486,6 +486,7 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
   const [heroeTakeCounter, setHeroeTakeCounter] = useState(
     initialState.heroeTakeCounter || 0,
   );
+  const [eligiblePieceIds, setEligiblePieceIds] = useState([]);
 
   // Add local state for history, defaulting to empty until backend passes it explicitly in all events
   const [moveHistory, setMoveHistory] = useState(initialState.history || []);
@@ -586,6 +587,11 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
     socket.on("game_update", handleGameUpdate);
     socket.on("legal_moves", handleLegalMoves);
 
+    // Initial eligibility check on mount
+    if (wasmReady) {
+      updateEligiblePieces();
+    }
+
     socket.emit("join_game_room", { gameId });
 
     return () => {
@@ -598,6 +604,32 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
   useEffect(() => {
     selected_piece_ref.current = selectedPiece;
   }, [selectedPiece]);
+
+  const updateEligiblePieces = () => {
+    if (!wasmReady || !board) return;
+    try {
+      const eligibleJson = get_eligible_pieces_wasm(
+        JSON.stringify(board),
+        JSON.stringify(pieces),
+        turn,
+        phase,
+        setupStep,
+        JSON.stringify(colorChosen || {}),
+        turnCounter,
+        isNewTurn,
+        movesThisTurn,
+        lockedSequencePiece,
+        heroeTakeCounter
+      );
+      setEligiblePieceIds(JSON.parse(eligibleJson));
+    } catch (e) {
+      console.error("Wasm Eligibility Error:", e);
+    }
+  };
+
+  useEffect(() => {
+    updateEligiblePieces();
+  }, [wasmReady, pieces, turn, phase, setupStep, colorChosen, lockedSequencePiece, turnCounter, isNewTurn, movesThisTurn, heroeTakeCounter]);
 
   const handlePieceClick = async (piece) => {
     if (turn !== side) return;
@@ -772,39 +804,7 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
       const isSelected = selectedPiece?.id === piece.id;
       const isLocked = lockedSequencePiece === piece.id;
       const isMyTurn = turn === actualPieceSide;
-      let allowedToMove = false;
-
-      if (phase === "Setup") {
-        if (
-          isMyTurn &&
-          actualPieceSide === side &&
-          piece.position === "returned"
-        ) {
-          if (setupStep === 0 && piece.type === "goddess") allowedToMove = true;
-          if (setupStep === 1 && piece.type === "heroe") allowedToMove = true;
-          if (setupStep === 2 && piece.type === "berserker")
-            allowedToMove = true;
-          if (setupStep === 3 && piece.type === "bishop") allowedToMove = true;
-          if (
-            setupStep === 4 &&
-            (piece.type === "ghoul" || piece.type === "siren")
-          )
-            allowedToMove = true;
-        }
-      } else {
-        if (
-          isMyTurn &&
-          actualPieceSide === side &&
-          piece.position !== "graveyard"
-        ) {
-          if (piece.position === "returned") {
-            // Returned pieces can be deployed once color is chosen
-            if (colorChosen[side]) allowedToMove = true;
-          } else {
-            allowedToMove = true;
-          }
-        }
-      }
+      let allowedToMove = isMyTurn && actualPieceSide === side && eligiblePieceIds.includes(piece.id);
 
       const isDragging = isSelected && dragPos;
       const actualCx = isDragging ? dragPos.x : cx;
@@ -1236,11 +1236,73 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
             )}
           </div>
         )}
+        
         {phase !== "Playing" && (
-          <div style={{ opacity: 0.5, textAlign: "center", marginTop: "50px" }}>
+          <div style={{ opacity: 0.5, textAlign: "center", marginTop: "50px", width: "100%" }}>
             Phase: Setup
           </div>
         )}
+        
+        {/* DEBUG ENGINE STATE PANEL - Added for debugging stuck pieces */}
+        <div 
+          className="glass-panel" 
+          style={{ 
+            marginTop: "15px", 
+            padding: "15px", 
+            width: "100%", 
+            boxSizing: "border-box",
+            border: "1px solid rgba(255, 215, 0, 0.2)", // Subtle gold border for debug
+            fontSize: "11px",
+            color: "rgba(255,255,255,0.8)",
+            textAlign: "left"
+          }}
+        >
+          <div style={{ color: "#f1c40f", fontWeight: "bold", marginBottom: "8px", fontSize: "12px", textAlign: "center" }}>
+            DEBUG ENGINE STATE
+          </div>
+          
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+            <span style={{ opacity: 0.6 }}>Phase:</span>
+            <span style={{ color: "#fff" }}>{phase}</span>
+          </div>
+          
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+            <span style={{ opacity: 0.6 }}>Turn:</span>
+            <span style={{ color: "#fff" }}>{turn}</span>
+          </div>
+          
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+            <span style={{ opacity: 0.6 }}>Moves This Turn:</span>
+            <span style={{ color: "#fff" }}>{movesThisTurn}</span>
+          </div>
+          
+          <div style={{ marginBottom: "8px", borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "8px" }}>
+            <div style={{ opacity: 0.6, marginBottom: "2px" }}>Locked Piece:</div>
+            <div style={{ color: lockedSequencePiece ? "#2ecc71" : "#e74c3c", fontWeight: "bold", wordBreak: "break-all" }}>
+              {lockedSequencePiece || "NONE"}
+            </div>
+          </div>
+          
+          <div style={{ marginBottom: "8px" }}>
+            <div style={{ opacity: 0.6, marginBottom: "2px" }}>Colors Chosen:</div>
+            <div style={{ color: "#3498db" }}>
+              {Object.entries(colorChosen || {}).map(([s, c]) => (
+                <div key={s}>{s}: {c}</div>
+              ))}
+              {Object.keys(colorChosen || {}).length === 0 && <div>NONE</div>}
+            </div>
+          </div>
+          
+          <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "8px" }}>
+            <div style={{ opacity: 0.6, marginBottom: "2px" }}>Selected Piece:</div>
+            <div style={{ color: "#fff" }}>{selectedPiece?.id || "NONE"}</div>
+            {selectedPiece && (
+              <div style={{ fontSize: "10px", opacity: 0.5 }}>
+                Pos: {selectedPiece.position}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 
-use crate::models::{BoardMap, Piece};
+use crate::models::BoardMap;
 
 pub fn load_board<P: AsRef<Path>>(path: P) -> Result<BoardMap, Box<dyn Error>> {
     let file = File::open(path)?;

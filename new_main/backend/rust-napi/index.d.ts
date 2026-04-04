@@ -85,6 +85,20 @@ export interface ApplyMoveRequest {
   lockedSequencePiece?: string
   heroeTakeCounter: number
 }
+export interface SelectColorRequest {
+  boardJson: string
+  piecesJson: string
+  color: string
+  turn: string
+  phase: string
+  setupStep: number
+  colorChosen: Record<string, string>
+  turnCounter: number
+  isNewTurn: boolean
+  movesThisTurn: number
+  lockedSequencePiece?: string
+  heroeTakeCounter: number
+}
 export interface ApplyMoveResponse {
   piecesJson: string
   captured: Array<string>
@@ -114,3 +128,4 @@ export interface EndTurnSetupRequest {
 export declare function endTurnSetupNapi(req: EndTurnSetupRequest): ApplyMoveResponse
 export declare function applyMoveNapi(req: ApplyMoveRequest): ApplyMoveResponse
 export declare function passTurnPlayingNapi(req: ApplyMoveRequest): ApplyMoveResponse
+export declare function selectColorNapi(req: SelectColorRequest): ApplyMoveResponse

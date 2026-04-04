@@ -27,6 +27,18 @@ pub struct GameState {
 }
 
 impl GameState {
+    pub fn is_siren_pinned(&self, poly_id: &str, side: Side) -> bool {
+        for n in self.get_slide_neighbors(poly_id) {
+            if let Some(occ_id) = self.occupancy.get(&n) {
+                let p = &self.board.pieces[occ_id];
+                if p.side != side && p.piece_type == PieceType::Siren {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     /// Returns IDs of pieces currently eligible to start a turn-step (color match or sequence lock).
     pub fn get_eligible_piece_ids(&self) -> Vec<String> {
         let current_turn = self.turn;
@@ -37,21 +49,50 @@ impl GameState {
             if p.side == current_turn && p.position != "graveyard" {
                 let mut can_start = false;
                 if p.position == "returned" {
-                    can_start = true;
-                } else if let Some(ref color) = chosen_color {
-                    if self.board.polygons.get(&p.position).map(|x| &x.color) == Some(color) {
+                    if self.phase == GamePhase::Playing {
                         can_start = true;
+                    } else {
+                        // Setup phase: filter by setup_step
+                        let (step_type, _) = match self.setup_step {
+                            0 => (PieceType::Goddess, 1),
+                            1 => (PieceType::Heroe, 2),
+                            2 => (PieceType::Berserker, 2),
+                            3 => (PieceType::Bishop, 4),
+                            4 => (PieceType::Ghoul, 18), // Ghouls + Sirens
+                            _ => (PieceType::Soldier, 0), // Should not reach
+                        };
+                        if self.setup_step == 4 {
+                            can_start = p.piece_type == PieceType::Ghoul || p.piece_type == PieceType::Siren;
+                        } else {
+                            can_start = p.piece_type == step_type;
+                        }
+                    }
+                } else if chosen_color.is_none() {
+                    // Rule 11: Player must choose a color first.
+                    // If no color is chosen yet, no piece is eligible to move.
+                    can_start = false;
+                } else if let Some(ref color) = chosen_color {
+                    if let Some(poly) = self.board.polygons.get(&p.position) {
+                        if poly.color.to_lowercase() == *color {
+                            can_start = true;
+                        }
                     }
                 }
                 
-                // If a piece is sequence-locked, it is the ONLY one that can move, 
-                // but we handle that restriction here:
+                // If a piece is sequence-locked, it is the ONLY one that can move:
                 if let Some(ref locked_id) = self.locked_sequence_piece {
-                    if locked_id == &p.id {
-                        can_start = true;
-                    } else {
-                        // If someone else is locked, this piece cannot start even if on color
-                        can_start = false;
+                    // Self-healing: Only enforce lock if it belongs to the current side.
+                    // This prevents stale/corrupt locks (e.g. White piece locked on Black's turn).
+                    if let Some(locked_piece) = self.board.pieces.get(locked_id) {
+                        if locked_piece.side == self.turn {
+                            if locked_id == &p.id {
+                                can_start = true;
+                            } else {
+                                // If someone else of MY side is locked, this piece cannot start.
+                                can_start = false;
+                            }
+                        }
+                        // If locked_piece is NOT my side, ignore the lock entirely for eligibility.
                     }
                 }
                 
@@ -61,6 +102,15 @@ impl GameState {
             }
         }
         eligible
+    }
+
+    pub fn set_color_chosen(&mut self, side: Side, color: &str) {
+        self.color_chosen.insert(side, color.to_string());
+        // Color choice marks the absolute start of a fresh turn segment.
+        // It should ALWAYS clear any sequence lock or Heroe bonus flags.
+        self.locked_sequence_piece = None;
+        self.heroe_take_counter = 0;
+        self.is_new_turn = false;
     }
 
     pub fn new(board: BoardMap) -> Self {
@@ -117,6 +167,15 @@ impl GameState {
 
     /// Checks if the current player has any legal moves available across all eligible pieces.
     pub fn has_any_legal_moves(&self) -> bool {
+        let current_turn = self.turn;
+        let chosen_color = self.color_chosen.get(&current_turn).cloned();
+
+        if chosen_color.is_none() {
+            // For a new turn, if no color is chosen yet, check if ANY color choice would yield a move.
+            // This prevents "turn skipping" if the player must choose a color first.
+            return !get_legal_colors(self, &current_turn).is_empty();
+        }
+
         let eligible = self.get_eligible_piece_ids();
         for id in eligible {
             if !get_legal_moves(self, &id).is_empty() {
@@ -205,11 +264,23 @@ pub fn get_polys_within_distance_slide(board: &BoardMap, start: &str, max_dist: 
 pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
     let piece = match state.board.pieces.get(piece_id) {
         Some(p) => p,
-        None => return vec![],
+        None => return Vec::new(),
     };
+    
+    let start = &piece.position;
+    if start == "returned" || start == "graveyard" {
+        // Redundant with matches below, but safe early exit.
+        if start == "graveyard" { return Vec::new(); }
+    } else {
+        // Rule 108: "If a Piece is immobilized by a Siren, its move and the TURN end immediately."
+        if state.is_siren_pinned(start, piece.side) {
+            return Vec::new();
+        }
+    }
 
-    if piece.position == "graveyard" {
-        return vec![]; // Dead
+    // Eligibility check (color match or sequence lock)
+    if !state.get_eligible_piece_ids().contains(&piece_id.to_string()) {
+        return vec![]; // Piece is not currently authorized to move
     }
 
     // Sequence locking enforcement
@@ -320,7 +391,7 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
                         if state.get_occupant_side(&n) == Some(piece.side) {
                             if friendly_hops.insert(n.clone()) { explore.push(n.clone()); }
                         }
-                    } else if Some(state.board.polygons[&n].color.clone()) == chosen_color {
+                    } else if Some(state.board.polygons[&n].color.to_lowercase()) == chosen_color {
                         // Empty polygon matching chosen color. Ensure it isn't blocked by Siren (evaluating slide topology natively matched to JS).
                         let mut siren_pinned = false;
                         for nn in state.get_slide_neighbors(&n) {
@@ -358,7 +429,7 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
                     targets.insert(n.clone());
                     if depth < 2 {
                         if !state.is_occupied(&n) {
-                            if Some(state.board.polygons[&n].color.clone()) != chosen_color {
+                            if Some(state.board.polygons[&n].color.to_lowercase()) != chosen_color {
                                 let mut siren_pinned = false;
                                 for nn in state.get_slide_neighbors(&n) {
                                     if let Some(s) = state.get_occupant_side(&nn) {
@@ -449,11 +520,11 @@ pub fn apply_move(state: &mut GameState, piece_id: &str, target_poly: &str) -> V
         }
     }
     
+    state.moves_this_turn += 1;
     captured_types
 }
 
-use rand::seq::{IteratorRandom, SliceRandom};
-use rand::Rng;
+use rand::seq::SliceRandom;
 
 /// Initializes the standard set of pieces into the "returned" position without randomizing them onto the board.
 pub fn setup_pieces(state: &mut GameState) {
@@ -741,7 +812,7 @@ pub fn get_setup_legal_placements(state: &GameState) -> HashMap<String, Vec<Stri
         .filter(|p| p.side == current_side && p.position == "returned")
         .collect();
 
-    let (step_type, count_needed) = match state.setup_step {
+    let (step_type, _count_needed) = match state.setup_step {
         0 => (PieceType::Goddess, 1),
         1 => (PieceType::Heroe, 2),
         2 => (PieceType::Berserker, 2),
@@ -1021,69 +1092,105 @@ fn advance_setup_step(state: &mut GameState) {
 
 /// Abstracted Turnover Application explicitly processing sequence breaking & logic formally after an active application.
 pub fn apply_move_turnover(state: &mut GameState, chosen_piece: &str, chosen_target: &str, goddess_captured: bool, captured_is_empty: bool, was_returned: bool) -> bool {
-    let target_color = state.board.polygons.get(chosen_target).map(|p| p.color.clone()).unwrap_or_else(|| {
-        eprintln!("ERROR: Poly ID '{}' not found in polygons map!", chosen_target);
-        "".to_string()
-    });
     let current_turn = state.turn;
-    let chosen_color = match state.color_chosen.get(&current_turn) {
-        Some(c) => c.clone(),
-        None => {
-            eprintln!("CRITICAL ERROR: No chosen color for side {:?} during Turnover logic evaluation! Turn: {}, Moves this turn: {}, is_new_turn: {}", 
-                current_turn, state.turn_counter, state.moves_this_turn, state.is_new_turn);
-            // Default to empty string to prevent panic, though this indicates an engine bug
-            "".to_string()
-        }
-    };
     
-    let piece_type = state.board.pieces[chosen_piece].piece_type.clone();
+    let chosen_color = state.color_chosen.get(&current_turn).map(|c| c.to_lowercase()).unwrap_or_default();
+    let target_color = state.board.polygons.get(chosen_target).map(|p| p.color.to_lowercase()).unwrap_or_default();
+    
+    let p_obj = &state.board.pieces[chosen_piece];
+    let piece_type = p_obj.piece_type.clone();
     let is_heroe = piece_type == PieceType::Heroe;
     let is_chainable = piece_type == PieceType::Soldier || piece_type == PieceType::Berserker;
     
-    // Explicit condition evaluating formal sequence breaking checks natively
-    if target_color == chosen_color {
-        if was_returned {
-            state.turn_counter += 1;
-            state.turn = state.get_enemy_side();
-            state.color_chosen.clear();
-            state.is_new_turn = true;
+    let turn_ends;
+
+    if was_returned {
+        // Rule 78: Entering on chosen color ends turn.
+        // Rule 79: Entering via Mage on different color does NOT end turn.
+        if target_color.to_lowercase() == chosen_color.to_lowercase() {
+            turn_ends = true;
+            // Deploying on chosen color ends turn and clears lock.
             state.locked_sequence_piece = None;
             state.heroe_take_counter = 0;
-        } else if is_heroe && !captured_is_empty && state.heroe_take_counter == 0 {
-            state.heroe_take_counter += 1;
-            state.locked_sequence_piece = Some(chosen_piece.to_string());
-        } else if is_chainable {
-            // JS specifically allows Soldier/Berserker to land on chosen_color AND lock their sequence dynamically tracking it natively (even after a capture).
-            state.locked_sequence_piece = Some(chosen_piece.to_string());
         } else {
-            // Any other piece hitting chosen_color instantly breaks the turn
-            state.turn_counter += 1;
-            state.turn = state.get_enemy_side();
-            state.color_chosen.clear();
-            state.is_new_turn = true;
-            state.locked_sequence_piece = None;
+            turn_ends = false;
+            // Rule 79: Deploying via Mage on different color does NOT end turn.
+            // Piece should NOT be locked in this case.
+            state.locked_sequence_piece = None; 
             state.heroe_take_counter = 0;
         }
     } else {
-        // Did NOT land on the Chosen Color.
-        if is_heroe && !captured_is_empty && state.heroe_take_counter == 0 && !was_returned {
-            state.heroe_take_counter += 1;
-            state.locked_sequence_piece = Some(chosen_piece.to_string());
-        } else {
-            // If any piece (including Solders/Berserkers) lands on a non-chosen color, it simply ends its own sequence locking natively.
-            // IT DOES NOT END THE TURN automatically. The Active Player is free to select another piece on the original chosen_color!
+        let is_pinned = state.is_siren_pinned(chosen_target, current_turn);
+        
+        if is_pinned {
+            // Immobilized pieces end their move AND turn immediately.
+            turn_ends = true;
             state.locked_sequence_piece = None;
+        } else if target_color == chosen_color {
+            // Rule 15: Landing on chosen color ends the MOVE.
+            // Rule 16/74: Soldier and Berserker "lock the sequence" instead of ending turn.
+            if is_chainable {
+                turn_ends = false;
+                state.locked_sequence_piece = Some(chosen_piece.to_string());
+            } else {
+                // Normal pieces (Ghoul, Mage, etc.) end segments on chosen color.
+                // But the PLAYER'S turn continues for other pieces on chosen color.
+                turn_ends = false; 
+                state.locked_sequence_piece = None;
+                state.heroe_take_counter = 0;
+            }
+        } else {
+            // Landing on a DIFFERENT color (Different-Color, Grey, etc.)
+            if is_chainable {
+                // Rule 16/74: Landing on a different color BREAKS the sequence for Soldiers/Berserker.
+                state.locked_sequence_piece = None;
+                state.heroe_take_counter = 0;
+                turn_ends = false; 
+            } else if is_heroe && !captured_is_empty && state.heroe_take_counter == 0 {
+                // Rule 44: Heroe bonus move after capture on a DIFFERENT color.
+                state.heroe_take_counter += 1;
+                state.locked_sequence_piece = Some(chosen_piece.to_string());
+                turn_ends = false;
+            } else {
+                // All other cases: segment ends, turn continues for other pieces.
+                state.locked_sequence_piece = None; 
+                state.heroe_take_counter = 0;
+                turn_ends = false;
+            }
         }
     }
 
-    // Final Rule Check: If the turn hasn't switched yet, check if the current player is "stuck" (zero legal moves).
-    // This handles Siren pins or reaching taking limits efficiently as per Rule 1085-1094.
-    if state.turn == current_turn {
+    // Deadlock Prevention: If a piece is sequence-locked but has ZERO legal moves, 
+    // the lock MUST be broken so the current player doesn't get stuck.
+    if let Some(ref locked_id) = state.locked_sequence_piece {
+        // We use a cloned state to check for moves without modifying the current one.
+        if get_legal_moves(state, locked_id).is_empty() {
+            state.locked_sequence_piece = None;
+            state.heroe_take_counter = 0;
+            state.visited_polygons.clear();
+        }
+    }
+
+    if turn_ends || goddess_captured {
+        state.turn_counter += 1;
+        state.turn = state.get_enemy_side();
+        state.color_chosen.clear();
+        state.is_new_turn = true;
+        state.moves_this_turn = 0; // CRITICAL: Reset move counter!
+        state.locked_sequence_piece = None;
+        state.heroe_take_counter = 0;
+        state.visited_polygons.clear();
+    } else {
+        // Turn continues.
+        state.is_new_turn = false;
+
+        // Check if the player is actually stuck.
         if !state.has_any_legal_moves() {
             state.turn_counter += 1;
             state.turn = state.get_enemy_side();
             state.color_chosen.clear();
             state.is_new_turn = true;
+            state.moves_this_turn = 0; // CRITICAL: Reset move counter!
             state.locked_sequence_piece = None;
             state.heroe_take_counter = 0;
             state.visited_polygons.clear(); 
@@ -1093,14 +1200,646 @@ pub fn apply_move_turnover(state: &mut GameState, chosen_piece: &str, chosen_tar
     goddess_captured
 }
 
-/// Manually transitions the turn to the opponent, resetting sequence locks and turn-specific state.
-/// This implements the "Pass" rule for locked sequences.
 pub fn pass_turn(state: &mut GameState) {
     state.turn_counter += 1;
     state.turn = state.get_enemy_side();
     state.color_chosen.clear();
     state.is_new_turn = true;
+    state.moves_this_turn = 0; // CRITICAL: Reset move counter!
     state.locked_sequence_piece = None;
     state.heroe_take_counter = 0;
     state.visited_polygons.clear();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{Piece, Polygon, Side, PieceType};
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_soldier_capture_on_wrong_color_ends_sequence() {
+        let mut polygons = HashMap::new();
+        // Setup a simple board: P1 (Blue) -> P2 (Yellow) -> P3 (Yellow)
+        polygons.insert("P1".to_string(), Polygon {
+            id: 1,
+            name: "P1".to_string(),
+            color: "blue".to_string(),
+            shape: "tri".to_string(),
+            center: [0.0, 0.0],
+            points: vec![],
+            neighbors: vec!["P2".to_string()],
+            neighbours: vec!["P2".to_string()],
+        });
+        polygons.insert("P2".to_string(), Polygon {
+            id: 2,
+            name: "P2".to_string(),
+            color: "yellow".to_string(),
+            shape: "tri".to_string(),
+            center: [1.0, 1.0],
+            points: vec![],
+            neighbors: vec!["P1".to_string(), "P3".to_string()],
+            neighbours: vec!["P1".to_string(), "P3".to_string()],
+        });
+        polygons.insert("P3".to_string(), Polygon {
+            id: 3,
+            name: "P3".to_string(),
+            color: "yellow".to_string(),
+            shape: "tri".to_string(),
+            center: [2.0, 2.0],
+            points: vec![],
+            neighbors: vec!["P2".to_string()],
+            neighbours: vec!["P2".to_string()],
+        });
+
+        let mut pieces = HashMap::new();
+        // White Soldier on P1 (Blue)
+        pieces.insert("S1".to_string(), Piece {
+            id: "S1".to_string(),
+            piece_type: PieceType::Soldier,
+            side: Side::White,
+            position: "P1".to_string(),
+        });
+        // Black Soldier on P2 (Yellow) - target for capture
+        pieces.insert("S2".to_string(), Piece {
+            id: "S2".to_string(),
+            piece_type: PieceType::Soldier,
+            side: Side::Black,
+            position: "P2".to_string(),
+        });
+        // Black Soldier on P3 (Yellow) - second target (should be unreachable after Capture 1)
+        pieces.insert("S3".to_string(), Piece {
+            id: "S3".to_string(),
+            piece_type: PieceType::Soldier,
+            side: Side::Black,
+            position: "P3".to_string(),
+        });
+
+        let board = BoardMap {
+            polygons: polygons.clone(),
+            pieces: pieces.clone(),
+            edges: HashMap::new(),
+            width: Some(100.0), height: Some(100.0),
+        };
+
+        let mut state = GameState::new(board);
+        state.phase = GamePhase::Playing;
+        state.turn = Side::White;
+        state.color_chosen.insert(Side::White, "blue".to_string());
+
+        // Step 1: Verify S1 is eligible to move
+        let eligible = state.get_eligible_piece_ids();
+        assert!(eligible.contains(&"S1".to_string()), "S1 should be eligible on Blue poly");
+
+        // Step 2: Get legal moves for S1
+        let moves = get_legal_moves(&state, "S1");
+        assert!(moves.contains(&"P2".to_string()), "S1 should be able to capture S2 on P2");
+
+        // Step 3: Apply move S1 -> P2
+        let captured = apply_move(&mut state, "S1", "P2");
+        let goddess_captured = captured.contains(&PieceType::Goddess);
+        assert!(!goddess_captured);
+        
+        // Step 4: Apply turnover logic
+        apply_move_turnover(&mut state, "S1", "P2", false, captured.is_empty(), false);
+
+        // Step 5: Verify S1 is NO LONGER sequence locked because P2 is Yellow, not Blue
+        assert_eq!(state.locked_sequence_piece, None, "S1 should not be locked after landing on Yellow");
+
+        // Step 6: Verify S1 is NO LONGER eligible to move (now on Yellow, Blue still chosen)
+        let eligible_after = state.get_eligible_piece_ids();
+        assert!(!eligible_after.contains(&"S1".to_string()), "S1 should not be eligible on Yellow poly");
+
+        // Step 7: Verify get_legal_moves for S1 returns EMPTY
+        let moves_after = get_legal_moves(&state, "S1");
+        assert!(moves_after.is_empty(), "S1 should have no more legal moves from P2 (Yellow)");
+    }
+
+    #[test]
+    fn test_heroe_sequence_ends_turn() {
+        let mut polygons = HashMap::new();
+        polygons.insert("P1".to_string(), Polygon {
+            id: 1, name: "P1".to_string(), color: "blue".to_string(), shape: "tri".to_string(),
+            center: [0.0, 0.0], points: vec![], neighbors: vec!["P2".to_string()], neighbours: vec!["P2".to_string()],
+        });
+        polygons.insert("P2".to_string(), Polygon {
+            id: 2, name: "P2".to_string(), color: "red".to_string(), shape: "tri".to_string(),
+            center: [1.0, 1.0], points: vec![], neighbors: vec!["P1".to_string(), "P3".to_string()], neighbours: vec!["P1".to_string(), "P3".to_string()],
+        });
+        polygons.insert("P3".to_string(), Polygon {
+            id: 3, name: "P3".to_string(), color: "blue".to_string(), shape: "tri".to_string(),
+            center: [2.0, 2.0], points: vec![], neighbors: vec!["P2".to_string()], neighbours: vec!["P2".to_string()],
+        });
+
+        let mut pieces = HashMap::new();
+        pieces.insert("H1".to_string(), Piece {
+            id: "H1".to_string(), piece_type: PieceType::Heroe, side: Side::White, position: "P1".to_string(),
+        });
+        pieces.insert("S2".to_string(), Piece {
+            id: "S2".to_string(), piece_type: PieceType::Soldier, side: Side::Black, position: "P2".to_string(),
+        });
+
+        let board = BoardMap {
+            polygons: polygons.clone(),
+            pieces: pieces.clone(),
+            edges: HashMap::new(),
+            width: Some(100.0), height: Some(100.0),
+        };
+
+        let mut state = GameState::new(board);
+        state.phase = GamePhase::Playing;
+        state.turn = Side::White;
+        state.color_chosen.insert(Side::White, "blue".to_string());
+
+        // Move 1: Hero captures S2 on P2
+        let captured = apply_move(&mut state, "H1", "P2");
+        assert!(captured.contains(&PieceType::Soldier));
+        apply_move_turnover(&mut state, "H1", "P2", false, false, false);
+
+        // Turn should STAY with White
+        assert_eq!(state.turn, Side::White);
+        assert_eq!(state.heroe_take_counter, 1);
+        assert_eq!(state.locked_sequence_piece, Some("H1".to_string()));
+
+        // Move 2: Hero moves passively to P3 (Blue)
+        let captured2 = apply_move(&mut state, "H1", "P3");
+        assert!(captured2.is_empty());
+        apply_move_turnover(&mut state, "H1", "P3", false, true, false);
+
+        // Turn should STAY with White because P3 is Blue
+        assert_eq!(state.turn, Side::White);
+        assert_eq!(state.heroe_take_counter, 0); // Reset for new move within turn? 
+        // Actually, heroe_take_counter should be reset whenever a sequence finishes.
+        assert_eq!(state.locked_sequence_piece, None);
+    }
+
+    #[test]
+    fn test_multipiece_turn_persistence() {
+        let mut polygons = HashMap::new();
+        polygons.insert("P1".to_string(), Polygon {
+            id: 1, name: "P1".to_string(), color: "blue".to_string(), shape: "tri".to_string(),
+            center: [0.0, 0.0], points: vec![], neighbors: vec!["P2".to_string()], neighbours: vec!["P2".to_string()],
+        });
+        polygons.insert("P2".to_string(), Polygon {
+            id: 2, name: "P2".to_string(), color: "blue".to_string(), shape: "tri".to_string(),
+            center: [1.0, 1.0], points: vec![], neighbors: vec!["P1".to_string(), "P3".to_string()], neighbours: vec!["P1".to_string(), "P3".to_string()],
+        });
+        polygons.insert("P3".to_string(), Polygon {
+            id: 3, name: "P3".to_string(), color: "blue".to_string(), shape: "tri".to_string(),
+            center: [2.0, 2.0], points: vec![], neighbors: vec!["P2".to_string()], neighbours: vec!["P2".to_string()],
+        });
+
+        let mut pieces = HashMap::new();
+        pieces.insert("B1".to_string(), Piece {
+            id: "B1".to_string(), piece_type: PieceType::Bishop, side: Side::White, position: "P1".to_string(),
+        });
+        pieces.insert("S1".to_string(), Piece {
+            id: "S1".to_string(), piece_type: PieceType::Soldier, side: Side::White, position: "P2".to_string(),
+        });
+
+        let board = BoardMap {
+            polygons: polygons.clone(),
+            pieces: pieces.clone(),
+            edges: HashMap::new(),
+            width: Some(100.0), height: Some(100.0),
+        };
+
+        let mut state = GameState::new(board);
+        state.phase = GamePhase::Playing;
+        state.turn = Side::White;
+        state.color_chosen.insert(Side::White, "blue".to_string());
+        state.is_new_turn = true;
+
+        // Move 1: Bishop moves to P2 (empty, Blue)
+        apply_move(&mut state, "B1", "P2");
+        apply_move_turnover(&mut state, "B1", "P2", false, true, false);
+
+        // Turn should STAY with White
+        assert_eq!(state.turn, Side::White);
+        assert_eq!(state.moves_this_turn, 1);
+        assert!(!state.is_new_turn);
+
+        // Piece B1 should NO LONGER be eligible (it moved), but S1 SHOULD be eligible (on Blue, same turn)
+        let eligible = state.get_eligible_piece_ids();
+        assert!(eligible.contains(&"S1".to_string()));
+        
+        // Move 2: Soldier S1 moves from P2 (its start) to P1 (where Bishop B1 WAS)
+        // If visited_polygons wasn't cleared, P1 would be BLOCKED.
+        apply_move(&mut state, "S1", "P1");
+        apply_move_turnover(&mut state, "S1", "P1", false, true, false);
+
+        assert_eq!(state.board.pieces["S1"].position, "P1");
+        assert_eq!(state.turn, Side::White); // STILL White's turn because P1 is Blue
+    }
+
+    #[test]
+    fn test_case_insensitive_color_matching_phalanx() {
+        use std::collections::HashMap;
+        let mut polygons = HashMap::new();
+        // Capitalized color in board data
+        polygons.insert("P1".to_string(), Polygon {
+            id: 1, name: "P1".to_string(), color: "Blue".to_string(), shape: "tri".to_string(),
+            center: [0.0, 0.0], points: vec![], neighbors: vec!["P2".to_string()], neighbours: vec!["P2".to_string()],
+        });
+        polygons.insert("P2".to_string(), Polygon {
+            id: 2, name: "P2".to_string(), color: "Blue".to_string(), shape: "tri".to_string(),
+            center: [1.0, 1.0], points: vec![], neighbors: vec!["P1".to_string()], neighbours: vec!["P1".to_string()],
+        });
+
+        let mut pieces = HashMap::new();
+        pieces.insert("S1".to_string(), Piece {
+            id: "S1".to_string(), piece_type: PieceType::Soldier, side: Side::White, position: "P1".to_string(),
+        });
+
+        let board = BoardMap {
+            polygons: polygons, pieces: pieces, edges: HashMap::new(),
+            width: Some(100.0), height: Some(100.0),
+        };
+
+        let mut state = GameState::new(board);
+        state.phase = GamePhase::Playing;
+        state.turn = Side::White;
+        // Lowercase selection (as done by NAPI/WASM)
+        state.color_chosen.insert(Side::White, "blue".to_string());
+
+        // Verify eligibility (this was already case-insensitive)
+        let eligible = state.get_eligible_piece_ids();
+        assert!(eligible.contains(&"S1".to_string()));
+
+        // Verify legal moves (this used to fail due to case-sensitivity in chaining)
+        let moves = get_legal_moves(&state, "S1");
+        assert!(moves.contains(&"P2".to_string()), "Soldier should chain through capitalized 'Blue' polygon even with 'blue' selection");
+    }
+
+    #[test]
+    fn test_immobilization_turnover_on_chosen_color() {
+        use std::collections::HashMap;
+        let mut polygons = HashMap::new();
+        polygons.insert("P1".to_string(), Polygon {
+            id: 1, name: "P1".to_string(), color: "blue".to_string(), shape: "tri".to_string(),
+            center: [0.0, 0.0], points: vec![], neighbors: vec!["P2".to_string()], neighbours: vec!["P2".to_string()],
+        });
+        polygons.insert("P2".to_string(), Polygon {
+            id: 2, name: "P2".to_string(), color: "blue".to_string(), shape: "tri".to_string(),
+            center: [1.0, 1.0], points: vec![], neighbors: vec!["P1".to_string(), "P3".to_string()], neighbours: vec!["P1".to_string(), "P3".to_string()],
+        });
+        polygons.insert("P3".to_string(), Polygon {
+            id: 3, name: "P3".to_string(), color: "red".to_string(), shape: "tri".to_string(),
+            center: [2.0, 2.0], points: vec![], neighbors: vec!["P2".to_string()], neighbours: vec!["P2".to_string()],
+        });
+
+        let mut pieces = HashMap::new();
+        // White Berserker moving to P2
+        pieces.insert("W_B1".to_string(), Piece {
+            id: "W_B1".to_string(), piece_type: PieceType::Berserker, side: Side::White, position: "P1".to_string(),
+        });
+        // Black Siren on P3
+        pieces.insert("B_S1".to_string(), Piece {
+            id: "B_S1".to_string(), piece_type: PieceType::Siren, side: Side::Black, position: "P3".to_string(),
+        });
+
+        let board = BoardMap {
+            polygons: polygons, pieces: pieces, edges: HashMap::new(),
+            width: Some(100.0), height: Some(100.0),
+        };
+
+        let mut state = GameState::new(board);
+        state.phase = GamePhase::Playing;
+        state.turn = Side::White;
+        state.color_chosen.insert(Side::White, "blue".to_string());
+        state.is_new_turn = false;
+        state.moves_this_turn = 1;
+
+        // Verify: P2 is slide-adjacent to P3 (where Siren is).
+        // apply_move_turnover should find it pinned on 'blue' (chosen color).
+        apply_move_turnover(&mut state, "W_B1", "P2", false, true, false);
+
+        // Verify:
+        // 1. Turn should have switched to Black
+        assert_eq!(state.turn, Side::Black, "Turn should switch to Black after pin on chosen color");
+        // 2. locked_sequence_piece should be None
+        assert!(state.locked_sequence_piece.is_none(), "Sequence lock should be cleared after pin");
+        // 3. turn_counter should have incremented
+        assert_eq!(state.turn_counter, 1);
+        // 4. is_new_turn should be true
+        assert!(state.is_new_turn);
+    }
+
+    #[test]
+    fn test_stale_lock_self_healing() {
+        use std::collections::HashMap;
+        let mut polygons = HashMap::new();
+        polygons.insert("P1".to_string(), Polygon {
+            id: 1, name: "P1".to_string(), color: "blue".to_string(), shape: "tri".to_string(),
+            center: [0.0, 0.0], points: vec![], neighbors: vec!["P2".to_string()], neighbours: vec!["P2".to_string()],
+        });
+        polygons.insert("P2".to_string(), Polygon {
+            id: 2, name: "P2".to_string(), color: "blue".to_string(), shape: "tri".to_string(),
+            center: [1.0, 1.0], points: vec![], neighbors: vec!["P1".to_string()], neighbours: vec!["P1".to_string()],
+        });
+
+        let mut pieces = HashMap::new();
+        // White Heroe at P1
+        pieces.insert("W_H1".to_string(), Piece {
+            id: "W_H1".to_string(), piece_type: PieceType::Heroe, side: Side::White, position: "P1".to_string(),
+        });
+        // Black Soldier at P2
+        pieces.insert("B_S1".to_string(), Piece {
+            id: "B_S1".to_string(), piece_type: PieceType::Soldier, side: Side::Black, position: "P2".to_string(),
+        });
+
+        let board = BoardMap {
+            polygons: polygons, pieces: pieces, edges: HashMap::new(),
+            width: Some(100.0), height: Some(100.0),
+        };
+
+        let mut state = GameState::new(board);
+        state.phase = GamePhase::Playing;
+        state.turn = Side::Black;
+        state.is_new_turn = true;
+        // CORRUPTION: A White piece is "locked" during Black's turn
+        state.locked_sequence_piece = Some("W_H1".to_string());
+
+        // Black chooses blue
+        state.set_color_chosen(Side::Black, "blue");
+
+        // Verify: Choosing color should have cleared the stale lock.
+        assert!(state.locked_sequence_piece.is_none(), "Lock should be cleared on color selection");
+
+        // Even with a stale lock, get_eligible_piece_ids should ignore it if it's the wrong side.
+        state.locked_sequence_piece = Some("W_H1".to_string()); // re-introduce corruption
+        let eligible = state.get_eligible_piece_ids();
+        assert!(eligible.contains(&"B_S1".to_string()), "Black Soldier should be eligible despite stale White lock");
+    }
+
+    #[test]
+    fn test_user_reported_berserker_move_to_different_color() {
+        use std::collections::HashMap;
+        let mut polygons = HashMap::new();
+        // Chosen color: green. Landing color: grey.
+        polygons.insert("P1".to_string(), Polygon {
+            id: 1, name: "P1".to_string(), color: "green".to_string(), shape: "tri".to_string(),
+            center: [0.0, 0.0], points: vec![], neighbors: vec!["P2".to_string()], neighbours: vec!["P2".to_string()],
+        });
+        polygons.insert("P2".to_string(), Polygon {
+            id: 2, name: "P2".to_string(), color: "grey".to_string(), shape: "tri".to_string(),
+            center: [1.0, 1.0], points: vec![], neighbors: vec!["P1".to_string()], neighbours: vec!["P1".to_string()],
+        });
+
+        let mut pieces = HashMap::new();
+        // White Berserker moving from start to P2.
+        pieces.insert("W_B1".to_string(), Piece {
+            id: "W_B1".to_string(), piece_type: PieceType::Berserker, side: Side::White, position: "P1".to_string(),
+        });
+        // OTHER White piece to prevent turn switch
+        pieces.insert("W_S2".to_string(), Piece {
+            id: "W_S2".to_string(), piece_type: PieceType::Soldier, side: Side::White, position: "P3".to_string(),
+        });
+        polygons.insert("P3".to_string(), Polygon {
+            id: 3, name: "P3".to_string(), color: "green".to_string(), shape: "tri".to_string(),
+            center: [2.0, 2.0], points: vec![], neighbors: vec!["P1".to_string()], neighbours: vec!["P1".to_string()],
+        });
+        // Black piece on P2 to be captured.
+        pieces.insert("B_S1".to_string(), Piece {
+            id: "B_S1".to_string(), piece_type: PieceType::Soldier, side: Side::Black, position: "P2".to_string(),
+        });
+
+        let board = BoardMap {
+            polygons: polygons, pieces: pieces, edges: HashMap::new(),
+            width: Some(100.0), height: Some(100.0),
+        };
+
+        let mut state = GameState::new(board);
+        state.phase = GamePhase::Playing;
+        state.turn = Side::White;
+        state.color_chosen.insert(Side::White, "green".to_string());
+        state.is_new_turn = false;
+        state.moves_this_turn = 5; // User said turn 6
+        state.locked_sequence_piece = Some("W_B1".to_string()); // Assume started locked or just became locked
+
+        // Verify: P2 is grey, chosen is green. Capturing.
+        let captured = apply_move(&mut state, "W_B1", "P2");
+        assert!(captured.contains(&PieceType::Soldier));
+        
+        apply_move_turnover(&mut state, "W_B1", "P2", false, false, false);
+
+        // Verify result:
+        // 1. Should be UNLOCKED (None) because grey != green.
+        assert!(state.locked_sequence_piece.is_none(), "Berserker should unlock after moving to non-chosen color even after capture");
+        // 2. Turn should NOT end.
+        assert_eq!(state.turn, Side::White);
+    }
+
+    #[test]
+    fn test_berserker_deadlock_recovery_on_grey() {
+        use std::collections::HashMap;
+        let mut polygons = HashMap::new();
+        polygons.insert("P1".to_string(), Polygon {
+            id: 1, name: "P1".to_string(), color: "green".to_string(), shape: "tri".to_string(),
+            center: [0.0, 0.0], points: vec![], neighbors: vec!["P2".to_string()], neighbours: vec!["P2".to_string()],
+        });
+        polygons.insert("P2".to_string(), Polygon {
+            id: 2, name: "P2".to_string(), color: "grey".to_string(), shape: "tri".to_string(),
+            center: [1.0, 1.0], points: vec![], neighbors: vec!["P1".to_string()], neighbours: vec!["P1".to_string()],
+        });
+        polygons.insert("P3".to_string(), Polygon {
+            id: 3, name: "P3".to_string(), color: "green".to_string(), shape: "tri".to_string(),
+            center: [2.0, 2.0], points: vec![], neighbors: vec!["P1".to_string()], neighbours: vec!["P1".to_string()],
+        });
+
+        let mut pieces = HashMap::new();
+        // White Berserker at P2 (grey).
+        pieces.insert("W_B1".to_string(), Piece {
+            id: "W_B1".to_string(), piece_type: PieceType::Berserker, side: Side::White, position: "P2".to_string(),
+        });
+        // Other white piece on P3 (on-color).
+        pieces.insert("W_S1".to_string(), Piece {
+            id: "W_S1".to_string(), piece_type: PieceType::Soldier, side: Side::White, position: "P3".to_string(),
+        });
+
+        let board = BoardMap {
+            polygons: polygons, pieces: pieces.clone(), edges: HashMap::new(),
+            width: Some(100.0), height: Some(100.0),
+        };
+
+        let mut state = GameState::new(board);
+        state.phase = GamePhase::Playing;
+        state.turn = Side::White;
+        state.color_chosen.insert(Side::White, "green".to_string());
+        state.is_new_turn = false;
+
+        // Force a sequence lock on the Berserker.
+        state.locked_sequence_piece = Some("W_B1".to_string());
+        
+        // Apply turnover at P2 (grey). 
+        // Deadlock detection should clear it because P2 (grey piece on green turn) has no moves.
+        apply_move_turnover(&mut state, "W_B1", "P2", false, true, false);
+
+        // Verification:
+        // 1. Berserker should be UNLOCKED (None).
+        assert!(state.locked_sequence_piece.is_none(), "Lock must be cleared if piece has no moves");
+        assert_eq!(state.turn, Side::White, "Turn should remain White because other pieces are eligible");
+
+        // Verify other piece is eligible
+        let eligible = state.get_eligible_piece_ids();
+        assert!(eligible.contains(&"W_S1".to_string()), "Other on-color pieces should be eligible after lock is broken");
+    }
+
+    #[test]
+    fn test_heroe_capture_different_color_locks() {
+        let mut polygons = HashMap::new();
+        polygons.insert("P1".to_string(), Polygon {
+            id: 1, name: "P1".to_string(), color: "green".to_string(), shape: "tri".to_string(),
+            center: [0.0, 0.0], points: vec![], neighbors: vec!["P2".to_string()], neighbours: vec!["P2".to_string()],
+        });
+        polygons.insert("P2".to_string(), Polygon {
+            id: 2, name: "P2".to_string(), color: "blue".to_string(), shape: "tri".to_string(),
+            center: [1.0, 1.0], points: vec![], neighbors: vec!["P1".to_string()], neighbours: vec!["P1".to_string()],
+        });
+
+        let mut pieces = HashMap::new();
+        pieces.insert("H1".to_string(), Piece {
+            id: "H1".to_string(), piece_type: PieceType::Heroe, side: Side::White, position: "P1".to_string(),
+        });
+        pieces.insert("S1".to_string(), Piece {
+            id: "S1".to_string(), piece_type: PieceType::Soldier, side: Side::Black, position: "P2".to_string(),
+        });
+
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.turn = Side::White;
+        state.color_chosen.insert(Side::White, "green".to_string());
+
+        // Capture S1 on P2 (blue != green)
+        let captured = apply_move(&mut state, "H1", "P2");
+        assert!(!captured.is_empty());
+        apply_move_turnover(&mut state, "H1", "P2", false, false, false);
+
+        // Result: Locked for bonus move
+        assert_eq!(state.locked_sequence_piece, Some("H1".to_string()));
+        assert_eq!(state.heroe_take_counter, 1);
+        assert_eq!(state.turn, Side::White);
+    }
+
+    #[test]
+    fn test_heroe_move_after_bonus_clears_lock() {
+        let mut polygons = HashMap::new();
+        polygons.insert("P2".to_string(), Polygon {
+            id: 2, name: "P2".to_string(), color: "blue".to_string(), shape: "tri".to_string(),
+            center: [1.0, 1.0], points: vec![], neighbors: vec!["P3".to_string()], neighbours: vec!["P3".to_string()],
+        });
+        polygons.insert("P3".to_string(), Polygon {
+            id: 3, name: "P3".to_string(), color: "red".to_string(), shape: "tri".to_string(),
+            center: [2.0, 2.0], points: vec![], neighbors: vec!["P2".to_string()], neighbours: vec!["P2".to_string()],
+        });
+
+        let mut pieces = HashMap::new();
+        pieces.insert("H1".to_string(), Piece {
+            id: "H1".to_string(), piece_type: PieceType::Heroe, side: Side::White, position: "P2".to_string(),
+        });
+
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.turn = Side::White;
+        state.color_chosen.insert(Side::White, "green".to_string());
+        state.locked_sequence_piece = Some("H1".to_string());
+        state.heroe_take_counter = 1;
+
+        // Move H1 to P3 (red != green, no capture)
+        let captured = apply_move(&mut state, "H1", "P3");
+        assert!(captured.is_empty());
+        apply_move_turnover(&mut state, "H1", "P3", false, true, false);
+
+        // Result: Lock cleared, turn ends (because moves_this_turn > 0 and no more bonus moves)
+        assert!(state.locked_sequence_piece.is_none());
+    }
+
+    #[test]
+    fn test_berserker_capture_different_color_unlocks_even_if_moves_remain() {
+        let mut polygons = HashMap::new();
+        polygons.insert("P1".to_string(), Polygon {
+            id: 1, name: "P1".to_string(), color: "green".to_string(), shape: "tri".to_string(),
+            center: [0.0, 0.0], points: vec![], neighbors: vec!["P2".to_string()], neighbours: vec!["P2".to_string()],
+        });
+        polygons.insert("P2".to_string(), Polygon {
+            id: 2, name: "P2".to_string(), color: "grey".to_string(), shape: "tri".to_string(),
+            center: [1.0, 1.0], points: vec![], neighbors: vec!["P3".to_string()], neighbours: vec!["P3".to_string()],
+        });
+        polygons.insert("P3".to_string(), Polygon {
+            id: 3, name: "P3".to_string(), color: "green".to_string(), shape: "tri".to_string(),
+            center: [2.0, 2.0], points: vec![], neighbors: vec!["P2".to_string()], neighbours: vec!["P2".to_string()],
+        });
+
+        let mut pieces = HashMap::new();
+        pieces.insert("W_B1".to_string(), Piece {
+            id: "W_B1".to_string(), piece_type: PieceType::Berserker, side: Side::White, position: "P1".to_string(),
+        });
+        pieces.insert("B_S1".to_string(), Piece {
+            id: "B_S1".to_string(), piece_type: PieceType::Soldier, side: Side::Black, position: "P2".to_string(),
+        });
+
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.turn = Side::White;
+        state.color_chosen.insert(Side::White, "green".to_string());
+
+        // Step 1: Capture B_S1 on P2 (grey != green)
+        let captured = apply_move(&mut state, "W_B1", "P2");
+        assert!(!captured.is_empty());
+        apply_move_turnover(&mut state, "W_B1", "P2", false, false, false);
+
+        // Verification: Berserker SHOULD be unlocked because it landed on GREY.
+        assert!(state.locked_sequence_piece.is_none(), "Sequence must break on non-chosen color landing");
+        
+        // Note: Turn swaps to Black only if no OTHER pieces can move.
+        // In this test, W_B1 is now on grey, so it can't move to green again (needs to be on green to move to green/any).
+        // Since no white pieces are on green, turn swaps.
+        assert_eq!(state.turn, Side::Black);
+    }
+
+    #[test]
+    fn test_berserker_capture_different_color_unlocks_with_other_pieces_remaining() {
+        let mut polygons = HashMap::new();
+        polygons.insert("P1".to_string(), Polygon {
+            id: 1, name: "P1".to_string(), color: "green".to_string(), shape: "tri".to_string(),
+            center: [0.0, 0.0], points: vec![], neighbors: vec!["P2".to_string()], neighbours: vec!["P2".to_string()],
+        });
+        polygons.insert("P2".to_string(), Polygon {
+            id: 2, name: "P2".to_string(), color: "grey".to_string(), shape: "tri".to_string(),
+            center: [1.0, 1.0], points: vec![], neighbors: vec!["P1".to_string()], neighbours: vec!["P1".to_string()],
+        });
+        polygons.insert("P3".to_string(), Polygon {
+            id: 3, name: "P3".to_string(), color: "green".to_string(), shape: "tri".to_string(),
+            center: [2.0, 2.0], points: vec![], neighbors: vec!["P4".to_string()], neighbours: vec!["P4".to_string()],
+        });
+        polygons.insert("P4".to_string(), Polygon {
+            id: 4, name: "P4".to_string(), color: "green".to_string(), shape: "tri".to_string(),
+            center: [3.0, 3.0], points: vec![], neighbors: vec!["P3".to_string()], neighbours: vec!["P3".to_string()],
+        });
+
+        let mut pieces = HashMap::new();
+        pieces.insert("W_B1".to_string(), Piece {
+            id: "W_B1".to_string(), piece_type: PieceType::Berserker, side: Side::White, position: "P1".to_string(),
+        });
+        pieces.insert("W_S1".to_string(), Piece {
+            id: "W_S1".to_string(), piece_type: PieceType::Soldier, side: Side::White, position: "P3".to_string(),
+        });
+        pieces.insert("B_S1".to_string(), Piece {
+            id: "B_S1".to_string(), piece_type: PieceType::Soldier, side: Side::Black, position: "P2".to_string(),
+        });
+
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.turn = Side::White;
+        state.color_chosen.insert(Side::White, "green".to_string());
+
+        // Capture B_S1 on P2 (grey)
+        apply_move(&mut state, "W_B1", "P2");
+        apply_move_turnover(&mut state, "W_B1", "P2", false, false, false);
+
+        // Result: W_B1 unlocked. Turn stays White because W_S1 is on Green.
+        assert!(state.locked_sequence_piece.is_none());
+        assert_eq!(state.turn, Side::White);
+        assert!(state.get_eligible_piece_ids().contains(&"W_S1".to_string()));
+    }
 }

@@ -7,7 +7,7 @@ const { v4: uuidv4 } = require('uuid');
 const { initDb, getDb } = require('./db');
 const { generateGuestId } = require('./utils/auth');
 const { sendVerificationEmail } = require('./utils/email');
-const { getLegalMovesNapi, applyMoveNapi, initGameStateNapi, randomizeSetupNapi, endTurnSetupNapi, passTurnPlayingNapi } = require('../rust-napi');
+const { getLegalMovesNapi, applyMoveNapi, initGameStateNapi, randomizeSetupNapi, endTurnSetupNapi, passTurnPlayingNapi, selectColorNapi } = require('../rust-napi');
 const { saveMatchResult } = require('./utils/gameStorage');
 const boardData = require('./utils/board.json');
 
@@ -226,7 +226,7 @@ io.on('connection', (socket) => {
                     turnCounter: gameData.turnCounter,
                     isNewTurn: gameData.isNewTurn,
                     movesThisTurn: gameData.movesThisTurn,
-                    lockedSequencePiece: gameData.lockedSequencePiece,
+                    lockedSequencePiece: gameData.lockedSequencePiece || null,
                     heroeTakeCounter: gameData.heroeTakeCounter
                 }
             });
@@ -244,7 +244,7 @@ io.on('connection', (socket) => {
                     turnCounter: gameData.turnCounter,
                     isNewTurn: gameData.isNewTurn,
                     movesThisTurn: gameData.movesThisTurn,
-                    lockedSequencePiece: gameData.lockedSequencePiece,
+                    lockedSequencePiece: gameData.lockedSequencePiece || null,
                     heroeTakeCounter: gameData.heroeTakeCounter
                 }
             });
@@ -257,25 +257,58 @@ io.on('connection', (socket) => {
     });
 
     // --- GAME ACTIONS ---
-
+    
     socket.on('color_selected', ({ gameId, color, side }) => {
         const game = lobby.activeGames.get(gameId);
         if (!game) return;
-        game.colorChosen[side] = color;
-        io.to(gameId).emit('game_update', {
-            pieces: game.pieces,
-            turn: game.turn,
-            colorChosen: game.colorChosen,
-            phase: game.phase,
-            setupStep: game.setupStep,
-            turnCounter: game.turnCounter,
-            isNewTurn: game.isNewTurn,
-            movesThisTurn: game.movesThisTurn,
-            lockedSequencePiece: game.lockedSequencePiece,
-            heroeTakeCounter: game.heroeTakeCounter
-        });
-        console.log(`Setting color ${color} for ${side} in game ${gameId}`);
+
+        try {
+            const response = selectColorNapi({
+                boardJson: JSON.stringify(game.board),
+                piecesJson: JSON.stringify(game.pieces),
+                color: color,
+                turn: game.turn,
+                phase: game.phase,
+                setupStep: game.setupStep,
+                colorChosen: game.colorChosen || {},
+                turnCounter: game.turnCounter || 0,
+                isNewTurn: game.isNewTurn !== undefined ? game.isNewTurn : true,
+                movesThisTurn: game.movesThisTurn || 0,
+                lockedSequencePiece: game.lockedSequencePiece || undefined,
+                heroeTakeCounter: game.heroeTakeCounter || 0
+            });
+
+            // Update lobby state from authoritative return values
+            game.pieces = JSON.parse(response.piecesJson);
+            game.turn = response.turn;
+            game.colorChosen = response.colorChosen;
+            game.phase = response.phase;
+            game.setupStep = response.setupStep;
+            game.turnCounter = response.turnCounter;
+            game.isNewTurn = response.isNewTurn;
+            game.movesThisTurn = response.movesThisTurn;
+            game.lockedSequencePiece = response.lockedSequencePiece;
+            game.heroeTakeCounter = response.heroeTakeCounter;
+
+            io.to(gameId).emit('game_update', {
+                pieces: game.pieces,
+                turn: game.turn,
+                colorChosen: game.colorChosen,
+                phase: game.phase,
+                setupStep: game.setupStep,
+                turnCounter: game.turnCounter,
+                isNewTurn: game.isNewTurn,
+                movesThisTurn: game.movesThisTurn,
+                lockedSequencePiece: game.lockedSequencePiece || null,
+                heroeTakeCounter: game.heroeTakeCounter
+            });
+            console.log(`Setting authoritative color ${color} for ${side} in game ${gameId}`);
+        } catch (error) {
+            console.error('Error selecting color:', error);
+            // socket.emit('error', { message: 'Failed to select color', details: error.message });
+        }
     });
+
 
     socket.on('randomize_setup', ({ gameId, side }) => {
         const game = lobby.activeGames.get(gameId);
@@ -323,7 +356,7 @@ io.on('connection', (socket) => {
                 turnCounter: game.turnCounter,
                 isNewTurn: game.isNewTurn,
                 movesThisTurn: game.movesThisTurn,
-                lockedSequencePiece: game.lockedSequencePiece,
+                lockedSequencePiece: game.lockedSequencePiece || null,
                 heroeTakeCounter: game.heroeTakeCounter
             });
             console.log(`randomize_setup result: turn=${game.turn}, phase=${game.phase}, step=${game.setupStep}`);
@@ -370,7 +403,7 @@ io.on('connection', (socket) => {
                     turnCounter: game.turnCounter,
                     isNewTurn: game.isNewTurn,
                     movesThisTurn: game.movesThisTurn,
-                    lockedSequencePiece: game.lockedSequencePiece,
+                    lockedSequencePiece: game.lockedSequencePiece || null,
                     heroeTakeCounter: game.heroeTakeCounter
                 });
                 console.log(`Setup turn ended in ${gameId}: Now ${game.turn}'s turn`);
@@ -418,7 +451,7 @@ io.on('connection', (socket) => {
                     turnCounter: game.turnCounter,
                     isNewTurn: game.isNewTurn,
                     movesThisTurn: game.movesThisTurn,
-                    lockedSequencePiece: game.lockedSequencePiece,
+                    lockedSequencePiece: game.lockedSequencePiece || null,
                     heroeTakeCounter: game.heroeTakeCounter
                 });
                 console.log(`Playing turn passed in ${gameId}: Now ${game.turn}'s turn`);
@@ -465,10 +498,51 @@ io.on('connection', (socket) => {
                 phase: game.phase,
                 setupStep: game.setupStep,
                 isNewTurn: game.isNewTurn,
-                lockedSequencePiece: game.lockedSequencePiece
+                lockedSequencePiece: game.lockedSequencePiece || null
             });
         } catch (e) {
             console.error('Error getting legal moves:', e);
+        }
+    });
+
+    socket.on('select_color', ({ gameId, color }) => {
+        const game = lobby.activeGames.get(gameId);
+        if (!game) return;
+
+        try {
+            const response = selectColorNapi({
+                boardJson: JSON.stringify(game.board),
+                piecesJson: JSON.stringify(game.pieces),
+                color: color,
+                turn: game.turn,
+                phase: game.phase,
+                setupStep: game.setupStep,
+                colorChosen: game.colorChosen || {},
+                turnCounter: game.turnCounter || 0,
+                isNewTurn: game.isNewTurn !== undefined ? game.isNewTurn : true,
+                movesThisTurn: game.movesThisTurn || 0,
+                lockedSequencePiece: game.lockedSequencePiece || undefined,
+                heroeTakeCounter: game.heroeTakeCounter || 0
+            });
+
+            game.colorChosen = response.colorChosen;
+            game.isNewTurn = response.isNewTurn;
+
+            io.to(gameId).emit('game_update', {
+                pieces: game.pieces,
+                turn: game.turn,
+                colorChosen: game.colorChosen,
+                phase: game.phase,
+                setupStep: game.setupStep,
+                turnCounter: game.turnCounter,
+                isNewTurn: game.isNewTurn,
+                movesThisTurn: game.movesThisTurn,
+                lockedSequencePiece: game.lockedSequencePiece || null,
+                heroeTakeCounter: game.heroeTakeCounter
+            });
+            console.log(`Color ${color} selected for ${game.turn} in ${gameId}`);
+        } catch (e) {
+            console.error('Error selecting color:', e);
         }
     });
 
@@ -498,7 +572,7 @@ io.on('connection', (socket) => {
                     turnCounter: game.turnCounter,
                     isNewTurn: game.isNewTurn,
                     movesThisTurn: game.movesThisTurn,
-                    lockedSequencePiece: game.lockedSequencePiece,
+                    lockedSequencePiece: game.lockedSequencePiece || null,
                     heroeTakeCounter: game.heroeTakeCounter
                 });
                 console.log(`Setup placement in ${gameId}: ${pieceId} to ${targetPoly}`);
@@ -544,7 +618,7 @@ io.on('connection', (socket) => {
                     turnCounter: game.turnCounter,
                     isNewTurn: game.isNewTurn,
                     movesThisTurn: game.movesThisTurn,
-                    lockedSequencePiece: game.lockedSequencePiece,
+                    lockedSequencePiece: game.lockedSequencePiece || null,
                     heroeTakeCounter: game.heroeTakeCounter,
                     lastMove: { pieceId, targetPoly, captured: response.captured }
                 });
@@ -585,7 +659,7 @@ io.on('connection', (socket) => {
                 turnCounter: game.turnCounter,
                 isNewTurn: game.isNewTurn,
                 movesThisTurn: game.movesThisTurn,
-                lockedSequencePiece: game.lockedSequencePiece,
+                lockedSequencePiece: game.lockedSequencePiece || null,
                 heroeTakeCounter: game.heroeTakeCounter
             });
         }
