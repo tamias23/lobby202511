@@ -14,6 +14,19 @@ The JavaScript workstream is focused on the frontend, visualization, and Node-ba
 - Contains the web frontend components (`index2.html`) and Node.js servers (e.g., `serverD.js`).
 - Utilized for visually inspecting game board states, manually verifying game rules, testing with Jest, and providing an interactive environment.
 
+### 3. Unified Game Platform (`/new_main`)
+A modern monorepo that integrates the full game lifecycle from user onboarding and ranked matchmaking to real-time gameplay.
+
+- **Architecture**:
+    - **Frontend (`/new_main/frontend`)**: A React-based web application built with **Vite**. It uses the shared game engine compiled to **WebAssembly (Wasm)** for high-performance client-side simulation.
+    - **Backend (`/new_main/backend`)**: A **Node.js** server using **Express** and **Socket.io**. It provides authoritative game state management by leveraging the same game logic through **Rust NAPI** bindings.
+    - **Database**: Employs **DuckDB** (via `@duckdb/node-api`) for high-speed user data and match history management.
+- **Key Features**:
+    - **Secure Onboarding**: Complete user registration with email verification and session-based login.
+    - **Lobby & Matchmaking**: Real-time ranked matchmaking system that pairs players by skill rating.
+    - **Gameplay HUD**: A sophisticated, multi-column responsive interface featuring live game statistics (turn/move counts), action buttons (Flip Board, Random Setup), and customizable themes (Light, Dark, and a special **Rain** mode).
+    - **Engine Consistency**: By sharing common code in `/new_main/rust-core`, the platform ensures perfect rule parity across the client and server.
+
 ## Utility Scripts
 
 The root directory contains bash scripts to quickly orchestrate Rust simulations:
