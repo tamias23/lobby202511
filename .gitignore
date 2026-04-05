@@ -29,3 +29,5 @@ new_main/backend/.env
 new_main/backend/.env.*
 new_main/backend/db/
 utils.txt
+new_main/backend/rust-napi/index.linux-x64-gnu.node
+

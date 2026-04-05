@@ -240,6 +240,8 @@ io.on('connection', (socket) => {
                 phase: 'Setup',
                 setupStep: 0,
                 colorChosen: {},
+                colorsEverChosen: [],
+                mageUnlocked: false,
                 turnCounter: 0,
                 isNewTurn: true,
                 movesThisTurn: 0,
@@ -264,6 +266,8 @@ io.on('connection', (socket) => {
                     pieces: gameData.pieces,
                     turn: gameData.turn,
                     colorChosen: gameData.colorChosen,
+                    colorsEverChosen: gameData.colorsEverChosen,
+                    mageUnlocked: gameData.mageUnlocked,
                     phase: gameData.phase,
                     setupStep: gameData.setupStep,
                     turnCounter: gameData.turnCounter,
@@ -284,6 +288,8 @@ io.on('connection', (socket) => {
                     pieces: gameData.pieces,
                     turn: gameData.turn,
                     colorChosen: gameData.colorChosen,
+                    colorsEverChosen: gameData.colorsEverChosen,
+                    mageUnlocked: gameData.mageUnlocked,
                     phase: gameData.phase,
                     setupStep: gameData.setupStep,
                     turnCounter: gameData.turnCounter,
@@ -318,6 +324,7 @@ io.on('connection', (socket) => {
                 phase: game.phase,
                 setupStep: game.setupStep,
                 colorChosen: game.colorChosen || {},
+                colorsEverChosen: game.colorsEverChosen || [],
                 turnCounter: game.turnCounter || 0,
                 isNewTurn: game.isNewTurn !== undefined ? game.isNewTurn : true,
                 movesThisTurn: game.movesThisTurn || 0,
@@ -329,6 +336,8 @@ io.on('connection', (socket) => {
             game.pieces = JSON.parse(response.piecesJson);
             game.turn = response.turn;
             game.colorChosen = response.colorChosen;
+            game.colorsEverChosen = response.colorsEverChosen;
+            game.mageUnlocked = response.mageUnlocked;
             game.phase = response.phase;
             game.setupStep = response.setupStep;
             game.turnCounter = response.turnCounter;
@@ -341,6 +350,8 @@ io.on('connection', (socket) => {
                 pieces: game.pieces,
                 turn: game.turn,
                 colorChosen: game.colorChosen,
+                colorsEverChosen: game.colorsEverChosen,
+                mageUnlocked: game.mageUnlocked,
                 phase: game.phase,
                 setupStep: game.setupStep,
                 turnCounter: game.turnCounter,
@@ -375,6 +386,7 @@ io.on('connection', (socket) => {
                 phase: game.phase,
                 setupStep: game.setupStep,
                 colorChosen: game.colorChosen || {},
+                colorsEverChosen: game.colorsEverChosen || [],
                 turnCounter: game.turnCounter || 0,
                 isNewTurn: game.isNewTurn !== undefined ? game.isNewTurn : true,
                 movesThisTurn: game.movesThisTurn || 0,
@@ -396,6 +408,8 @@ io.on('connection', (socket) => {
                 pieces: game.pieces,
                 turn: game.turn,
                 colorChosen: game.colorChosen,
+                colorsEverChosen: game.colorsEverChosen,
+                mageUnlocked: game.mageUnlocked,
                 phase: game.phase,
                 setupStep: game.setupStep,
                 turnCounter: game.turnCounter,
@@ -424,6 +438,7 @@ io.on('connection', (socket) => {
                     phase: game.phase,
                     setupStep: game.setupStep,
                     colorChosen: game.colorChosen || {},
+                    colorsEverChosen: game.colorsEverChosen || [],
                     turnCounter: game.turnCounter || 0,
                     isNewTurn: game.isNewTurn !== undefined ? game.isNewTurn : true,
                     movesThisTurn: game.movesThisTurn || 0,
@@ -446,6 +461,8 @@ io.on('connection', (socket) => {
                     pieces: game.pieces,
                     turn: game.turn,
                     colorChosen: game.colorChosen,
+                    colorsEverChosen: game.colorsEverChosen,
+                    mageUnlocked: game.mageUnlocked,
                     phase: game.phase,
                     setupStep: game.setupStep,
                     turnCounter: game.turnCounter,
@@ -474,6 +491,7 @@ io.on('connection', (socket) => {
                     phase: game.phase,
                     setupStep: game.setupStep,
                     colorChosen: game.colorChosen || {},
+                    colorsEverChosen: game.colorsEverChosen || [],
                     turnCounter: game.turnCounter || 0,
                     isNewTurn: game.isNewTurn !== undefined ? game.isNewTurn : true,
                     movesThisTurn: game.movesThisTurn || 0,
@@ -494,11 +512,15 @@ io.on('connection', (socket) => {
                 game.lockedSequencePiece = response.lockedSequencePiece;
                 game.heroeTakeCounter = response.heroeTakeCounter;
                 game.colorChosen = response.colorChosen;
+                game.colorsEverChosen = response.colorsEverChosen;
+                game.mageUnlocked = response.mageUnlocked;
 
                 io.to(gameId).emit('game_update', {
                     pieces: game.pieces,
                     turn: game.turn,
                     colorChosen: game.colorChosen,
+                    colorsEverChosen: game.colorsEverChosen,
+                    mageUnlocked: game.mageUnlocked,
                     phase: game.phase,
                     setupStep: game.setupStep,
                     turnCounter: game.turnCounter,
@@ -529,6 +551,7 @@ io.on('connection', (socket) => {
                 phase: game.phase,
                 setupStep: game.setupStep,
                 colorChosen: game.colorChosen || {},
+                colorsEverChosen: game.colorsEverChosen || [],
                 turnCounter: game.turnCounter || 0,
                 isNewTurn: game.isNewTurn !== undefined ? game.isNewTurn : true,
                 movesThisTurn: game.movesThisTurn || 0,
@@ -536,6 +559,8 @@ io.on('connection', (socket) => {
                 heroeTakeCounter: game.heroeTakeCounter || 0
             });
             game.colorChosen = response.colorChosen;
+            game.colorsEverChosen = response.colorsEverChosen;
+            game.mageUnlocked = response.mageUnlocked;
             game.phase = response.phase;
             game.setupStep = response.setupStep;
             game.turn = response.turn;
@@ -573,6 +598,7 @@ io.on('connection', (socket) => {
                 phase: game.phase,
                 setupStep: game.setupStep,
                 colorChosen: game.colorChosen || {},
+                colorsEverChosen: game.colorsEverChosen || [],
                 turnCounter: game.turnCounter || 0,
                 isNewTurn: game.isNewTurn !== undefined ? game.isNewTurn : true,
                 movesThisTurn: game.movesThisTurn || 0,
@@ -581,12 +607,16 @@ io.on('connection', (socket) => {
             });
 
             game.colorChosen = response.colorChosen;
+            game.colorsEverChosen = response.colorsEverChosen;
+            game.mageUnlocked = response.mageUnlocked;
             game.isNewTurn = response.isNewTurn;
 
             io.to(gameId).emit('game_update', {
                 pieces: game.pieces,
                 turn: game.turn,
                 colorChosen: game.colorChosen,
+                colorsEverChosen: game.colorsEverChosen,
+                mageUnlocked: game.mageUnlocked,
                 phase: game.phase,
                 setupStep: game.setupStep,
                 turnCounter: game.turnCounter,
@@ -641,6 +671,7 @@ io.on('connection', (socket) => {
                     phase: game.phase,
                     setupStep: game.setupStep,
                     colorChosen: game.colorChosen || {},
+                    colorsEverChosen: game.colorsEverChosen || [],
                     turnCounter: game.turnCounter || 0,
                     isNewTurn: game.isNewTurn !== undefined ? game.isNewTurn : true,
                     movesThisTurn: game.movesThisTurn || 0,
@@ -652,6 +683,8 @@ io.on('connection', (socket) => {
                 
                 game.pieces = JSON.parse(response.piecesJson);
                 game.colorChosen = response.colorChosen;
+                game.colorsEverChosen = response.colorsEverChosen;
+                game.mageUnlocked = response.mageUnlocked;
                 game.phase = response.phase;
                 game.setupStep = response.setupStep;
                 if (oldTurn !== response.turn) {
@@ -672,6 +705,8 @@ io.on('connection', (socket) => {
                     pieces: game.pieces,
                     turn: game.turn,
                     colorChosen: game.colorChosen,
+                    colorsEverChosen: game.colorsEverChosen,
+                    mageUnlocked: game.mageUnlocked,
                     phase: game.phase,
                     setupStep: game.setupStep,
                     turnCounter: game.turnCounter,
@@ -708,6 +743,8 @@ io.on('connection', (socket) => {
                 pieces: game.pieces,
                 turn: game.turn,
                 colorChosen: game.colorChosen,
+                colorsEverChosen: game.colorsEverChosen,
+                mageUnlocked: game.mageUnlocked,
                 phase: game.phase,
                 setupStep: game.setupStep,
                 turnCounter: game.turnCounter,

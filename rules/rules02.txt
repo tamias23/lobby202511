@@ -171,3 +171,7 @@ The following rule numbers are referenced in the engine source code (`engine.rs`
 ### **Rule 108: Siren Pin Termination**
 - **Description**: Immobilization ends the MOVE.
 - **Explanation**: Moving into a position slide-adjacent to an enemy Siren results in immediate immobilization (pinning). This ends the move instantly. If the pin occurs on a chosen-color polygon, the entire turn ends.
+
+### **Rule 110: Chromatic Unlock (Mage Gate)**
+- **Description**: The Mage is locked until all 4 board colors have been chosen.
+- **Explanation**: At the start of the playing phase, the Mage piece cannot be deployed or acted upon. A global, persistent set (`colors_ever_chosen`) tracks every distinct board color that has been selected as the turn color by either player since the beginning of the playing phase. Once this set contains all 4 distinct board colors (`grey`, `green`, `blue`, `orange`) — regardless of which player chose them — the Mage becomes permanently available to both players simultaneously (Chromatic Unlock). The UI displays a progress counter showing how many colors have been seen, which disappears on unlock.

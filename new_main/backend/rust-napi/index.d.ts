@@ -51,6 +51,7 @@ export interface MoveRequest {
   phase: string
   setupStep: number
   colorChosen: Record<string, string>
+  colorsEverChosen: Array<string>
   turnCounter: number
   isNewTurn: boolean
   movesThisTurn: number
@@ -60,6 +61,8 @@ export interface MoveRequest {
 export interface MoveResponse {
   targets: Array<string>
   colorChosen: Record<string, string>
+  colorsEverChosen: Array<string>
+  mageUnlocked: boolean
   phase: string
   setupStep: number
   turn: string
@@ -79,6 +82,7 @@ export interface ApplyMoveRequest {
   phase: string
   setupStep: number
   colorChosen: Record<string, string>
+  colorsEverChosen: Array<string>
   turnCounter: number
   isNewTurn: boolean
   movesThisTurn: number
@@ -93,6 +97,7 @@ export interface SelectColorRequest {
   phase: string
   setupStep: number
   colorChosen: Record<string, string>
+  colorsEverChosen: Array<string>
   turnCounter: number
   isNewTurn: boolean
   movesThisTurn: number
@@ -103,6 +108,8 @@ export interface ApplyMoveResponse {
   piecesJson: string
   captured: Array<string>
   colorChosen: Record<string, string>
+  colorsEverChosen: Array<string>
+  mageUnlocked: boolean
   phase: string
   setupStep: number
   turn: string
@@ -119,6 +126,7 @@ export interface EndTurnSetupRequest {
   phase: string
   setupStep: number
   colorChosen: Record<string, string>
+  colorsEverChosen: Array<string>
   turnCounter: number
   isNewTurn: boolean
   movesThisTurn: number

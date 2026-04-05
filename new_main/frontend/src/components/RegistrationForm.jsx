@@ -119,8 +119,6 @@ const fieldStyle = {
 const inputStyle = {
   width: '100%',
   padding: '12px',
-  marginTop: '8px',
-  borderRadius: '6px',
   marginTop: '4px',
   borderRadius: '8px',
   border: '1px solid rgba(255,255,255,0.1)',

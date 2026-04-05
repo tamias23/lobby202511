@@ -15,6 +15,7 @@ pub struct GameState {
     pub occupancy: HashMap<String, String>, // PolyName -> PieceId
     pub turn: Side,
     pub color_chosen: HashMap<Side, String>, // Which board polygon color they chose to spawn on
+    pub colors_ever_chosen: HashSet<String>, // Global set of all colors ever chosen by either player
     pub turn_counter: u32,
     pub is_new_turn: bool,
     pub moves_this_turn: u32,
@@ -50,7 +51,12 @@ impl GameState {
                 let mut can_start = false;
                 if p.position == "returned" {
                     if self.phase == GamePhase::Playing {
-                        can_start = true;
+                        // Rule 110: Mage is locked until all 4 colors have been chosen (Chromatic Unlock).
+                        if p.piece_type == PieceType::Mage && !self.is_mage_unlocked() {
+                            can_start = false;
+                        } else {
+                            can_start = true;
+                        }
                     } else {
                         // Setup phase: filter by setup_step
                         let (step_type, _) = match self.setup_step {
@@ -67,13 +73,9 @@ impl GameState {
                             can_start = p.piece_type == step_type;
                         }
                     }
-                } else if chosen_color.is_none() {
-                    // Rule 11: Player must choose a color first.
-                    // If no color is chosen yet, no piece is eligible to move.
-                    can_start = false;
                 } else if let Some(ref color) = chosen_color {
                     if let Some(poly) = self.board.polygons.get(&p.position) {
-                        if poly.color.to_lowercase() == *color {
+                        if poly.color.to_lowercase() == color.to_lowercase() {
                             can_start = true;
                         }
                     }
@@ -105,12 +107,21 @@ impl GameState {
     }
 
     pub fn set_color_chosen(&mut self, side: Side, color: &str) {
-        self.color_chosen.insert(side, color.to_string());
+        let lc = color.to_lowercase();
+        self.color_chosen.insert(side, lc.clone());
+        // Rule 110: Track every color ever chosen for the Chromatic Unlock (Mage gate).
+        self.colors_ever_chosen.insert(lc);
         // Color choice marks the absolute start of a fresh turn segment.
         // It should ALWAYS clear any sequence lock or Heroe bonus flags.
         self.locked_sequence_piece = None;
         self.heroe_take_counter = 0;
         self.is_new_turn = false;
+    }
+
+    /// Rule 110: The Mage is available for deployment only after all 4 board colors
+    /// have been chosen at least once by either player (Chromatic Unlock).
+    pub fn is_mage_unlocked(&self) -> bool {
+        self.colors_ever_chosen.len() >= 4
     }
 
     pub fn new(board: BoardMap) -> Self {
@@ -125,6 +136,7 @@ impl GameState {
             occupancy,
             turn: Side::White, // Example start
             color_chosen: HashMap::new(),
+            colors_ever_chosen: HashSet::new(),
             turn_counter: 0,
             is_new_turn: true,
             moves_this_turn: 0,
@@ -1123,8 +1135,12 @@ pub fn apply_move_turnover(state: &mut GameState, chosen_piece: &str, chosen_tar
         let is_pinned = state.is_siren_pinned(chosen_target, current_turn);
         
         if is_pinned {
-            // Immobilized pieces end their move AND turn immediately.
-            turn_ends = true;
+            // Rule 108: Move ends. Turn ends ONLY if pinning occurred on a CHOSEN color.
+            if target_color.to_lowercase() == chosen_color.to_lowercase() {
+                turn_ends = true;
+            } else {
+                turn_ends = false;
+            }
             state.locked_sequence_piece = None;
         } else if target_color == chosen_color {
             // Rule 15: Landing on chosen color ends the MOVE.
@@ -1133,9 +1149,8 @@ pub fn apply_move_turnover(state: &mut GameState, chosen_piece: &str, chosen_tar
                 turn_ends = false;
                 state.locked_sequence_piece = Some(chosen_piece.to_string());
             } else {
-                // Normal pieces (Ghoul, Mage, etc.) end segments on chosen color.
-                // But the PLAYER'S turn continues for other pieces on chosen color.
-                turn_ends = false; 
+                // Normal pieces (Ghoul, Mage, etc.) end segments AND the turn on chosen color.
+                turn_ends = true; 
                 state.locked_sequence_piece = None;
                 state.heroe_take_counter = 0;
             }
@@ -1366,10 +1381,9 @@ mod tests {
         assert!(captured2.is_empty());
         apply_move_turnover(&mut state, "H1", "P3", false, true, false);
 
-        // Turn should STAY with White because P3 is Blue
-        assert_eq!(state.turn, Side::White);
-        assert_eq!(state.heroe_take_counter, 0); // Reset for new move within turn? 
-        // Actually, heroe_take_counter should be reset whenever a sequence finishes.
+        // Turn should END with White because P3 is Blue (chosen color)
+        assert_eq!(state.turn, Side::Black);
+        assert_eq!(state.heroe_take_counter, 0); 
         assert_eq!(state.locked_sequence_piece, None);
     }
 
@@ -1414,22 +1428,16 @@ mod tests {
         apply_move(&mut state, "B1", "P2");
         apply_move_turnover(&mut state, "B1", "P2", false, true, false);
 
-        // Turn should STAY with White
-        assert_eq!(state.turn, Side::White);
-        assert_eq!(state.moves_this_turn, 1);
-        assert!(!state.is_new_turn);
+        // Turn should END with White because P2 is Blue (the chosen color)
+        assert_eq!(state.turn, Side::Black);
+        assert_eq!(state.moves_this_turn, 0); // Reset to 0 after turn end
+        assert!(state.is_new_turn);
 
-        // Piece B1 should NO LONGER be eligible (it moved), but S1 SHOULD be eligible (on Blue, same turn)
+        // Piece B1 should NO LONGER be eligible (it moved), but S1 is also not eligible as it's Black's turn
         let eligible = state.get_eligible_piece_ids();
-        assert!(eligible.contains(&"S1".to_string()));
+        assert!(!eligible.contains(&"S1".to_string()));
         
-        // Move 2: Soldier S1 moves from P2 (its start) to P1 (where Bishop B1 WAS)
-        // If visited_polygons wasn't cleared, P1 would be BLOCKED.
-        apply_move(&mut state, "S1", "P1");
-        apply_move_turnover(&mut state, "S1", "P1", false, true, false);
-
-        assert_eq!(state.board.pieces["S1"].position, "P1");
-        assert_eq!(state.turn, Side::White); // STILL White's turn because P1 is Blue
+        // (Manual move 2 not possible anymore since turn switched)
     }
 
     #[test]
@@ -1841,5 +1849,126 @@ mod tests {
         assert!(state.locked_sequence_piece.is_none());
         assert_eq!(state.turn, Side::White);
         assert!(state.get_eligible_piece_ids().contains(&"W_S1".to_string()));
+    }
+
+    #[test]
+    fn test_siren_pin_on_different_color_does_not_end_turn() {
+        let mut polygons = HashMap::new();
+        polygons.insert("P1".to_string(), Polygon {
+            id: 1, name: "P1".to_string(), color: "green".to_string(), shape: "tri".to_string(),
+            center: [0.0, 0.0], points: vec![], neighbors: vec!["P2".to_string()], neighbours: vec!["P2".to_string()],
+        });
+        polygons.insert("P2".to_string(), Polygon {
+            id: 2, name: "P2".to_string(), color: "yellow".to_string(), shape: "tri".to_string(),
+            center: [1.0, 1.0], points: vec![], neighbors: vec!["P1".to_string(), "P3".to_string(), "P4".to_string()], neighbours: vec!["P1".to_string(), "P3".to_string(), "P4".to_string()],
+        });
+        polygons.insert("P3".to_string(), Polygon {
+            id: 3, name: "P3".to_string(), color: "green".to_string(), shape: "tri".to_string(),
+            center: [2.0, 2.0], points: vec![], neighbors: vec!["P2".to_string()], neighbours: vec!["P2".to_string()],
+        });
+        polygons.insert("P4".to_string(), Polygon {
+            id: 4, name: "P4".to_string(), color: "red".to_string(), shape: "tri".to_string(),
+            center: [1.0, 0.0], points: vec![], neighbors: vec!["P2".to_string()], neighbours: vec!["P2".to_string()],
+        });
+
+        let mut pieces = HashMap::new();
+        pieces.insert("W_S1".to_string(), Piece {
+            id: "W_S1".to_string(), piece_type: PieceType::Siren, side: Side::White, position: "P1".to_string(),
+        });
+        pieces.insert("W_P2".to_string(), Piece {
+            id: "W_P2".to_string(), piece_type: PieceType::Soldier, side: Side::White, position: "P3".to_string(),
+        });
+        pieces.insert("B_S1".to_string(), Piece {
+            id: "B_S1".to_string(), piece_type: PieceType::Siren, side: Side::Black, position: "P4".to_string(),
+        });
+
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.turn = Side::White;
+        state.set_color_chosen(Side::White, "green");
+
+        // Move W_S1 from Green to Yellow (pinned by B_S1 on P4)
+        apply_move(&mut state, "W_S1", "P2");
+        apply_move_turnover(&mut state, "W_S1", "P2", false, true, false);
+
+        // Turn stays White because landing was Yellow (not Green).
+        assert_eq!(state.turn, Side::White);
+    }
+
+    #[test]
+    fn test_case_insensitive_eligibility() {
+        let mut polygons = HashMap::new();
+        polygons.insert("P1".to_string(), Polygon {
+            id: 1, name: "P1".to_string(), color: "Green".to_string(), shape: "tri".to_string(),
+            center: [0.0, 0.0], points: vec![], neighbors: vec![], neighbours: vec![],
+        });
+        let mut pieces = HashMap::new();
+        pieces.insert("P1".to_string(), Piece {
+            id: "P1".to_string(), piece_type: PieceType::Soldier, side: Side::White, position: "P1".to_string(),
+        });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.turn = Side::White;
+        
+        // Selection is lowercase "green", board is uppercase "Green"
+        state.set_color_chosen(Side::White, "green");
+        
+        let eligible = state.get_eligible_piece_ids();
+        assert!(eligible.contains(&"P1".to_string()));
+    }
+
+    #[test]
+    fn test_mage_locked_before_chromatic_unlock() {
+        let mut polygons = HashMap::new();
+        polygons.insert("P1".to_string(), Polygon {
+            id: 1, name: "P1".to_string(), color: "green".to_string(), shape: "tri".to_string(),
+            center: [0.0, 0.0], points: vec![], neighbors: vec![], neighbours: vec![],
+        });
+        let mut pieces = HashMap::new();
+        // White Mage in returned state
+        pieces.insert("M1".to_string(), Piece {
+            id: "M1".to_string(), piece_type: PieceType::Mage, side: Side::White, position: "returned".to_string(),
+        });
+        // White Soldier on board so there is always a legal move
+        pieces.insert("S1".to_string(), Piece {
+            id: "S1".to_string(), piece_type: PieceType::Soldier, side: Side::White, position: "P1".to_string(),
+        });
+
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.turn = Side::White;
+        // Only 3 colors ever chosen — not yet unlocked
+        state.colors_ever_chosen.insert("green".to_string());
+        state.colors_ever_chosen.insert("blue".to_string());
+        state.colors_ever_chosen.insert("grey".to_string());
+        state.set_color_chosen(Side::White, "green"); // this adds green again (idempotent) -> still 3 unique
+        // Reinsert only 3
+        state.colors_ever_chosen = ["green", "blue", "grey"].iter().map(|s| s.to_string()).collect();
+
+        let eligible = state.get_eligible_piece_ids();
+        assert!(!eligible.contains(&"M1".to_string()), "Mage must be locked when only 3 colors chosen");
+    }
+
+    #[test]
+    fn test_mage_unlocked_after_all_colors_chosen() {
+        let mut polygons = HashMap::new();
+        polygons.insert("P1".to_string(), Polygon {
+            id: 1, name: "P1".to_string(), color: "green".to_string(), shape: "tri".to_string(),
+            center: [0.0, 0.0], points: vec![], neighbors: vec![], neighbours: vec![],
+        });
+        let mut pieces = HashMap::new();
+        pieces.insert("M1".to_string(), Piece {
+            id: "M1".to_string(), piece_type: PieceType::Mage, side: Side::White, position: "returned".to_string(),
+        });
+
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.turn = Side::White;
+        // All 4 colors ever chosen
+        state.colors_ever_chosen = ["green", "blue", "grey", "orange"].iter().map(|s| s.to_string()).collect();
+        state.set_color_chosen(Side::White, "green");
+
+        let eligible = state.get_eligible_piece_ids();
+        assert!(eligible.contains(&"M1".to_string()), "Mage must be eligible when all 4 colors chosen");
     }
 }

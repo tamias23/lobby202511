@@ -10,8 +10,8 @@
     ]
   },
   "scripts": {
-    "build": "napi build --release",
-    "build:debug": "napi build"
+    "build": "napi build --release && [ -f index.node ] && mv index.node index.linux-x64-gnu.node || true",
+    "build:debug": "napi build && [ -f index.node ] && mv index.node index.linux-x64-gnu.node || true"
   },
   "devDependencies": {
     "@napi-rs/cli": "^2.18.4"

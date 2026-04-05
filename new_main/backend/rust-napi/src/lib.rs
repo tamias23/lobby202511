@@ -40,6 +40,8 @@ pub fn init_game_state_napi(req: InitGameRequest) -> napi::Result<InitGameRespon
         setup_pieces(&mut state);
     }
     
+    let mage_unlocked_flag = state.is_mage_unlocked();
+    let ever_chosen_vec: Vec<String> = state.colors_ever_chosen.iter().cloned().collect();
     let updated_pieces: Vec<Piece> = state.board.pieces.into_values().collect();
     let updated_pieces_json = serde_json::to_string(&updated_pieces)
         .map_err(|e| napi::Error::from_reason(format!("Failed to serialize updated pieces: {}", e)))?;
@@ -198,6 +200,8 @@ pub fn randomize_setup_napi(req: RandomizeRequest) -> napi::Result<RandomizeResp
         iterations += 1;
     }
 
+    let mage_unlocked_flag = state.is_mage_unlocked();
+    let ever_chosen_vec: Vec<String> = state.colors_ever_chosen.iter().cloned().collect();
     let updated_pieces: Vec<Piece> = state.board.pieces.into_values().collect();
     let updated_pieces_json = serde_json::to_string(&updated_pieces)
         .map_err(|e| napi::Error::from_reason(format!("Failed to serialize updated pieces: {}", e)))?;
@@ -230,6 +234,8 @@ pub struct MoveRequest {
     pub setup_step: u8,
     #[napi(js_name = "colorChosen")]
     pub color_chosen: HashMap<String, String>,
+    #[napi(js_name = "colorsEverChosen")]
+    pub colors_ever_chosen: Vec<String>,
     #[napi(js_name = "turnCounter")]
     pub turn_counter: u32,
     #[napi(js_name = "isNewTurn")]
@@ -248,6 +254,10 @@ pub struct MoveResponse {
     pub targets: Vec<String>,
     #[napi(js_name = "colorChosen")]
     pub color_chosen: HashMap<String, String>, // side -> color
+    #[napi(js_name = "colorsEverChosen")]
+    pub colors_ever_chosen: Vec<String>,
+    #[napi(js_name = "mageUnlocked")]
+    pub mage_unlocked: bool,
     pub phase: String,
     #[napi(js_name = "setupStep")]
     pub setup_step: u8,
@@ -311,6 +321,9 @@ pub fn get_legal_moves_napi(req: MoveRequest) -> napi::Result<MoveResponse> {
         let side = if s.to_lowercase() == "white" { Side::White } else { Side::Black };
         state.color_chosen.insert(side, c.to_lowercase());
     }
+    for c in &req.colors_ever_chosen {
+        state.colors_ever_chosen.insert(c.to_lowercase());
+    }
 
     let mut targets = Vec::new();
     
@@ -323,10 +336,14 @@ pub fn get_legal_moves_napi(req: MoveRequest) -> napi::Result<MoveResponse> {
     }
     
     let colors = state.color_chosen.iter().map(|(s, c)| (format!("{:?}", s).to_lowercase(), c.clone())).collect();
+    let mage_unlocked_flag = state.is_mage_unlocked();
+    let ever_chosen_vec: Vec<String> = state.colors_ever_chosen.iter().cloned().collect();
 
     Ok(MoveResponse { 
         targets, 
         color_chosen: colors,
+        colors_ever_chosen: ever_chosen_vec,
+        mage_unlocked: mage_unlocked_flag,
         phase: if state.phase == GamePhase::Setup { "Setup".to_string() } else { "Playing".to_string() },
         setup_step: state.setup_step,
         turn: format!("{:?}", state.turn).to_lowercase(),
@@ -355,6 +372,8 @@ pub struct ApplyMoveRequest {
     pub setup_step: u8,
     #[napi(js_name = "colorChosen")]
     pub color_chosen: HashMap<String, String>,
+    #[napi(js_name = "colorsEverChosen")]
+    pub colors_ever_chosen: Vec<String>,
     #[napi(js_name = "turnCounter")]
     pub turn_counter: u32,
     #[napi(js_name = "isNewTurn")]
@@ -380,6 +399,8 @@ pub struct SelectColorRequest {
     pub setup_step: u8,
     #[napi(js_name = "colorChosen")]
     pub color_chosen: HashMap<String, String>,
+    #[napi(js_name = "colorsEverChosen")]
+    pub colors_ever_chosen: Vec<String>,
     #[napi(js_name = "turnCounter")]
     pub turn_counter: u32,
     #[napi(js_name = "isNewTurn")]
@@ -398,6 +419,10 @@ pub struct ApplyMoveResponse {
     pub captured: Vec<String>, 
     #[napi(js_name = "colorChosen")]
     pub color_chosen: HashMap<String, String>,
+    #[napi(js_name = "colorsEverChosen")]
+    pub colors_ever_chosen: Vec<String>,
+    #[napi(js_name = "mageUnlocked")]
+    pub mage_unlocked: bool,
     pub phase: String,
     #[napi(js_name = "setupStep")]
     pub setup_step: u8,
@@ -426,6 +451,8 @@ pub struct EndTurnSetupRequest {
     pub setup_step: u8,
     #[napi(js_name = "colorChosen")]
     pub color_chosen: HashMap<String, String>,
+    #[napi(js_name = "colorsEverChosen")]
+    pub colors_ever_chosen: Vec<String>,
     #[napi(js_name = "turnCounter")]
     pub turn_counter: u32,
     #[napi(js_name = "isNewTurn")]
@@ -485,6 +512,9 @@ pub fn end_turn_setup_napi(req: EndTurnSetupRequest) -> napi::Result<ApplyMoveRe
         let side = if s.to_lowercase() == "white" { Side::White } else { Side::Black };
         state.color_chosen.insert(side, c.to_lowercase());
     }
+    for c in &req.colors_ever_chosen {
+        state.colors_ever_chosen.insert(c.to_lowercase());
+    }
 
     // Logic: Switch turn, potentially advance setup step, with auto-skipping randomized players
     let mut iterations = 0;
@@ -529,6 +559,8 @@ pub fn end_turn_setup_napi(req: EndTurnSetupRequest) -> napi::Result<ApplyMoveRe
         iterations += 1;
     }
 
+    let mage_unlocked_flag = state.is_mage_unlocked();
+    let ever_chosen_vec: Vec<String> = state.colors_ever_chosen.iter().cloned().collect();
     let updated_pieces: Vec<Piece> = state.board.pieces.into_values().collect();
     let updated_pieces_json = serde_json::to_string(&updated_pieces)
         .map_err(|e| napi::Error::from_reason(format!("Failed to serialize updated pieces: {}", e)))?;
@@ -539,6 +571,8 @@ pub fn end_turn_setup_napi(req: EndTurnSetupRequest) -> napi::Result<ApplyMoveRe
         pieces_json: updated_pieces_json,
         captured: Vec::new(),
         color_chosen: colors,
+        colors_ever_chosen: ever_chosen_vec,
+        mage_unlocked: mage_unlocked_flag,
         phase: if state.phase == GamePhase::Setup { "Setup".to_string() } else { "Playing".to_string() },
         setup_step: state.setup_step,
         turn: format!("{:?}", state.turn).to_lowercase(),
@@ -592,12 +626,18 @@ pub fn apply_move_napi(req: ApplyMoveRequest) -> napi::Result<ApplyMoveResponse>
         let side = if s.to_lowercase() == "white" { Side::White } else { Side::Black };
         state.color_chosen.insert(side, c.to_lowercase());
     }
-
     state.turn_counter = req.turn_counter;
     state.is_new_turn = req.is_new_turn;
     state.moves_this_turn = req.moves_this_turn;
     state.locked_sequence_piece = req.locked_sequence_piece.clone();
     state.heroe_take_counter = req.heroe_take_counter;
+    for (s, c) in req.color_chosen.clone() {
+        let side = if s.to_lowercase() == "white" { Side::White } else { Side::Black };
+        state.color_chosen.insert(side, c.to_lowercase());
+    }
+    for c in &req.colors_ever_chosen {
+        state.colors_ever_chosen.insert(c.to_lowercase());
+    }
 
     // Authoritative Legality Check
     let legal_targets = get_legal_moves(&state, &req.piece_id);
@@ -626,6 +666,8 @@ pub fn apply_move_napi(req: ApplyMoveRequest) -> napi::Result<ApplyMoveResponse>
         was_returned
     );
     
+    let mage_unlocked_flag = state.is_mage_unlocked();
+    let ever_chosen_vec: Vec<String> = state.colors_ever_chosen.iter().cloned().collect();
     let updated_pieces: Vec<Piece> = state.board.pieces.into_values().collect();
     let updated_pieces_json = serde_json::to_string(&updated_pieces)
         .map_err(|e| napi::Error::from_reason(format!("Failed to serialize updated pieces: {}", e)))?;
@@ -637,6 +679,8 @@ pub fn apply_move_napi(req: ApplyMoveRequest) -> napi::Result<ApplyMoveResponse>
         pieces_json: updated_pieces_json,
         captured: captured_strs,
         color_chosen: colors,
+        colors_ever_chosen: ever_chosen_vec,
+        mage_unlocked: mage_unlocked_flag,
         phase: if state.phase == GamePhase::Setup { "Setup".to_string() } else { "Playing".to_string() },
         setup_step: state.setup_step,
         turn: format!("{:?}", state.turn).to_lowercase(),
@@ -695,9 +739,14 @@ pub fn pass_turn_playing_napi(req: ApplyMoveRequest) -> napi::Result<ApplyMoveRe
         let side = if s.to_lowercase() == "white" { Side::White } else { Side::Black };
         state.color_chosen.insert(side, c.to_lowercase());
     }
+    for c in &req.colors_ever_chosen {
+        state.colors_ever_chosen.insert(c.to_lowercase());
+    }
 
     pass_turn(&mut state);
 
+    let mage_unlocked_flag = state.is_mage_unlocked();
+    let ever_chosen_vec: Vec<String> = state.colors_ever_chosen.iter().cloned().collect();
     let updated_pieces: Vec<Piece> = state.board.pieces.into_values().collect();
     let updated_pieces_json = serde_json::to_string(&updated_pieces)
         .map_err(|e| napi::Error::from_reason(format!("Failed to serialize updated pieces: {}", e)))?;
@@ -708,6 +757,8 @@ pub fn pass_turn_playing_napi(req: ApplyMoveRequest) -> napi::Result<ApplyMoveRe
         pieces_json: updated_pieces_json,
         captured: Vec::new(),
         color_chosen: colors,
+        colors_ever_chosen: ever_chosen_vec,
+        mage_unlocked: mage_unlocked_flag,
         phase: if state.phase == GamePhase::Setup { "Setup".to_string() } else { "Playing".to_string() },
         setup_step: state.setup_step,
         turn: format!("{:?}", state.turn).to_lowercase(),
@@ -758,9 +809,14 @@ pub fn select_color_napi(req: SelectColorRequest) -> napi::Result<ApplyMoveRespo
         let side = if s.to_lowercase() == "white" { Side::White } else { Side::Black };
         state.color_chosen.insert(side, c.to_lowercase());
     }
+    for c in &req.colors_ever_chosen {
+        state.colors_ever_chosen.insert(c.to_lowercase());
+    }
 
     state.set_color_chosen(state.turn, &req.color.to_lowercase());
 
+    let mage_unlocked_flag = state.is_mage_unlocked();
+    let ever_chosen_vec: Vec<String> = state.colors_ever_chosen.iter().cloned().collect();
     let updated_pieces: Vec<Piece> = state.board.pieces.into_values().collect();
     let updated_pieces_json = serde_json::to_string(&updated_pieces)
         .map_err(|e| napi::Error::from_reason(format!("Failed to serialize updated pieces: {}", e)))?;
@@ -771,6 +827,8 @@ pub fn select_color_napi(req: SelectColorRequest) -> napi::Result<ApplyMoveRespo
         pieces_json: updated_pieces_json,
         captured: Vec::new(),
         color_chosen: colors,
+        colors_ever_chosen: ever_chosen_vec,
+        mage_unlocked: mage_unlocked_flag,
         phase: if state.phase == GamePhase::Setup { "Setup".to_string() } else { "Playing".to_string() },
         setup_step: state.setup_step,
         turn: format!("{:?}", state.turn).to_lowercase(),

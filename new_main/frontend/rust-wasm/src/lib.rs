@@ -12,6 +12,7 @@ pub fn get_legal_moves_wasm(
     phase: &str, 
     setup_step: u8, 
     color_chosen_json: &str,
+    colors_ever_chosen_json: &str,
     turn_counter: u32,
     is_new_turn: bool,
     moves_this_turn: u32,
@@ -63,6 +64,13 @@ pub fn get_legal_moves_wasm(
         for (s, c) in color_chosen {
             let side = if s.to_lowercase() == "white" { Side::White } else { Side::Black };
             state.color_chosen.insert(side, c.to_lowercase());
+        }
+    }
+
+    // Rule 110: Hydrate colors_ever_chosen for Chromatic Unlock (Mage gate)
+    if let Ok(ever_chosen) = serde_json::from_str::<Vec<String>>(colors_ever_chosen_json) {
+        for c in ever_chosen {
+            state.colors_ever_chosen.insert(c.to_lowercase());
         }
     }
 
@@ -87,6 +95,7 @@ pub fn get_eligible_pieces_wasm(
     phase: &str, 
     setup_step: u8, 
     color_chosen_json: &str,
+    colors_ever_chosen_json: &str,
     turn_counter: u32,
     is_new_turn: bool,
     moves_this_turn: u32,
@@ -139,6 +148,13 @@ pub fn get_eligible_pieces_wasm(
         for (s, c) in color_chosen {
             let side = if s.to_lowercase() == "white" { Side::White } else { Side::Black };
             state.color_chosen.insert(side, c.to_lowercase());
+        }
+    }
+
+    // Rule 110: Hydrate colors_ever_chosen for Chromatic Unlock (Mage gate)
+    if let Ok(ever_chosen) = serde_json::from_str::<Vec<String>>(colors_ever_chosen_json) {
+        for c in ever_chosen {
+            state.colors_ever_chosen.insert(c.to_lowercase());
         }
     }
 

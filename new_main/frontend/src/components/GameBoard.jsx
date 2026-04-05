@@ -486,6 +486,12 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
   const [heroeTakeCounter, setHeroeTakeCounter] = useState(
     initialState.heroeTakeCounter || 0,
   );
+  const [colorsEverChosen, setColorsEverChosen] = useState(
+    initialState.colorsEverChosen || [],
+  );
+  const [mageUnlocked, setMageUnlocked] = useState(
+    initialState.mageUnlocked || false,
+  );
   const [eligiblePieceIds, setEligiblePieceIds] = useState([]);
   const [clocks, setClocks] = useState(initialState.clocks || { white: 900000, black: 900000 });
   const [lastTurnTimestamp, setLastTurnTimestamp] = useState(initialState.lastTurnTimestamp || null);
@@ -572,6 +578,8 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
       if (data.history !== undefined) setMoveHistory(data.history);
       if (data.clocks) setClocks(data.clocks);
       if (data.lastTurnTimestamp) setLastTurnTimestamp(data.lastTurnTimestamp);
+      if (data.colorsEverChosen !== undefined) setColorsEverChosen(data.colorsEverChosen);
+      if (data.mageUnlocked !== undefined) setMageUnlocked(data.mageUnlocked);
 
       setSelectedPiece(null);
       setLegalMoves([]);
@@ -627,6 +635,7 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
         phase,
         setupStep,
         JSON.stringify(colorChosen || {}),
+        JSON.stringify(colorsEverChosen || []),
         turnCounter,
         isNewTurn,
         movesThisTurn,
@@ -672,6 +681,7 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
           phase,
           setupStep,
           JSON.stringify(colorChosen || {}),
+          JSON.stringify(colorsEverChosen || []),
           turnCounter,
           isNewTurn,
           movesThisTurn,
@@ -1221,6 +1231,42 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
             </div>
           )}
         </div>
+
+        {/* CHROMATIC UNLOCK COUNTER - Visible during Playing phase until Mage is unlocked */}
+        {phase === "Playing" && !mageUnlocked && (
+          <div className="glass-panel" style={{ width: '100%', padding: '14px 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', border: '1px solid rgba(255,165,0,0.25)' }}>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#f97316', letterSpacing: '0.05em', textTransform: 'uppercase', textAlign: 'center' }}>
+              🔒 Mage Locked
+            </div>
+            <div style={{ fontSize: '10px', opacity: 0.55, textAlign: 'center', lineHeight: 1.4 }}>
+              Choose all 4 colors to unlock
+            </div>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+              {['grey', 'green', 'blue', 'orange'].map((color) => {
+                const seen = colorsEverChosen.includes(color);
+                return (
+                  <div
+                    key={color}
+                    title={color}
+                    style={{
+                      width: '22px',
+                      height: '22px',
+                      borderRadius: '50%',
+                      backgroundColor: color === 'grey' ? '#9ca3af' : color,
+                      opacity: seen ? 1 : 0.2,
+                      boxShadow: seen ? `0 0 10px ${color === 'grey' ? '#9ca3af' : color}` : 'none',
+                      transition: 'all 0.4s ease',
+                      border: seen ? '2px solid rgba(255,255,255,0.8)' : '2px solid rgba(255,255,255,0.15)',
+                    }}
+                  />
+                );
+              })}
+            </div>
+            <div style={{ fontSize: '10px', opacity: 0.45, marginTop: '2px' }}>
+              {colorsEverChosen.length} / 4 seen
+            </div>
+          </div>
+        )}
 
         {/* ACTIONS PANEL - (Now on Right, below Color) */}
         <div 
