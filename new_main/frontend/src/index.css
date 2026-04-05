@@ -94,3 +94,56 @@ svg polygon:hover {
   border-radius: 16px;
 }
 
+/* RESPONSIVE DESIGN */
+
+/* Mobile & Tablet viewports */
+@media (max-width: 1024px) {
+  .game-board-container {
+    flex-direction: column !important;
+    padding: 10px !important;
+    gap: 15px !important;
+    align-items: center;
+    min-height: auto !important;
+  }
+
+  /* HUD panels stack better on mobile */
+  .hud-panel {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 600px;
+  }
+
+  .game-board-wrapper {
+    width: 100% !important;
+    aspect-ratio: 1 / 1;
+    max-width: 600px;
+    margin: 20px 0;
+  }
+
+  /* Menu scaling */
+  h1 {
+    font-size: 2.5rem !important;
+  }
+
+  .glass-panel {
+    padding: 20px !important;
+  }
+}
+
+/* Small mobile devices */
+@media (max-width: 480px) {
+  h1 {
+    font-size: 2rem !important;
+  }
+
+  .game-board-container {
+      border-radius: 0 !important;
+      border: none !important;
+  }
+
+  .button-group button {
+      padding: 10px 20px !important;
+      font-size: 14px !important;
+  }
+}
+

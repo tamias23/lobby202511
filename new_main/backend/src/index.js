@@ -152,6 +152,44 @@ const lobby = {
     activeGames: new Map() // gameId -> { players, state }
 };
 
+function updateClocks(game, turnEnded) {
+    const now = Date.now();
+    if (!game.lastTurnTimestamp) game.lastTurnTimestamp = now;
+    
+    if (turnEnded) {
+        const elapsedTime = now - game.lastTurnTimestamp;
+        const activeSide = game.turn;
+        // Apply 100ms grace period per turn
+        const deduction = Math.max(0, elapsedTime - 100);
+        game.clocks[activeSide] = Math.max(0, game.clocks[activeSide] - deduction + (30 * 1000));
+        game.lastTurnTimestamp = now;
+    }
+}
+
+// Global Timeout Check
+setInterval(() => {
+    const now = Date.now();
+    for (const [gameId, game] of lobby.activeGames) {
+        if (!game.lastTurnTimestamp) continue;
+        if (game.phase === 'GameOver') continue;
+
+        const activeSide = game.turn;
+        const elapsedTime = now - game.lastTurnTimestamp;
+        const currentClock = game.clocks[activeSide] - Math.max(0, elapsedTime - 100);
+
+        if (currentClock <= 0) {
+            console.log(`Game Over: ${gameId} - timeout for ${activeSide}`);
+            game.clocks[activeSide] = 0;
+            game.phase = 'GameOver';
+            const winnerSide = activeSide === 'white' ? 'black' : 'white';
+            const winnerId = winnerSide === 'white' ? game.white : game.black;
+
+            io.to(gameId).emit('game_over', { winnerId, reason: 'timeout' });
+            saveMatchResult(gameId, game.white, game.black, winnerId, game.pieces, game.history);
+        }
+    }
+}, 1000);
+
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
@@ -207,6 +245,11 @@ io.on('connection', (socket) => {
                 movesThisTurn: 0,
                 lockedSequencePiece: null,
                 heroeTakeCounter: 0,
+                clocks: {
+                    white: 15 * 60 * 1000,
+                    black: 15 * 60 * 1000
+                },
+                lastTurnTimestamp: Date.now(),
                 history: []
             };
             
@@ -227,7 +270,9 @@ io.on('connection', (socket) => {
                     isNewTurn: gameData.isNewTurn,
                     movesThisTurn: gameData.movesThisTurn,
                     lockedSequencePiece: gameData.lockedSequencePiece || null,
-                    heroeTakeCounter: gameData.heroeTakeCounter
+                    heroeTakeCounter: gameData.heroeTakeCounter,
+                    clocks: gameData.clocks,
+                    lastTurnTimestamp: gameData.lastTurnTimestamp
                 }
             });
             io.to(opponent.socketId).emit('match_found', { 
@@ -245,7 +290,9 @@ io.on('connection', (socket) => {
                     isNewTurn: gameData.isNewTurn,
                     movesThisTurn: gameData.movesThisTurn,
                     lockedSequencePiece: gameData.lockedSequencePiece || null,
-                    heroeTakeCounter: gameData.heroeTakeCounter
+                    heroeTakeCounter: gameData.heroeTakeCounter,
+                    clocks: gameData.clocks,
+                    lastTurnTimestamp: gameData.lastTurnTimestamp
                 }
             });
             
@@ -300,12 +347,13 @@ io.on('connection', (socket) => {
                 isNewTurn: game.isNewTurn,
                 movesThisTurn: game.movesThisTurn,
                 lockedSequencePiece: game.lockedSequencePiece || null,
-                heroeTakeCounter: game.heroeTakeCounter
+                heroeTakeCounter: game.heroeTakeCounter,
+                clocks: game.clocks,
+                lastTurnTimestamp: game.lastTurnTimestamp
             });
             console.log(`Setting authoritative color ${color} for ${side} in game ${gameId}`);
         } catch (error) {
             console.error('Error selecting color:', error);
-            // socket.emit('error', { message: 'Failed to select color', details: error.message });
         }
     });
 
@@ -344,9 +392,6 @@ io.on('connection', (socket) => {
             game.lockedSequencePiece = response.lockedSequencePiece;
             game.heroeTakeCounter = response.heroeTakeCounter;
             
-            // THE NAPI response already updated state based on engine rules.
-            // DO NOT manually switch turns or phases here, as response.turn/response.phase are correct.
-
             io.to(gameId).emit('game_update', {
                 pieces: game.pieces,
                 turn: game.turn,
@@ -357,11 +402,11 @@ io.on('connection', (socket) => {
                 isNewTurn: game.isNewTurn,
                 movesThisTurn: game.movesThisTurn,
                 lockedSequencePiece: game.lockedSequencePiece || null,
-                heroeTakeCounter: game.heroeTakeCounter
+                heroeTakeCounter: game.heroeTakeCounter,
+                clocks: game.clocks,
+                lastTurnTimestamp: game.lastTurnTimestamp
             });
             console.log(`randomize_setup result: turn=${game.turn}, phase=${game.phase}, step=${game.setupStep}`);
-            console.log(`Broadcasting game_update to room ${gameId}`);
-            console.log(`Randomized setup for ${side} in game ${gameId}`);
         } catch (e) {
             console.error('Error in randomize_setup:', e);
         }
@@ -385,6 +430,9 @@ io.on('connection', (socket) => {
                     lockedSequencePiece: game.lockedSequencePiece || undefined,
                     heroeTakeCounter: game.heroeTakeCounter || 0
                 });
+
+                updateClocks(game, true);
+
                 game.turn = response.turn;
                 game.phase = response.phase;
                 game.setupStep = response.setupStep;
@@ -404,7 +452,9 @@ io.on('connection', (socket) => {
                     isNewTurn: game.isNewTurn,
                     movesThisTurn: game.movesThisTurn,
                     lockedSequencePiece: game.lockedSequencePiece || null,
-                    heroeTakeCounter: game.heroeTakeCounter
+                    heroeTakeCounter: game.heroeTakeCounter,
+                    clocks: game.clocks,
+                    lastTurnTimestamp: game.lastTurnTimestamp
                 });
                 console.log(`Setup turn ended in ${gameId}: Now ${game.turn}'s turn`);
             } catch (e) {
@@ -432,6 +482,9 @@ io.on('connection', (socket) => {
                     pieceId: "", // Dummy for request compatibility
                     targetPoly: "" // Dummy for request compatibility
                 });
+                
+                updateClocks(game, true);
+
                 game.turn = response.turn;
                 game.phase = response.phase;
                 game.setupStep = response.setupStep;
@@ -452,7 +505,9 @@ io.on('connection', (socket) => {
                     isNewTurn: game.isNewTurn,
                     movesThisTurn: game.movesThisTurn,
                     lockedSequencePiece: game.lockedSequencePiece || null,
-                    heroeTakeCounter: game.heroeTakeCounter
+                    heroeTakeCounter: game.heroeTakeCounter,
+                    clocks: game.clocks,
+                    lastTurnTimestamp: game.lastTurnTimestamp
                 });
                 console.log(`Playing turn passed in ${gameId}: Now ${game.turn}'s turn`);
             } catch (e) {
@@ -538,7 +593,9 @@ io.on('connection', (socket) => {
                 isNewTurn: game.isNewTurn,
                 movesThisTurn: game.movesThisTurn,
                 lockedSequencePiece: game.lockedSequencePiece || null,
-                heroeTakeCounter: game.heroeTakeCounter
+                heroeTakeCounter: game.heroeTakeCounter,
+                clocks: game.clocks,
+                lastTurnTimestamp: game.lastTurnTimestamp
             });
             console.log(`Color ${color} selected for ${game.turn} in ${gameId}`);
         } catch (e) {
@@ -552,15 +609,11 @@ io.on('connection', (socket) => {
 
         try {
             if (game.phase === 'Setup') {
-                // During Setup phase: just move the piece to target polygon.
-                // Step advancement and turn switching are handled separately
-                // by the "Confirm Placement" button (end_turn_setup event).
                 const pieceIndex = game.pieces.findIndex(p => p.id === pieceId);
                 if (pieceIndex === -1) return;
                 const piece = game.pieces[pieceIndex];
                 if (piece.position !== 'returned') return;
                 
-                // Update piece position
                 game.pieces[pieceIndex] = { ...piece, position: targetPoly };
 
                 io.to(gameId).emit('game_update', {
@@ -573,11 +626,12 @@ io.on('connection', (socket) => {
                     isNewTurn: game.isNewTurn,
                     movesThisTurn: game.movesThisTurn,
                     lockedSequencePiece: game.lockedSequencePiece || null,
-                    heroeTakeCounter: game.heroeTakeCounter
+                    heroeTakeCounter: game.heroeTakeCounter,
+                    clocks: game.clocks,
+                    lastTurnTimestamp: game.lastTurnTimestamp
                 });
                 console.log(`Setup placement in ${gameId}: ${pieceId} to ${targetPoly}`);
             } else {
-                // Playing phase: use full apply_move with turnover logic
                 const response = applyMoveNapi({
                     boardJson: JSON.stringify(game.board),
                     piecesJson: JSON.stringify(game.pieces),
@@ -594,12 +648,18 @@ io.on('connection', (socket) => {
                     heroeTakeCounter: game.heroeTakeCounter || 0
                 });
 
-                // Update game state strictly from NAPI response
+                const oldTurn = game.turn;
+                
                 game.pieces = JSON.parse(response.piecesJson);
                 game.colorChosen = response.colorChosen;
                 game.phase = response.phase;
                 game.setupStep = response.setupStep;
+                if (oldTurn !== response.turn) {
+                    updateClocks(game, true);
+                }
+
                 game.turn = response.turn;
+
                 game.turnCounter = response.turnCounter;
                 game.isNewTurn = response.isNewTurn;
                 game.movesThisTurn = response.movesThisTurn;
@@ -608,7 +668,6 @@ io.on('connection', (socket) => {
                 
                 game.history.push({ pieceId, targetPoly, captured: response.captured });
 
-                // Broadcast update to both players
                 io.to(gameId).emit('game_update', {
                     pieces: game.pieces,
                     turn: game.turn,
@@ -620,17 +679,17 @@ io.on('connection', (socket) => {
                     movesThisTurn: game.movesThisTurn,
                     lockedSequencePiece: game.lockedSequencePiece || null,
                     heroeTakeCounter: game.heroeTakeCounter,
+                    clocks: game.clocks,
+                    lastTurnTimestamp: game.lastTurnTimestamp,
                     lastMove: { pieceId, targetPoly, captured: response.captured }
                 });
 
-                // Check for Win Condition (Goddess Captured)
                 if (response.captured.includes('goddess')) {
                     const winnerSide = game.turn === 'white' ? 'black' : 'white'; 
                     const winnerId = winnerSide === 'white' ? game.white : game.black;
+                    game.phase = 'GameOver';
                     
-                    console.log(`Game Over: ${gameId}. Winner: ${winnerId}`);
                     io.to(gameId).emit('game_over', { winnerId });
-                    
                     saveMatchResult(gameId, game.white, game.black, winnerId, game.pieces, game.history);
                 }
 
@@ -643,13 +702,8 @@ io.on('connection', (socket) => {
 
     socket.on('join_game_room', ({ gameId }) => {
         socket.join(gameId);
-        console.log(`Socket ${socket.id} joined game room ${gameId}`);
-        
-        // Send current game state to the joining socket so late-joiners
-        // get the up-to-date state (e.g., if opponent already randomized setup)
         const game = lobby.activeGames.get(gameId);
         if (game) {
-            console.log(`Sending state sync to ${socket.id}: turn=${game.turn}, phase=${game.phase}, step=${game.setupStep}`);
             socket.emit('game_update', {
                 pieces: game.pieces,
                 turn: game.turn,
@@ -660,7 +714,9 @@ io.on('connection', (socket) => {
                 isNewTurn: game.isNewTurn,
                 movesThisTurn: game.movesThisTurn,
                 lockedSequencePiece: game.lockedSequencePiece || null,
-                heroeTakeCounter: game.heroeTakeCounter
+                heroeTakeCounter: game.heroeTakeCounter,
+                clocks: game.clocks,
+                lastTurnTimestamp: game.lastTurnTimestamp
             });
         }
     });
@@ -671,6 +727,6 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
     console.log(`Backend server running on port ${PORT}`);
 });

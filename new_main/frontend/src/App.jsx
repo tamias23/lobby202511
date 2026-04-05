@@ -85,11 +85,11 @@ function App() {
 
       {view === 'menu' && (
         <div className="glass-panel" style={menuStyle}>
-          <h1 style={{ fontSize: '3.5rem', marginBottom: '10px', background: 'linear-gradient(to right, #6366f1, #a855f7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+          <h1 style={{ fontSize: 'min(3.5rem, 10vw)', marginBottom: '10px', background: 'linear-gradient(to right, #6366f1, #a855f7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
             LOBBY-2025
           </h1>
-          <p style={{ color: 'var(--text-muted)', marginBottom: '30px' }}>Join the next generation of board gaming.</p>
-          <div style={buttonGroupStyle}>
+          <p style={{ color: 'var(--text-muted)', marginBottom: '30px', fontSize: 'min(1rem, 4vw)' }}>Join the next generation of board gaming.</p>
+          <div style={buttonGroupStyle} className="button-group">
             <button onClick={() => setView('login')} className="primary-button" style={primaryButtonStyle}>Log In</button>
             <button onClick={() => setView('register')} className="secondary-button" style={secondaryButtonStyle}>Create Account</button>
             <div style={{ margin: '15px 0', opacity: 0.5 }}>— or —</div>
@@ -141,9 +141,9 @@ const appStyle = {
 
 const menuStyle = {
   textAlign: 'center',
-  padding: '60px',
-  width: '100%',
-  maxWidth: '600px'
+  padding: 'min(60px, 5vw)',
+  width: 'min(600px, 95vw)',
+  margin: '0 auto'
 };
 
 const themeToggleStyle = {

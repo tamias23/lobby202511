@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { socket } from "../socket";
 import init, { get_legal_moves_wasm, get_eligible_pieces_wasm } from "../wasm_pkg/frontend_wasm";
+import Clock from "./Clock";
 
 const PieceIcon = ({ type, side }) => {
   const isBlack = side === "black" || side === "yellow";
@@ -470,7 +471,6 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
   const [isFlipped, setIsFlipped] = useState(false);
   const [selectedPiece, setSelectedPiece] = useState(null);
   const [legalMoves, setLegalMoves] = useState([]);
-  const [isStatsHovered, setIsStatsHovered] = useState(false);
 
   const [board, setBoard] = useState(initialState.board);
   const [turnCounter, setTurnCounter] = useState(initialState.turnCounter || 0);
@@ -487,6 +487,9 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
     initialState.heroeTakeCounter || 0,
   );
   const [eligiblePieceIds, setEligiblePieceIds] = useState([]);
+  const [clocks, setClocks] = useState(initialState.clocks || { white: 900000, black: 900000 });
+  const [lastTurnTimestamp, setLastTurnTimestamp] = useState(initialState.lastTurnTimestamp || null);
+  const [isDebugFolded, setIsDebugFolded] = useState(true);
 
   // Add local state for history, defaulting to empty until backend passes it explicitly in all events
   const [moveHistory, setMoveHistory] = useState(initialState.history || []);
@@ -567,6 +570,8 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
       if (data.heroeTakeCounter !== undefined)
         setHeroeTakeCounter(data.heroeTakeCounter);
       if (data.history !== undefined) setMoveHistory(data.history);
+      if (data.clocks) setClocks(data.clocks);
+      if (data.lastTurnTimestamp) setLastTurnTimestamp(data.lastTurnTimestamp);
 
       setSelectedPiece(null);
       setLegalMoves([]);
@@ -584,8 +589,14 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
       }
     };
 
+    const handleGameOver = ({ winnerId, reason }) => {
+      alert(`Game Over! ${reason === 'timeout' ? 'Time out for opponent. ' : ''}Winner: ${winnerId}`);
+      setPhase("GameOver");
+    };
+
     socket.on("game_update", handleGameUpdate);
     socket.on("legal_moves", handleLegalMoves);
+    socket.on("game_over", handleGameOver);
 
     // Initial eligibility check on mount
     if (wasmReady) {
@@ -597,6 +608,7 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
     return () => {
       socket.off("game_update", handleGameUpdate);
       socket.off("legal_moves", handleLegalMoves);
+      socket.off("game_over", handleGameOver);
     };
   }, [gameId]);
 
@@ -857,17 +869,18 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
 
   return (
     <div className="game-board-container" style={boardContainerStyle}>
-      {/* LEFT HUD - Main Info & Actions */}
       <div
+        className="hud-panel"
         style={{
           display: "flex",
           flexDirection: "column",
-          gap: "20px",
-          width: "195px",
-          padding: "15px",
-          minWidth: "195px",
+          gap: "15px",
+          padding: "10px",
+          width: "180px",
+          minWidth: "180px",
         }}
       >
+
         <div className="glass-panel" style={{ ...leftHudStyle, width: "100%" }}>
           <div
             style={{
@@ -888,7 +901,9 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
               gap: "10px",
               padding: "15px 10px",
               borderRadius: "20px",
-              marginBottom: "30px",
+              marginBottom: "15px",
+              width: "100%",
+              boxSizing: "border-box",
               backgroundColor:
                 turn === side
                   ? "rgba(46, 204, 113, 0.2)"
@@ -915,88 +930,80 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
               [{phase} Step {setupStep}]
             </span>
           </div>
+        </div>
 
-          <div
-            style={{
+        {/* DEBUG ENGINE STATE PANEL - Foldable (Now on Left) */}
+        <div 
+          className="glass-panel" 
+          style={{ 
+            marginTop: "10px", 
+            padding: "12px", 
+            width: "100%", 
+            boxSizing: "border-box",
+            border: "1px solid rgba(255, 215, 0, 0.2)",
+            fontSize: "11px",
+            color: "rgba(255,255,255,0.8)",
+            textAlign: "left"
+          }}
+        >
+          <div 
+            onClick={() => setIsDebugFolded(!isDebugFolded)}
+            style={{ 
+              color: "#f1c40f", 
+              fontWeight: "bold", 
+              fontSize: "12px", 
+              textAlign: "center",
+              cursor: "pointer",
               display: "flex",
-              flexDirection: "column",
-              gap: "15px",
-              width: "100%",
+              justifyContent: "space-between",
+              alignItems: "center"
             }}
           >
-            {phase === "Setup" && turn === side && (
-              <button
-                onClick={() => socket.emit("end_turn_setup", { gameId })}
-                onMouseOver={(e) => (e.target.style.transform = "scale(1.05)")}
-                onMouseOut={(e) => (e.target.style.transform = "scale(1)")}
-                style={{
-                  ...buttonStyle,
-                  backgroundColor: "#2ecc71",
-                  boxShadow: "0 4px 12px rgba(46, 204, 113, 0.4)",
-                }}
-              >
-                Confirm Placement
-              </button>
-            )}
-
-            {phase === "Setup" && turn === side && (
-              <button
-                onClick={() => socket.emit("randomize_setup", { gameId, side })}
-                onMouseOver={(e) => (e.target.style.transform = "scale(1.05)")}
-                onMouseOut={(e) => (e.target.style.transform = "scale(1)")}
-                style={{
-                  ...buttonStyle,
-                  backgroundColor: "#9b59b6",
-                  boxShadow: "0 4px 12px rgba(155, 89, 182, 0.4)",
-                }}
-              >
-                Random Setup
-              </button>
-            )}
-
-            {phase === "Playing" && turn === side && (
-              <button
-                onClick={() => socket.emit("pass_turn_playing", { gameId })}
-                onMouseOver={(e) => (e.target.style.transform = "scale(1.05)")}
-                onMouseOut={(e) => (e.target.style.transform = "scale(1)")}
-                style={{
-                  ...buttonStyle,
-                  backgroundColor: "#e67e22",
-                  boxShadow: "0 4px 12px rgba(230, 126, 34, 0.4)",
-                }}
-              >
-                End Turn
-              </button>
-            )}
-
-            <button
-              onClick={() => setIsFlipped(!isFlipped)}
-              onMouseOver={(e) => (e.target.style.transform = "scale(1.05)")}
-              onMouseOut={(e) => (e.target.style.transform = "scale(1)")}
-              style={{
-                ...buttonStyle,
-                backgroundColor: "#34495e",
-                boxShadow: "0 4px 12px rgba(52, 73, 94, 0.4)",
-              }}
-            >
-              Flip Board
-            </button>
+            <span>DEBUG ENGINE</span>
+            <span>{isDebugFolded ? "▼" : "▲"}</span>
           </div>
+          
+          {!isDebugFolded && (
+            <div style={{ marginTop: "10px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                <span style={{ opacity: 0.6 }}>Phase:</span>
+                <span style={{ color: "#fff" }}>{phase}</span>
+              </div>
+              
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                <span style={{ opacity: 0.6 }}>Turn:</span>
+                <span style={{ color: "#fff" }}>{turn}</span>
+              </div>
+              
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                <span style={{ opacity: 0.6 }}>Moves:</span>
+                <span style={{ color: "#fff" }}>{movesThisTurn}</span>
+              </div>
+              
+              <div style={{ marginBottom: "8px", borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "8px" }}>
+                <div style={{ opacity: 0.6, marginBottom: "2px" }}>Locked:</div>
+                <div style={{ color: lockedSequencePiece ? "#2ecc71" : "#e74c3c", fontWeight: "bold", wordBreak: "break-all" }}>
+                  {lockedSequencePiece || "NONE"}
+                </div>
+              </div>
+              
+              <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "8px" }}>
+                <div style={{ opacity: 0.6, marginBottom: "2px" }}>Selected:</div>
+                <div style={{ color: "#fff" }}>{selectedPiece?.id || "NONE"}</div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* GAME INFO PANEL */}
         <div
           className="glass-panel"
-          onMouseEnter={() => setIsStatsHovered(true)}
-          onMouseLeave={() => setIsStatsHovered(false)}
           style={{ 
             ...leftHudStyle, 
-            width: isStatsHovered ? "280px" : "100%", 
+            width: "100%", 
             alignItems: "stretch",
             position: "relative",
-            zIndex: isStatsHovered ? 50 : 1,
-            transition: "width 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-            boxShadow: isStatsHovered ? "0 10px 30px rgba(0,0,0,0.5)" : undefined,
+            zIndex: 1,
             overflow: "hidden"
           }}
         >
@@ -1114,7 +1121,7 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
       </div>
 
       {/* CENTER - Game Board */}
-      <div style={{ position: 'relative', flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', minWidth: 0, minHeight: 0 }}>
+      <div className="game-board-wrapper" style={{ position: 'relative', flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', minWidth: 0, minHeight: 0 }}>
         <svg
           ref={svgRef}
           viewBox="-160 -30 730 480"
@@ -1134,174 +1141,164 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
       </div>
 
       {/* RIGHT HUD - Color Selection & Status */}
-      <div className="glass-panel" style={rightHudStyle}>
-        {phase === "Playing" && (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "20px",
-              width: "100%",
-            }}
-          >
+      <div className="hud-panel" style={{ display: 'flex', flexDirection: 'column', gap: '15px', width: '180px', minWidth: '180px' }}>
+        <div className="glass-panel" style={{ ...rightHudStyle, width: "100%", marginBottom: "10px" }}>
+          <Clock clocks={clocks} lastTurnTimestamp={lastTurnTimestamp} turn={turn} side={side} />
+        </div>
+
+        <div className="glass-panel" style={{ ...rightHudStyle, width: '100%' }}>
+          {phase === "Playing" && (
             <div
-              style={{ display: "flex", flexDirection: "column", gap: "10px" }}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px",
+                width: "100%",
+                padding: "8px 0",
+              }}
             >
               <span
                 style={{
                   fontWeight: "bold",
-                  borderBottom: "1px solid rgba(255,255,255,0.1)",
-                  paddingBottom: "5px",
+                  color: "#f1c40f",
+                  fontSize: "13px",
+                  textAlign: "center",
                 }}
               >
-                Chosen Colors:
+                {turn === side 
+                  ? (colorChosen[side] ? "Your Color:" : "Choose Color:") 
+                  : (colorChosen[turn] ? "Opponent Color:" : "Opponent Deciding...")}
               </span>
-              {["white", "black"].map((s) => (
-                <div
-                  key={s}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    fontSize: "14px",
-                  }}
-                >
-                  <span style={{ opacity: 0.8 }}>{s}:</span>
-                  <div
-                    style={{
-                      width: "24px",
-                      height: "24px",
-                      backgroundColor: colorChosen[s] || "transparent",
-                      border: "1px solid #777",
-                      borderRadius: "50%",
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
-
-            {!colorChosen[side] && (
               <div
                 style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "15px",
-                  marginTop: "20px",
+                  display: "grid",
+                  gridTemplateColumns: colorChosen[turn] ? "1fr" : "1fr 1fr",
+                  gap: "10px",
+                  justifyItems: "center",
                 }}
               >
-                <span
-                  style={{
-                    fontWeight: "bold",
-                    color: "#f1c40f",
-                    fontSize: "14px",
-                    textAlign: "center",
-                  }}
-                >
-                  Choose Movement:
-                </span>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: "10px",
-                  }}
-                >
-                  {["grey", "green", "blue", "orange"].map((color) => (
-                    <div
-                      key={color}
-                      onClick={() =>
-                        turn === side &&
-                        socket.emit("color_selected", { gameId, color, side })
-                      }
-                      style={{
-                        aspectRatio: "1",
-                        backgroundColor: color,
-                        borderRadius: "50%",
-                        cursor: turn === side ? "pointer" : "default",
-                        border: "2px solid rgba(255,255,255,0.3)",
-                        transition: "transform 0.1s",
-                        opacity: turn === side ? 1 : 0.4,
-                      }}
-                      onMouseOver={(e) =>
-                        turn === side &&
-                        (e.target.style.transform = "scale(1.15)")
-                      }
-                      onMouseOut={(e) =>
-                        (e.target.style.transform = "scale(1)")
-                      }
-                    />
-                  ))}
-                </div>
+                {(colorChosen[turn] ? [colorChosen[turn]] : ["grey", "green", "blue", "orange"]).map((color) => (
+                  <div
+                    key={color}
+                    onClick={() =>
+                      turn === side &&
+                      !colorChosen[side] &&
+                      socket.emit("color_selected", { gameId, color, side })
+                    }
+                    style={{
+                      width: "50px",
+                      height: "50px",
+                      backgroundColor: color,
+                      borderRadius: "50%",
+                      cursor: (turn === side && !colorChosen[side]) ? "pointer" : "default",
+                      border: `2px solid ${turn === side || colorChosen[turn] ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.2)"}`,
+                      transition: "all 0.2s ease",
+                      opacity: (turn === side || colorChosen[turn]) ? 1 : 0.4,
+                      boxShadow: (turn === side || colorChosen[turn]) ? `0 0 15px ${color}` : "none",
+                    }}
+                    onMouseOver={(e) =>
+                      turn === side &&
+                      !colorChosen[side] &&
+                      (e.target.style.transform = "scale(1.1)")
+                    }
+                    onMouseOut={(e) =>
+                      (e.target.style.transform = "scale(1)")
+                    }
+                  />
+                ))}
               </div>
-            )}
-          </div>
-        )}
-        
-        {phase !== "Playing" && (
-          <div style={{ opacity: 0.5, textAlign: "center", marginTop: "50px", width: "100%" }}>
-            Phase: Setup
-          </div>
-        )}
-        
-        {/* DEBUG ENGINE STATE PANEL - Added for debugging stuck pieces */}
+              {turn !== side && !colorChosen[turn] && (
+                <div style={{ 
+                  fontSize: "11px", 
+                  color: "rgba(255, 255, 255, 0.4)", 
+                  textAlign: "center",
+                  marginTop: "5px",
+                  fontStyle: "italic"
+                }}>
+                  Opponent choosing...
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ACTIONS PANEL - (Now on Right, below Color) */}
         <div 
           className="glass-panel" 
           style={{ 
-            marginTop: "15px", 
-            padding: "15px", 
-            width: "100%", 
-            boxSizing: "border-box",
-            border: "1px solid rgba(255, 215, 0, 0.2)", // Subtle gold border for debug
-            fontSize: "11px",
-            color: "rgba(255,255,255,0.8)",
-            textAlign: "left"
+            ...rightHudStyle, 
+            width: '100%', 
+            padding: "15px 12px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "10px"
           }}
         >
-          <div style={{ color: "#f1c40f", fontWeight: "bold", marginBottom: "8px", fontSize: "12px", textAlign: "center" }}>
-            DEBUG ENGINE STATE
-          </div>
-          
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-            <span style={{ opacity: 0.6 }}>Phase:</span>
-            <span style={{ color: "#fff" }}>{phase}</span>
-          </div>
-          
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-            <span style={{ opacity: 0.6 }}>Turn:</span>
-            <span style={{ color: "#fff" }}>{turn}</span>
-          </div>
-          
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-            <span style={{ opacity: 0.6 }}>Moves This Turn:</span>
-            <span style={{ color: "#fff" }}>{movesThisTurn}</span>
-          </div>
-          
-          <div style={{ marginBottom: "8px", borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "8px" }}>
-            <div style={{ opacity: 0.6, marginBottom: "2px" }}>Locked Piece:</div>
-            <div style={{ color: lockedSequencePiece ? "#2ecc71" : "#e74c3c", fontWeight: "bold", wordBreak: "break-all" }}>
-              {lockedSequencePiece || "NONE"}
-            </div>
-          </div>
-          
-          <div style={{ marginBottom: "8px" }}>
-            <div style={{ opacity: 0.6, marginBottom: "2px" }}>Colors Chosen:</div>
-            <div style={{ color: "#3498db" }}>
-              {Object.entries(colorChosen || {}).map(([s, c]) => (
-                <div key={s}>{s}: {c}</div>
-              ))}
-              {Object.keys(colorChosen || {}).length === 0 && <div>NONE</div>}
-            </div>
-          </div>
-          
-          <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "8px" }}>
-            <div style={{ opacity: 0.6, marginBottom: "2px" }}>Selected Piece:</div>
-            <div style={{ color: "#fff" }}>{selectedPiece?.id || "NONE"}</div>
-            {selectedPiece && (
-              <div style={{ fontSize: "10px", opacity: 0.5 }}>
-                Pos: {selectedPiece.position}
-              </div>
-            )}
-          </div>
+          {phase === "Setup" && turn === side && (
+            <button
+              onClick={() => socket.emit("end_turn_setup", { gameId })}
+              onMouseOver={(e) => (e.target.style.transform = "scale(1.03)")}
+              onMouseOut={(e) => (e.target.style.transform = "scale(1)")}
+              style={{
+                ...buttonStyle,
+                backgroundColor: "#2ecc71",
+                boxShadow: "0 2px 8px rgba(46, 204, 113, 0.3)",
+                width: "100%",
+                padding: "8px"
+              }}
+            >
+              Confirm Placement
+            </button>
+          )}
+
+          {phase === "Setup" && turn === side && (
+            <button
+              onClick={() => socket.emit("randomize_setup", { gameId, side })}
+              onMouseOver={(e) => (e.target.style.transform = "scale(1.03)")}
+              onMouseOut={(e) => (e.target.style.transform = "scale(1)")}
+              style={{
+                ...buttonStyle,
+                backgroundColor: "#9b59b6",
+                boxShadow: "0 2px 8px rgba(155, 89, 182, 0.3)",
+                width: "100%",
+                padding: "8px"
+              }}
+            >
+              Random Setup
+            </button>
+          )}
+
+          {phase === "Playing" && turn === side && (
+            <button
+              onClick={() => socket.emit("pass_turn_playing", { gameId })}
+              onMouseOver={(e) => (e.target.style.transform = "scale(1.03)")}
+              onMouseOut={(e) => (e.target.style.transform = "scale(1)")}
+              style={{
+                ...buttonStyle,
+                backgroundColor: "#e67e22",
+                boxShadow: "0 2px 8px rgba(230, 126, 34, 0.3)",
+                width: "100%",
+                padding: "8px"
+              }}
+            >
+              End Turn
+            </button>
+          )}
+
+          <button
+            onClick={() => setIsFlipped(!isFlipped)}
+            onMouseOver={(e) => (e.target.style.transform = "scale(1.03)")}
+            onMouseOut={(e) => (e.target.style.transform = "scale(1)")}
+            style={{
+              ...buttonStyle,
+              backgroundColor: "#34495e",
+              boxShadow: "0 2px 8px rgba(52, 73, 94, 0.3)",
+              width: "100%",
+              padding: "8px"
+            }}
+          >
+            Flip Board
+          </button>
         </div>
       </div>
     </div>
@@ -1324,15 +1321,15 @@ const leftHudStyle = {
   display: "flex",
   flexDirection: "column",
   alignItems: "center",
-  padding: "20px",
+  padding: "12px",
   height: "fit-content",
   boxSizing: "border-box",
 };
 
 const rightHudStyle = {
   ...leftHudStyle,
-  width: "195px",
-  minWidth: "195px",
+  width: "180px",
+  minWidth: "180px",
 };
 
 const statusBarStyle = {

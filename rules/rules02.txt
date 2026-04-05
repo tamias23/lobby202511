@@ -1,0 +1,173 @@
+# Game Rules (Rust Core Implementation) — rules02.txt
+
+This document captures the definitive game rules as implemented in the `./new_main/rust-core` engine. These rules are the source of truth for the modern platform.
+
+## Game Objective
+
+The objective is to capture the opponent's **Goddess**. A game ends immediately when a Goddess is removed from the board (captured or destroyed by an AoE effect).
+
+## Players & Sides
+
+- **White** vs. **Black** (internal representation may use "Yellow" for Black).
+- White always takes the first turn of the game.
+
+## The Board
+
+The board consists of a tessellation of coloured polygons. Each polygon has two distinct adjacency graphs:
+1. **Jump Adjacency (`neighbours`)**: Used for leap-based movement (Goddess, Heroe, Mage, Bishop, Siren) and setup distance calculations.
+2. **Slide Adjacency (`neighbors`)**: Used for chaining movement (Soldier, Berserker, Ghoul), AoE effects (Bishop, Mage), Siren pin checks, and deployment proximity.
+
+## Pieces & Quantities (per player)
+
+| Piece      | Count | Movement Type | Base Range |
+|------------|:-----:|---------------|------------|
+| Goddess    |   1   | Jump          | 2 hops     |
+| Heroe      |   2   | Jump          | 3 hops     |
+| Bishop     |   4   | Jump          | 4 hops     |
+| Mage       |   1   | Jump          | 3 hops     |
+| Soldier    |   9   | Slide (Chain) | 1+ hop     |
+| Ghoul      |   9   | Slide (Chain) | 1-3 hops   |
+| Siren      |   9   | Jump          | 2 hops     |
+| Berserker  |   2   | Slide (Chain) | 1+ hop     |
+| **Total**  | **37**|               |            |
+
+---
+
+## 1. Setup Phase (`setup_random_board`)
+
+Pieces are placed in stages with specific spatial constraints:
+
+1. **Goddess & Heroes (Edge Anchors)**
+   - Goddess is placed on a random edge polygon (top-edge for White, bottom-edge for Black).
+   - Heroes are placed on the same edge, but must be **more than 6 jump-hops apart** from each other.
+   - Each Heroe must be **between 4 and 6 jump-hops** from their own Goddess (not within 3, but within 6).
+
+2. **Berserkers (Guardians)**
+   - Placed within **1 jump-hop** of the Goddess (expanded to 2 if no space is available).
+
+3. **Bishops (Chromatic Spread)**
+   - Placed on polygons of **different colours** from one another.
+   - Candidates are usually within 1–4 hops of existing anchors.
+
+4. **Ghouls & Sirens (Infantry)**
+   - Filled into unoccupied polygons within 1–4 hops of anchors.
+
+5. **Mage & Soldiers (Reserve)**
+   - Start the game in the **"returned"** state (off-board).
+
+---
+
+## 2. Turn Sequence
+
+### 2.1 The New Turn (`get_legal_colors`)
+1. At the start of a turn, the active player **must choose a colour**.
+2. A colour is valid if it allows at least one piece to make a legal move (on-board or deployment).
+3. If no colour allows a move, the turn is skipped.
+
+### 2.2 Piece Eligibility
+A piece can move if:
+- It is in the **"returned"** state (is being deployed).
+- Its current polygon colour matches the **chosen colour**.
+- It is currently **sequence-locked** (e.g., a Soldier/Berserker that landed on chosen color or a Heroe after a capture).
+
+### 2.3 Turnover Logic (`apply_move_turnover`)
+Landing on a polygon triggers checks that determine if the move or turn ends:
+
+#### A. Deployed from Reserve
+- If the piece lands on the **chosen colour**, the **turn ends immediately**.
+- If it lands via Mage adjacency on a **different colour**, the **turn does NOT end** (Rule 79).
+
+#### B. Pinned by Siren (Rule 108)
+- If a piece lands slide-adjacent to an enemy Siren, its move ends immediately.
+- The **turn ends** ONLY if the piece is pinned on a **chosen colour** polygon.
+
+#### C. Landing on Chosen Colour (Rule 15/16)
+- **Soldiers & Berserkers**: The piece becomes **sequence-locked**. The turn does NOT end; this piece must move again (or pass) before other pieces can act.
+- **Other Pieces**: The **turn ends immediately**.
+
+#### D. Landing on Different Colour (Rule 14)
+- Sequence locks are cleared. The **turn does NOT end**. The player may continue acting with other eligible pieces (on-colour pieces).
+- **Heroe Exception**: If a Heroe captures a piece and lands on a different colour (and hasn't used its bonus move yet), it becomes **sequence-locked** for one extra move (Rule 44).
+
+---
+
+## 3. Movement Rules
+
+### 3.1 Global Restrictions
+- No piece may land on a polygon occupied by a **Friendly** piece.
+- No piece may land on or capture a **Berserker** (Ally or Enemy).
+- **Siren** and **Bishop** cannot capture; they only move to empty polygons.
+- **Siren Pin**: A piece slide-adjacent to an enemy Siren has **zero legal moves** (immobilized).
+
+### 3.2 Specific Piece Ranges
+- **Goddess**: 2 jump-hops.
+- **Heroe**: 3 jump-hops. Limited to one bonus move per turn after a capture.
+- **Mage**: 3 jump-hops. **Must** land on a colour different from its start.
+- **Bishop**: 4 jump-hops. **Must** land on a colour matching its start.
+- **Siren**: 2 jump-hops. Passive pin aura (slide topology).
+- **Soldier / Berserker (Phalanx)**: May traverse a chain of slide-adjacent polygons. A chain can pass through friendly pieces or empty chosen-colour polygons (if not pinned by a Siren). The piece can then "step/capture" to any slide-adjacent polygon from any point in the chain.
+- **Ghoul**: Depth-limited chain (max 2 internal hops). Can chain through empty, non-chosen-colour polygons (if not pinned). Reaches up to 3 slide-hops total.
+
+---
+
+## 4. Captures & Area-of-Effect (AoE)
+
+### 4.1 Captures
+Moving onto an enemy-occupied polygon (non-Berserker) returns that piece to the **"returned"** stash.
+
+### 4.2 Initial AoE Blasts (`apply_move`)
+- **Bishop (Landing Blast)**: After moving to an empty polygon, all enemy pieces slide-adjacent to the destination are destroyed.
+- **Mage (Chain Attack)**: After **successfully capturing** an enemy piece, all enemy pieces slide-adjacent to the destination are destroyed.
+- **Berserkers are immune** to all AoE blasts.
+
+---
+
+## 5. Deployment Rules
+
+Pieces in the "returned" stash can re-enter the board on empty polygons if:
+1. The polygon matches the **chosen colour**.
+2. The polygon is **slide-adjacent to a friendly Mage** already on the board.
+
+**Bishop Restriction**: A Bishop cannot be deployed slide-adjacent to **any enemy piece**.
+
+---
+
+## 6. Winning & Termination
+The game ends immediately if:
+- A Goddess is captured.
+- A player has no valid moves and no legal colours to choose (Stalemate/Loss).
+
+------------------------------------------------------------------
+------------------------------------------------------------------
+
+## 7. Numerical Rule References (Code Documentation)
+
+The following rule numbers are referenced in the engine source code (`engine.rs`) for logic branching and implementation safety:
+
+### **Rule 11: Color Choice Dependency**
+- **Description**: No piece eligibility until color selection.
+- **Explanation**: A turn cannot start and no piece is authorized to move until the active player selects a valid board color.
+
+### **Rule 14: Non-Termination Color**
+- **Description**: Landing on a different color does NOT end the turn.
+- **Explanation**: Moving to a polygon whose color differs from the chosen color ends only that piece's move. The turn remains with the active player, allowing other pieces on the chosen color to act.
+
+### **Rule 15: Move Termination**
+- **Description**: Landing on the chosen color ends the MOVE.
+- **Explanation**: For most pieces, landing on a chosen-color polygon completes its action. This typically triggers a turn end unless a sequence lock is active.
+
+### **Rule 16 / Rule 74: Piece-Specific Sequence Locking**
+- **Description**: Soldier and Berserker "lock the sequence" instead of ending the turn.
+- **Explanation**: When these pieces land on a chosen-color polygon and if they are not immobilized by a siren, they become "sequence locked." Only this piece may move again during the current turn until the sequence is broken by landing on a different color or passing.
+
+### **Rule 44: Heroe Bonus Action**
+- **Description**: Heroe bonus move after capture.
+- **Explanation**: A Heroe that captures an enemy piece is granted one immediate bonus move, if the landing color is not the turn-chosen-color (provided it hasn't already used its bonus move this turn) and if it is not immobilized by a siren.
+
+### **Rule 78 / Rule 79: Deployment Turn-End Variations**
+- **Description**: **Rule 78**: Entering on chosen color ends turn. **Rule 79**: Entering via Mage on different color does NOT end turn.
+- **Explanation**: Standard deployments to the chosen color yield the turn. High-skill deployments via Mage adjacency to non-chosen colors allow the player to continue their turn.
+
+### **Rule 108: Siren Pin Termination**
+- **Description**: Immobilization ends the MOVE.
+- **Explanation**: Moving into a position slide-adjacent to an enemy Siren results in immediate immobilization (pinning). This ends the move instantly. If the pin occurs on a chosen-color polygon, the entire turn ends.
