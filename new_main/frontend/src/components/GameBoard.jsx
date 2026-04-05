@@ -1134,7 +1134,7 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
       <div className="game-board-wrapper" style={{ position: 'relative', flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', minWidth: 0, minHeight: 0 }}>
         <svg
           ref={svgRef}
-          viewBox="-160 -30 730 480"
+          viewBox="-143 -19 695 457"
           style={svgStyle}
           onMouseMove={handleGlobalMouseMove}
           onMouseUp={handleGlobalMouseUp}

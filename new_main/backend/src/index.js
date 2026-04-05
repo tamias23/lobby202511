@@ -6,10 +6,39 @@ const bcrypt = require('bcrypt');
 const { v4: uuidv4 } = require('uuid');
 const { initDb, getDb } = require('./db');
 const { generateGuestId } = require('./utils/auth');
+const fs = require('fs');
+const path = require('path');
 const { sendVerificationEmail } = require('./utils/email');
 const { getLegalMovesNapi, applyMoveNapi, initGameStateNapi, randomizeSetupNapi, endTurnSetupNapi, passTurnPlayingNapi, selectColorNapi } = require('../rust-napi');
 const { saveMatchResult } = require('./utils/gameStorage');
-const boardData = require('./utils/board.json');
+
+// --- BOARD LOADING ---
+const BOARDS_PATH = path.join(__dirname, 'utils', 'boards');
+const boardPool = [];
+
+function loadBoards() {
+    try {
+        const files = fs.readdirSync(BOARDS_PATH);
+        files.forEach(file => {
+            if (file.endsWith('.json')) {
+                try {
+                    const data = JSON.parse(fs.readFileSync(path.join(BOARDS_PATH, file), 'utf8'));
+                    boardPool.push(data);
+                } catch (e) {
+                    console.error(`Failed to load board ${file}:`, e);
+                }
+            }
+        });
+        if (boardPool.length === 0) {
+            throw new Error("No boards found in utils/boards");
+        }
+        console.log(`Successfully loaded ${boardPool.length} boards into the pool.`);
+    } catch (e) {
+        console.error("Defaulting to empty pool. Please provide board.json in the boards directory.", e);
+    }
+}
+
+loadBoards();
 
 const app = express();
 app.use(express.json()); // Enable JSON parsing
@@ -213,6 +242,14 @@ io.on('connection', (socket) => {
             // Remove opponent from queue
             lobby.waitingPlayers = lobby.waitingPlayers.filter(p => p.socketId !== opponent.socketId);
             
+            // 1. Randomize Board Selection
+            const boardData = boardPool[Math.floor(Math.random() * boardPool.length)];
+
+            // 2. Randomize Sides
+            const isPlayerWhite = Math.random() > 0.5;
+            const whitePlayer = isPlayerWhite ? player : opponent;
+            const blackPlayer = isPlayerWhite ? opponent : player;
+            
             let initPieces = [];
             let piecesJsonString = "";
             try {
@@ -229,8 +266,7 @@ io.on('connection', (socket) => {
             }
 
             const gameId = `game_${Date.now()}`;
-            const whitePlayer = player;
-            const blackPlayer = opponent;
+            
             const gameData = {
                 white: whitePlayer.userId,
                 black: blackPlayer.userId,
@@ -257,10 +293,10 @@ io.on('connection', (socket) => {
             
             lobby.activeGames.set(gameId, gameData);
             
-            io.to(player.socketId).emit('match_found', { 
+            io.to(whitePlayer.socketId).emit('match_found', { 
                 gameId, 
                 side: 'white', 
-                opponent: opponent.userId,
+                opponent: blackPlayer.userId,
                 initialState: {
                     board: gameData.board,
                     pieces: gameData.pieces,
@@ -279,10 +315,10 @@ io.on('connection', (socket) => {
                     lastTurnTimestamp: gameData.lastTurnTimestamp
                 }
             });
-            io.to(opponent.socketId).emit('match_found', { 
+            io.to(blackPlayer.socketId).emit('match_found', { 
                 gameId, 
                 side: 'black', 
-                opponent: player.userId,
+                opponent: whitePlayer.userId,
                 initialState: {
                     board: gameData.board,
                     pieces: gameData.pieces,

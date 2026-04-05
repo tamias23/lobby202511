@@ -28,7 +28,7 @@ pub async fn start_server(
     black_agent: Arc<dyn Agent>
 ) {
     let mut state = GameState::new(initial_board);
-    setup_random_board(&mut state);
+    setup_random_board(&mut state, None);
 
     let shared_state = Arc::new(AppState {
         game_state: Mutex::new(state),

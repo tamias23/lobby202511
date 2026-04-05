@@ -153,21 +153,20 @@ async fn get_turn(
             break;
         }
         
-        if gs.is_new_turn {
-            gs.moves_this_turn = 0;
-            gs.is_new_turn = false;
-        }
-
-        gs.turn = match m.active_side.to_lowercase().as_str() {
+        let active_side = match m.active_side.to_lowercase().as_str() {
             "white" => Side::White,
             _ => Side::Black,
         };
-        gs.color_chosen.insert(gs.turn.clone(), m.chosen_color.clone());
 
-        last_turn_side = gs.turn.clone();
-        last_chosen_color = Some(m.chosen_color.clone());
-        gs.moves_this_turn += 1;
-        moves_run = gs.moves_this_turn;
+        // Sync turn and color from event
+        gs.turn = active_side;
+        if m.chosen_color != "setup" && !m.chosen_color.is_empty() {
+             gs.color_chosen.insert(active_side, m.chosen_color.clone());
+             gs.is_new_turn = false;
+        }
+
+        last_turn_side = gs.turn;
+        last_chosen_color = if m.chosen_color == "setup" { None } else { Some(m.chosen_color.clone()) };
 
         if m.piece_id.is_empty() {
             continue;
@@ -175,20 +174,25 @@ async fn get_turn(
 
         let piece_opt = gs.board.pieces.get(&m.piece_id);
         if piece_opt.is_none() {
-            println!("CRITICAL DEBUG: MISSING PIECE IN gs.board.pieces -> '{}'", m.piece_id);
             continue;
         }
         let grabbed_position = piece_opt.unwrap().position.clone();
         let captured = apply_move(&mut gs, &m.piece_id, &m.target_pos);
         let goddess_captured = captured.contains(&rust::models::PieceType::Goddess);
-        apply_move_turnover(
-            &mut gs,
-            &m.piece_id,
-            &m.target_pos,
-            goddess_captured,
-            captured.is_empty(),
-            grabbed_position == "returned",
-        );
+
+        if gs.phase == rust::engine::GamePhase::Setup {
+            rust::engine::apply_setup_placement_turnover(&mut gs, &m.piece_id, &m.target_pos);
+        } else {
+            apply_move_turnover(
+                &mut gs,
+                &m.piece_id,
+                &m.target_pos,
+                goddess_captured,
+                captured.is_empty(),
+                grabbed_position == "returned",
+            );
+        }
+        moves_run = gs.moves_this_turn;
     }
     
     // Explicitly sync the `moves_this_turn` counter

@@ -9,7 +9,7 @@
 mod agent_tests {
     use std::collections::HashMap;
     use crate::models::{BoardMap, Piece, Polygon, Side, PieceType};
-    use crate::engine::{GameState, perform_turn, setup_random_board, get_legal_moves};
+    use crate::engine::{GameState, perform_turn, get_legal_moves, GamePhase};
     use crate::agents::{Agent, AgentMove};
     use crate::agents::random::RandomAgent;
 
@@ -23,6 +23,19 @@ mod agent_tests {
             pieces: HashMap::new(),
             edges: HashMap::new(),
         }
+    }
+
+    fn gs_playing(board: BoardMap) -> GameState {
+        let mut gs = GameState::new(board);
+        gs.phase = GamePhase::Playing;
+        gs.color_chosen.insert(Side::White, "white".to_string());
+        gs.color_chosen.insert(Side::Black, "black".to_string());
+        // Rule 110: Unlock Mage by default in tests
+        gs.colors_ever_chosen.insert("grey".to_string());
+        gs.colors_ever_chosen.insert("green".to_string());
+        gs.colors_ever_chosen.insert("blue".to_string());
+        gs.colors_ever_chosen.insert("orange".to_string());
+        gs
     }
 
     fn add_poly(board: &mut BoardMap, id: &str, color: &str, neighbors: Vec<&str>) {
@@ -124,11 +137,11 @@ mod agent_tests {
     #[test]
     fn test_random_agent_choose_color_within_valid_set() {
         let mut board = create_board();
-        add_poly(&mut board, "p1", "orange", vec!["p2"]);
+        add_poly(&mut board, "p1", "blue", vec!["p2"]);
         add_poly(&mut board, "p2", "grey", vec!["p1"]);
         add_piece(&mut board, "w_soldier", "p1", Side::White, PieceType::Soldier);
-        let gs = GameState::new(board);
-        let valid = vec!["orange".to_string(), "grey".to_string()];
+        let gs = gs_playing(board);
+        let valid = vec!["blue".to_string(), "grey".to_string()];
         let chosen = RandomAgent.choose_color(&gs, &valid);
         assert!(valid.contains(chosen));
     }
@@ -136,12 +149,12 @@ mod agent_tests {
     #[test]
     fn test_random_agent_choose_move_produces_legal_move() {
         let mut board = create_board();
-        add_poly(&mut board, "p1", "orange", vec!["p2"]);
+        add_poly(&mut board, "p1", "blue", vec!["p2"]);
         add_poly(&mut board, "p2", "grey", vec!["p1", "p3"]);
         add_poly(&mut board, "p3", "grey", vec!["p2"]);
         add_piece(&mut board, "w_soldier", "p1", Side::White, PieceType::Soldier);
-        let mut gs = GameState::new(board);
-        gs.color_chosen.insert(Side::White, "orange".to_string());
+        let mut gs = gs_playing(board);
+        gs.color_chosen.insert(Side::White, "blue".to_string());
 
         let legal = get_legal_moves(&gs, "w_soldier");
         let mut all_moves = HashMap::new();
@@ -160,12 +173,12 @@ mod agent_tests {
     #[test]
     fn test_deterministic_agent_always_picks_first() {
         let mut board = create_board();
-        add_poly(&mut board, "p1", "orange", vec!["p2", "p3"]);
+        add_poly(&mut board, "p1", "blue", vec!["p2", "p3"]);
         add_poly(&mut board, "p2", "grey", vec!["p1"]);
         add_poly(&mut board, "p3", "grey", vec!["p1"]);
         add_piece(&mut board, "w_soldier", "p1", Side::White, PieceType::Soldier);
-        let mut gs = GameState::new(board);
-        gs.color_chosen.insert(Side::White, "orange".to_string());
+        let mut gs = gs_playing(board);
+        gs.color_chosen.insert(Side::White, "blue".to_string());
 
         let mut all_moves = HashMap::new();
         all_moves.insert("w_soldier".to_string(), vec!["p2".to_string(), "p3".to_string()]);
@@ -183,38 +196,39 @@ mod agent_tests {
     #[test]
     fn test_perform_turn_with_deterministic_agent_advances_state() {
         let mut board = create_board();
-        add_poly(&mut board, "p1", "orange", vec!["p2"]);
+        add_poly(&mut board, "p1", "blue", vec!["p2"]);
         add_poly(&mut board, "p2", "grey", vec!["p1"]);
         add_piece(&mut board, "w_soldier", "p1", Side::White, PieceType::Soldier);
-        let mut gs = GameState::new(board);
+        let mut gs = gs_playing(board);
         gs.turn = Side::White;
 
         // First call: colour selection phase (is_new_turn == true)
-        perform_turn(&mut gs, &DeterministicAgent).0;
+        // DeterministicAgent picks 'blue' (first sorted). p1 is 'blue'.
+        perform_turn(&mut gs, &DeterministicAgent);
         assert!(!gs.is_new_turn);
-        assert!(gs.color_chosen.contains_key(&Side::White));
+        assert_eq!(gs.color_chosen.get(&Side::White).unwrap(), "blue");
 
         // Second call: move execution phase
-        perform_turn(&mut gs, &DeterministicAgent).0;
-        // Soldier landed on grey (not chosen=orange) → turn doesn't end
+        perform_turn(&mut gs, &DeterministicAgent);
+        // Soldier landed on grey (not chosen=blue) → turn doesn't end
         assert_eq!(gs.board.pieces.get("w_soldier").unwrap().position, "p2");
     }
 
     #[test]
     fn test_perform_turn_turn_ends_when_choosing_chosen_color() {
         let mut board = create_board();
-        add_poly(&mut board, "p1", "orange", vec!["p2"]);
-        add_poly(&mut board, "p2", "orange", vec!["p1"]);
-        // Add a second piece so there IS a valid non-orange turn too,
-        // but our deterministic agent picks orange (alphabetically last — switch order)
+        add_poly(&mut board, "p1", "blue", vec!["p2"]);
+        add_poly(&mut board, "p2", "blue", vec!["p1"]);
+        // Add a second piece so there IS a valid non-blue piece too if we wanted,
+        // but our piece is w_goddess on blue.
         add_piece(&mut board, "w_goddess", "p1", Side::White, PieceType::Goddess);
-        let mut gs = GameState::new(board);
+        let mut gs = gs_playing(board);
         gs.turn = Side::White;
 
-        // Colour phase
-        perform_turn(&mut gs, &DeterministicAgent).0;
-        // Move phase — lands on chosen colour → turn ends (Goddess is not Soldier)
-        perform_turn(&mut gs, &DeterministicAgent).0;
+        // Colour phase -> Picks 'blue'
+        perform_turn(&mut gs, &DeterministicAgent);
+        // Move phase — lands on chosen colour (blue) → turn ends (Goddess is not Soldier)
+        perform_turn(&mut gs, &DeterministicAgent);
 
         assert_eq!(gs.turn, Side::Black);
         assert!(gs.is_new_turn);
@@ -223,14 +237,16 @@ mod agent_tests {
     #[test]
     fn test_perform_turn_no_valid_moves_skips_turn() {
         let mut board = create_board();
-        // Goddess on a dead-end polygon, pinned by its own side having no moves to chosen colour
-        add_poly(&mut board, "p1", "orange", vec![]);
+        // Goddess on a dead-end polygon
+        add_poly(&mut board, "p1", "blue", vec![]);
         add_piece(&mut board, "w_goddess", "p1", Side::White, PieceType::Goddess);
         // No legal moves at all
-        let mut gs = GameState::new(board);
+        let mut gs = gs_playing(board);
         gs.turn = Side::White;
 
-        // Colour phase — no valid colours → turn is automatically skipped
+        // Call 1: Colour phase
+        perform_turn(&mut gs, &DeterministicAgent);
+        // Call 2: Move phase — no legal moves -> skipped to opponent
         let result = perform_turn(&mut gs, &DeterministicAgent).0;
         assert!(!result); // No Goddess captured
         assert_eq!(gs.turn, Side::Black); // Skipped to opponent
@@ -242,37 +258,36 @@ mod agent_tests {
         add_poly(&mut board, "p1", "orange", vec!["p2"]);
         add_poly(&mut board, "p2", "orange", vec!["p1"]);
         add_piece(&mut board, "w_soldier", "p1", Side::White, PieceType::Soldier);
-        let mut gs = GameState::new(board);
+        let mut gs = gs_playing(board);
         gs.turn = Side::White;
 
         // Manually set up a locked sequence scenario
         // Colour phase
-        perform_turn(&mut gs, &DeterministicAgent).0;
+        perform_turn(&mut gs, &DeterministicAgent);
         // Move soldier to p2 (chosen colour orange) → soldier gets locked
-        perform_turn(&mut gs, &DeterministicAgent).0;
+        perform_turn(&mut gs, &DeterministicAgent);
         // Soldier is now locked on p2, it's still White's turn
         if gs.turn == Side::White {
             // Now the AlwaysPassAgent will see pass_allowed=true and end the turn
-            perform_turn(&mut gs, &AlwaysPassAgent).0;
+            perform_turn(&mut gs, &AlwaysPassAgent);
             assert_eq!(gs.turn, Side::Black);
         }
-        // Test passed whether or not the soldier got locked (depends on board topology)
     }
 
     #[test]
     fn test_perform_turn_captures_goddess_returns_true() {
         let mut board = create_board();
-        add_poly(&mut board, "p1", "orange", vec!["p2"]);
+        add_poly(&mut board, "p1", "blue", vec!["p2"]);
         add_poly(&mut board, "p2", "grey", vec!["p1"]);
         add_piece(&mut board, "w_heroe", "p1", Side::White, PieceType::Heroe);
         add_piece(&mut board, "b_goddess", "p2", Side::Black, PieceType::Goddess);
-        let mut gs = GameState::new(board);
+        let mut gs = gs_playing(board);
         gs.turn = Side::White;
 
         // Colour phase
-        perform_turn(&mut gs, &DeterministicAgent).0;
+        perform_turn(&mut gs, &DeterministicAgent);
         // Move phase — Heroe captures Black Goddess
-        let result = perform_turn(&mut gs, &DeterministicAgent).0;
+        let (result, _) = perform_turn(&mut gs, &DeterministicAgent);
         assert!(result, "perform_turn should return true when a Goddess is captured");
     }
 
@@ -286,14 +301,14 @@ mod agent_tests {
         add_poly(&mut board, "p2", "grey", vec!["p1"]);
         add_piece(&mut board, "w_soldier", "p1", Side::White, PieceType::Soldier);
 
-        let mut gs1 = GameState::new(board.clone());
+        let mut gs1 = gs_playing(board.clone());
         gs1.turn = Side::White;
-        let mut gs2 = GameState::new(board);
+        let mut gs2 = gs_playing(board);
         gs2.turn = Side::White;
 
         // Both should complete a full turn in two calls (colour + move)
         perform_random_turn(&mut gs1);
-        perform_turn(&mut gs2, &RandomAgent).0;
+        perform_turn(&mut gs2, &RandomAgent);
         // Both should be in the same phase (move phase, colour chosen)
         assert!(!gs1.is_new_turn);
         assert!(!gs2.is_new_turn);

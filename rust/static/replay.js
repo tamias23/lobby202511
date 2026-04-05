@@ -92,6 +92,21 @@ window.onload = initReplay;
 
 
 function renderBoard(board) {
+    if (!board) {
+        console.warn("Server returned null or empty board state for this turn.");
+        return;
+    }
+    
+    // Universal Compatibility Layer: Handle both legacy and new engine field names
+    const polygons = board.allPolygons || board.polygons;
+    const pieces = board.allPieces || board.pieces;
+    const edges = board.allEdges || board.edges;
+
+    if (!polygons) {
+        console.error("Board state is missing polygon data!", board);
+        return;
+    }
+
     const container = document.getElementById("game-container");
     
     // Initialize SVG canvas on first payload
@@ -109,16 +124,16 @@ function renderBoard(board) {
     // Render Color Picker UI Dashboard
     let ui = document.getElementById("color-picker-ui");
     
-    let colors = [...new Set(Object.values(board.allPolygons).map(p => p.color))];
+    let colors = [...new Set(Object.values(polygons).map(p => p.color))];
     colors.sort(); // Consistent display logic
     ui.innerHTML = colors.map(c => `
-        <div style="width: 45px; height: 45px; background: ${c}; border-radius: 6px; border: 4px solid ${board.chosen_color === c ? (board.turn === 'white' ? 'white' : 'black') : 'transparent'}; opacity: ${board.chosen_color === c ? '1' : '0.2'}; transition: all 0.2s;"></div>
+        <div style="width: 45px; height: 45px; background: ${c}; border-radius: 6px; border: 4px solid ${board.chosen_color === c ? (board.turn.toLowerCase() === 'white' ? 'white' : 'black') : 'transparent'}; opacity: ${board.chosen_color === c ? '1' : '0.2'}; transition: all 0.2s;"></div>
     `).join("");
     
     // Inject Turn Info Overlay HUD
     let hud = document.getElementById("turn-hud");
     
-    let turnName = board.turn === "white" ? (board.white_name || "White") : (board.black_name || "Black");
+    let turnName = board.turn.toLowerCase() === "white" ? (board.white_name || "White") : (board.black_name || "Black");
     hud.innerHTML = `Turn &nbsp;<b style="color: #60a5fa">${board.turn_counter !== undefined ? board.turn_counter : 0}</b>&nbsp; | &nbsp;Playing: <b style="color: #a78bfa">${turnName}</b>&nbsp; | &nbsp;Moves executed: <b style="color: #34d399">${board.moves_this_turn !== undefined ? board.moves_this_turn : 0}</b>`;
     
     // Create Persistent SVG Render Layers safely integrating continuous transform transitions
@@ -135,8 +150,8 @@ function renderBoard(board) {
         svgCanvas.appendChild(piecesLayer);
         
         // Render underlying Polygons ONCE statically 
-        for (const polyKey in board.allPolygons) {
-            const poly = board.allPolygons[polyKey];
+        for (const polyKey in polygons) {
+            const poly = polygons[polyKey];
             const polygonEl = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
             const pointsString = poly.points.map(pt => `${pt[0]},${pt[1]}`).join(" ");
             polygonEl.setAttribute("points", pointsString);
@@ -147,9 +162,9 @@ function renderBoard(board) {
         }
 
         // Process Edge lines ONCE statically
-        if (board.allEdges) {
-            for (const edgeKey in board.allEdges) {
-                const edge = board.allEdges[edgeKey];
+        if (edges) {
+            for (const edgeKey in edges) {
+                const edge = edges[edgeKey];
                 if (!edge.sharedPoints || edge.sharedPoints.length !== 2) continue;
                 
                 const lineEl = document.createElementNS("http://www.w3.org/2000/svg", "line");
@@ -166,12 +181,12 @@ function renderBoard(board) {
 
     // Render dynamic Pieces atop everything
     let returnedCounters = { white: 0, black: 0 };
-    for (const pieceKey in board.allPieces) {
-        const piece = board.allPieces[pieceKey];
+    for (const pieceKey in pieces) {
+        const piece = pieces[pieceKey];
         let cx = 0, cy = 0;
         
         if (piece.position === "returned" || piece.position === "graveyard") {
-            let side = piece.side || pieceKey.split("_")[0];
+            let side = (piece.side || pieceKey.split("_")[0]).toLowerCase();
             if (side === "white") {
                 cx = -70 - (returnedCounters.white % 3) * 30;
                 cy = 100 + Math.floor(returnedCounters.white / 3) * 30;
@@ -182,7 +197,7 @@ function renderBoard(board) {
                 returnedCounters.black++;
             }
         } else {
-            const targetPoly = board.allPolygons[piece.position];
+            const targetPoly = polygons[piece.position];
             if (!targetPoly) continue; 
             cx = targetPoly.center[0];
             cy = targetPoly.center[1];
@@ -197,8 +212,8 @@ function renderBoard(board) {
             g.id = `piece-${pieceKey}`;
             g.style.transition = "transform 0.4s ease-in-out, opacity 0.3s ease";
             
-            const type = piece.type;
-            const isBlack = (piece.side === "black"); // otherwise white
+            const type = (piece.type || 'soldier').toLowerCase();
+            const isBlack = (piece.side.toLowerCase() === "black"); // otherwise white
 
             let innerHTML = "";
 
