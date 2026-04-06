@@ -177,8 +177,8 @@ pub fn randomize_setup_napi(req: RandomizeRequest) -> napi::Result<RandomizeResp
         let (step_type, _) = match state.setup_step {
             0 => (PieceType::Goddess, 1),
             1 => (PieceType::Heroe, 2),
-            2 => (PieceType::Berserker, 2),
-            3 => (PieceType::Bishop, 4),
+            2 => (PieceType::Golem, 2),
+            3 => (PieceType::Witch, 4),
             4 => (PieceType::Ghoul, 18),
             _ => break,
         };
@@ -536,8 +536,8 @@ pub fn end_turn_setup_napi(req: EndTurnSetupRequest) -> napi::Result<ApplyMoveRe
         let (step_type, _) = match state.setup_step {
             0 => (PieceType::Goddess, 1),
             1 => (PieceType::Heroe, 2),
-            2 => (PieceType::Berserker, 2),
-            3 => (PieceType::Bishop, 4),
+            2 => (PieceType::Golem, 2),
+            3 => (PieceType::Witch, 4),
             4 => (PieceType::Ghoul, 18),
             _ => break,
         };

@@ -109,10 +109,10 @@ mod tests {
     }
 
     // ---------------------------------------------------------
-    // Bishop Tests
+    // Witch Tests
     // ---------------------------------------------------------
     #[test]
-    fn test_bishop_movement_and_aoe() {
+    fn test_witch_movement_and_aoe() {
         let mut board = create_mock_board();
         add_poly(&mut board, "p1", "white", vec!["p2"]);
         add_poly(&mut board, "p2", "yellow", vec!["p1", "p3"]);
@@ -120,19 +120,19 @@ mod tests {
         add_poly(&mut board, "p4", "white", vec!["p3", "p5"]);
         add_poly(&mut board, "p5", "yellow", vec!["p4"]);
         
-        add_piece(&mut board, "w_bishop", "p1", Side::White, PieceType::Bishop);
+        add_piece(&mut board, "w_witch", "p1", Side::White, PieceType::Witch);
         add_piece(&mut board, "b_soldier", "p5", Side::Black, PieceType::Soldier);
         add_piece(&mut board, "w_soldier", "p3", Side::White, PieceType::Soldier);
 
         let mut gs = gs_playing(board);
         gs.turn = Side::White;
         
-        let moves = get_legal_moves(&gs, "w_bishop");
+        let moves = get_legal_moves(&gs, "w_witch");
         
         assert!(moves.contains(&"p4".to_string())); // Same color (white)
         assert!(!moves.contains(&"p2".to_string())); // Different color (yellow)
 
-        apply_move(&mut gs, "w_bishop", "p4");
+        apply_move(&mut gs, "w_witch", "p4");
 
         // Verify AoE: black soldier on p5 is destroyed, white soldier on p3 is immune.
         assert_eq!(gs.board.pieces.get("b_soldier").unwrap().position, "returned"); 
@@ -288,29 +288,29 @@ mod tests {
     }
 
     // ---------------------------------------------------------
-    // 5 Specific Berserker Tests (Requested by User)
+    // 5 Specific Golem Tests (Requested by User)
     // ---------------------------------------------------------
 
     // TEST 1: Absolute Invulnerability from Direct Capture (Get Legal Moves Filter)
     #[test]
-    fn test_berserker_invulnerable_direct_capture() {
+    fn test_golem_invulnerable_direct_capture() {
         let mut board = create_mock_board();
         add_poly(&mut board, "p1", "white", vec!["p2"]);
         add_poly(&mut board, "p2", "yellow", vec!["p1"]);
         
         add_piece(&mut board, "b_heroe", "p1", Side::Black, PieceType::Heroe);
-        add_piece(&mut board, "w_berserker", "p2", Side::White, PieceType::Berserker);
+        add_piece(&mut board, "w_golem", "p2", Side::White, PieceType::Golem);
 
         let gs = gs_playing(board);
         let heroe_moves = get_legal_moves(&gs, "b_heroe");
         
-        // The mighty Black Heroe cannot target p2 because a Berserker stands there.
+        // The mighty Black Heroe cannot target p2 because a Golem stands there.
         assert!(!heroe_moves.contains(&"p2".to_string())); 
     }
 
-    // TEST 2: Absolute Invulnerability from Area of Effect (Mage/Bishop Explosions)
+    // TEST 2: Absolute Invulnerability from Area of Effect (Mage/Witch Explosions)
     #[test]
-    fn test_berserker_invulnerable_aoe() {
+    fn test_golem_invulnerable_aoe() {
         let mut board = create_mock_board();
         add_poly(&mut board, "p1", "white", vec!["p2"]);
         add_poly(&mut board, "p2", "black", vec!["p1", "p3", "p4"]);
@@ -319,23 +319,23 @@ mod tests {
         
         add_piece(&mut board, "w_mage", "p1", Side::White, PieceType::Mage);
         add_piece(&mut board, "b_soldier", "p2", Side::Black, PieceType::Soldier); // The target
-        add_piece(&mut board, "b_berserker", "p3", Side::Black, PieceType::Berserker); // Collateral target
-        add_piece(&mut board, "w_berserker", "p4", Side::White, PieceType::Berserker); // Friendly Berserker
+        add_piece(&mut board, "b_golem", "p3", Side::Black, PieceType::Golem); // Collateral target
+        add_piece(&mut board, "w_golem", "p4", Side::White, PieceType::Golem); // Friendly Golem
 
         let mut gs = gs_playing(board);
         gs.turn = Side::White;
 
         apply_move(&mut gs, "w_mage", "p2");
 
-        // Verify the soldier died but the massive Berserkers survived seamlessly.
+        // Verify the soldier died but the massive Golems survived seamlessly.
         assert_eq!(gs.board.pieces.get("b_soldier").unwrap().position, "returned"); 
-        assert_eq!(gs.board.pieces.get("b_berserker").unwrap().position, "p3"); 
-        assert_eq!(gs.board.pieces.get("w_berserker").unwrap().position, "p4"); 
+        assert_eq!(gs.board.pieces.get("b_golem").unwrap().position, "p3"); 
+        assert_eq!(gs.board.pieces.get("w_golem").unwrap().position, "p4"); 
     }
 
-    // TEST 3: Berserker Phalanx Movement (Chaining via Teammates and Chosen Color)
+    // TEST 3: Golem Phalanx Movement (Chaining via Teammates and Chosen Color)
     #[test]
-    fn test_berserker_chain_movement() {
+    fn test_golem_chain_movement() {
         let mut board = create_mock_board();
         add_poly(&mut board, "p1", "white", vec!["p2"]);
         add_poly(&mut board, "p2", "white", vec!["p1", "p3"]); // Teammate
@@ -343,56 +343,56 @@ mod tests {
         add_poly(&mut board, "p4", "white", vec!["p3", "p5"]); // Chosen Color (Empty)
         add_poly(&mut board, "p5", "grey", vec!["p4"]); // Grey (Empty, Destination)
         
-        add_piece(&mut board, "w_berserker", "p1", Side::White, PieceType::Berserker);
+        add_piece(&mut board, "w_golem", "p1", Side::White, PieceType::Golem);
         add_piece(&mut board, "w_soldier", "p2", Side::White, PieceType::Soldier); // The bridge
         
         let mut gs = gs_playing(board);
         gs.color_chosen.insert(Side::White, "white".to_string()); // Start piece must be on chosen color to be eligible
 
-        let berserker_moves = get_legal_moves(&gs, "w_berserker");
+        let golem_moves = get_legal_moves(&gs, "w_golem");
         
-        assert!(berserker_moves.contains(&"p5".to_string())); // Chained mathematically! 1->2->3->4->5.
+        assert!(golem_moves.contains(&"p5".to_string())); // Chained mathematically! 1->2->3->4->5.
     }
 
-    // TEST 4: Berserker Solid Collision (Blocks Enemy Phalanxes Natively)
+    // TEST 4: Golem Solid Collision (Blocks Enemy Phalanxes Natively)
     #[test]
-    fn test_berserker_solid_collision_blocks_all() {
+    fn test_golem_solid_collision_blocks_all() {
         let mut board = create_mock_board();
         add_poly(&mut board, "p1", "white", vec!["p2"]);
         add_poly(&mut board, "p2", "orange", vec!["p1", "p3"]); // Intervening gap
         add_poly(&mut board, "p3", "grey", vec!["p2"]); 
         
         add_piece(&mut board, "w_soldier", "p1", Side::White, PieceType::Soldier);
-        add_piece(&mut board, "b_berserker", "p2", Side::Black, PieceType::Berserker); // The wall
+        add_piece(&mut board, "b_golem", "p2", Side::Black, PieceType::Golem); // The wall
         
         let mut gs = gs_playing(board);
         gs.color_chosen.insert(Side::White, "orange".to_string());
 
         let soldier_moves = get_legal_moves(&gs, "w_soldier");
         
-        // Cannot chain onto the Berserker or jump completely through it safely.
+        // Cannot chain onto the Golem or jump completely through it safely.
         assert!(!soldier_moves.contains(&"p2".to_string()));
         assert!(!soldier_moves.contains(&"p3".to_string()));
     }
 
-    // TEST 5: Berserker Siren Susceptibility (They are immobilized by Siren singing)
+    // TEST 5: Golem Siren Susceptibility (They are immobilized by Siren singing)
     #[test]
-    fn test_berserker_vulnerable_to_siren_pinning() {
+    fn test_golem_vulnerable_to_siren_pinning() {
         let mut board = create_mock_board();
         add_poly(&mut board, "p1", "white", vec!["p2"]);
         add_poly(&mut board, "p2", "black", vec!["p1", "p3"]);
         add_poly(&mut board, "p3", "grey", vec!["p2"]); 
         
-        add_piece(&mut board, "w_berserker", "p1", Side::White, PieceType::Berserker);
+        add_piece(&mut board, "w_golem", "p1", Side::White, PieceType::Golem);
         add_piece(&mut board, "b_siren", "p2", Side::Black, PieceType::Siren); // The singer
         
         let mut gs = gs_playing(board);
         gs.color_chosen.insert(Side::White, "grey".to_string());
 
-        let berserker_moves = get_legal_moves(&gs, "w_berserker");
+        let golem_moves = get_legal_moves(&gs, "w_golem");
         
-        // Berserker has exactly 0 legal maneuvers generated. Immobilized flawlessly.
-        assert_eq!(berserker_moves.len(), 0);
+        // Golem has exactly 0 legal maneuvers generated. Immobilized flawlessly.
+        assert_eq!(golem_moves.len(), 0);
     }
 
     // ---------------------------------------------------------
@@ -475,7 +475,7 @@ mod tests {
         assert_eq!(moves.len(), 0);
     }
 
-    // TEST 10: Soldiers/Berserkers landing on NON-chosen colors formally break their personal sequences WITHOUT immediately killing the collective team Turn!
+    // TEST 10: Soldiers/Golems landing on NON-chosen colors formally break their personal sequences WITHOUT immediately killing the collective team Turn!
     #[test]
     fn test_soldier_chain_stops_on_non_chosen_color_without_turn_ending() {
         let mut board = create_mock_board();
@@ -534,9 +534,9 @@ mod tests {
         assert!(moves.contains(&"p3".to_string()), "Captured soldier should be deployable to p3");
     }
 
-    // TEST 12: Soldier/Berserker can chain through friendly Berserkers
+    // TEST 12: Soldier/Golem can chain through friendly Golems
     #[test]
-    fn test_soldier_chains_through_friendly_berserker() {
+    fn test_soldier_chains_through_friendly_golem() {
         let mut board = create_mock_board();
         add_poly(&mut board, "p1", "grey", vec!["p2"]);
         add_poly(&mut board, "p2", "grey", vec!["p1", "p3"]);
@@ -544,19 +544,19 @@ mod tests {
         add_poly(&mut board, "p4", "yellow", vec!["p3"]);
 
         add_piece(&mut board, "w_soldier", "p1", Side::White, PieceType::Soldier);
-        add_piece(&mut board, "w_berserker", "p2", Side::White, PieceType::Berserker); // Friendly Berserker to chain through
+        add_piece(&mut board, "w_golem", "p2", Side::White, PieceType::Golem); // Friendly Golem to chain through
 
         let mut gs = gs_playing(board);
         gs.color_chosen.insert(Side::White, "grey".to_string());
 
         let moves = get_legal_moves(&gs, "w_soldier");
 
-        // Soldier should chain through the friendly Berserker on p2 and reach p3 and p4
-        assert!(moves.contains(&"p3".to_string()), "Soldier should chain through friendly Berserker to reach p3");
-        assert!(moves.contains(&"p4".to_string()), "Soldier should chain through friendly Berserker to reach p4");
+        // Soldier should chain through the friendly Golem on p2 and reach p3 and p4
+        assert!(moves.contains(&"p3".to_string()), "Soldier should chain through friendly Golem to reach p3");
+        assert!(moves.contains(&"p4".to_string()), "Soldier should chain through friendly Golem to reach p4");
     }
 
-    // TEST 13: Mage can be deployed adjacent to enemy pieces (only Bishop is restricted)
+    // TEST 13: Mage can be deployed adjacent to enemy pieces (only Witch is restricted)
     #[test]
     fn test_mage_deploy_adjacent_to_enemy() {
         let mut board = create_mock_board();
@@ -576,24 +576,24 @@ mod tests {
         assert!(moves.contains(&"p1".to_string()), "Mage should be deployable adjacent to enemy pieces");
     }
 
-    // TEST 14: Bishop CANNOT be deployed adjacent to enemy pieces
+    // TEST 14: Witch CANNOT be deployed adjacent to enemy pieces
     #[test]
-    fn test_bishop_deploy_blocked_adjacent_to_enemy() {
+    fn test_witch_deploy_blocked_adjacent_to_enemy() {
         let mut board = create_mock_board();
         add_poly(&mut board, "p1", "orange", vec!["p2"]);
         add_poly(&mut board, "p2", "orange", vec!["p1"]);
 
-        add_piece(&mut board, "w_bishop", "returned", Side::White, PieceType::Bishop);
+        add_piece(&mut board, "w_witch", "returned", Side::White, PieceType::Witch);
         add_piece(&mut board, "b_soldier", "p2", Side::Black, PieceType::Soldier);
 
         let mut gs = gs_playing(board);
         gs.turn = Side::White;
         gs.color_chosen.insert(Side::White, "orange".to_string());
 
-        let moves = get_legal_moves(&gs, "w_bishop");
+        let moves = get_legal_moves(&gs, "w_witch");
 
-        // Bishop cannot deploy on p1 because it is slide-adjacent to an enemy soldier on p2
-        assert!(!moves.contains(&"p1".to_string()), "Bishop should NOT be deployable adjacent to enemy pieces");
+        // Witch cannot deploy on p1 because it is slide-adjacent to an enemy soldier on p2
+        assert!(!moves.contains(&"p1".to_string()), "Witch should NOT be deployable adjacent to enemy pieces");
     }
     // ---------------------------------------------------------
     // §3.0 Global Constraints
@@ -611,12 +611,12 @@ mod tests {
     }
 
     #[test]
-    fn test_global_constraint_no_berserker_capture() {
+    fn test_global_constraint_no_golem_capture() {
         let mut board = create_mock_board();
         add_poly(&mut board, "p1", "white", vec!["p2"]);
         add_poly(&mut board, "p2", "white", vec!["p1"]);
         add_piece(&mut board, "w_heroe", "p1", Side::White, PieceType::Heroe);
-        add_piece(&mut board, "b_berserker", "p2", Side::Black, PieceType::Berserker);
+        add_piece(&mut board, "b_golem", "p2", Side::Black, PieceType::Golem);
         let gs = gs_playing(board);
         let moves = get_legal_moves(&gs, "w_heroe");
         assert!(!moves.contains(&"p2".to_string()));
@@ -635,14 +635,14 @@ mod tests {
     }
 
     #[test]
-    fn test_global_constraint_bishop_no_capture() {
+    fn test_global_constraint_witch_no_capture() {
         let mut board = create_mock_board();
         add_poly(&mut board, "p1", "white", vec!["p2"]);
         add_poly(&mut board, "p2", "white", vec!["p1"]);
-        add_piece(&mut board, "w_bishop", "p1", Side::White, PieceType::Bishop);
+        add_piece(&mut board, "w_witch", "p1", Side::White, PieceType::Witch);
         add_piece(&mut board, "b_soldier", "p2", Side::Black, PieceType::Soldier);
         let gs = gs_playing(board);
-        let moves = get_legal_moves(&gs, "w_bishop");
+        let moves = get_legal_moves(&gs, "w_witch");
         assert!(!moves.contains(&"p2".to_string()));
     }
 
@@ -771,12 +771,12 @@ mod tests {
     }
 
     #[test]
-    fn test_goddess_no_berserker_capture() {
+    fn test_goddess_no_golem_capture() {
         let mut board = create_mock_board();
         add_poly(&mut board, "p1", "white", vec!["p2"]);
         add_poly(&mut board, "p2", "white", vec!["p1"]);
         add_piece(&mut board, "w_goddess", "p1", Side::White, PieceType::Goddess);
-        add_piece(&mut board, "b_berserker", "p2", Side::Black, PieceType::Berserker);
+        add_piece(&mut board, "b_golem", "p2", Side::Black, PieceType::Golem);
         let gs = gs_playing(board);
         let moves = get_legal_moves(&gs, "w_goddess");
         assert!(!moves.contains(&"p2".to_string()));
@@ -936,10 +936,10 @@ mod tests {
     }
 
     // ---------------------------------------------------------
-    // §3.5 Bishop
+    // §3.5 Witch
     // ---------------------------------------------------------
     #[test]
-    fn test_bishop_jump_range_4() {
+    fn test_witch_jump_range_4() {
         let mut board = create_mock_board();
         add_poly_split(&mut board, "p1", "white", vec![], vec!["p2"]);
         add_poly_split(&mut board, "p2", "grey", vec![], vec!["p1", "p3"]);
@@ -947,59 +947,59 @@ mod tests {
         add_poly_split(&mut board, "p4", "grey", vec![], vec!["p3", "p5"]);
         add_poly_split(&mut board, "p5", "white", vec![], vec!["p4", "p6"]); // Hop 4
         add_poly_split(&mut board, "p6", "white", vec![], vec!["p5"]); // Hop 5
-        add_piece(&mut board, "w_bishop", "p1", Side::White, PieceType::Bishop);
+        add_piece(&mut board, "w_witch", "p1", Side::White, PieceType::Witch);
         let gs = gs_playing(board);
-        let moves = get_legal_moves(&gs, "w_bishop");
+        let moves = get_legal_moves(&gs, "w_witch");
         assert!(moves.contains(&"p5".to_string()));
         assert!(!moves.contains(&"p6".to_string()));
     }
 
     #[test]
-    fn test_bishop_colour_constraint_same_colour() {
+    fn test_witch_colour_constraint_same_colour() {
         let mut board = create_mock_board();
         add_poly_split(&mut board, "p1", "white", vec![], vec!["p2", "p3"]);
         add_poly_split(&mut board, "p2", "yellow", vec![], vec!["p1"]); // Different colour
         add_poly_split(&mut board, "p3", "white", vec![], vec!["p1"]); // Same colour
-        add_piece(&mut board, "w_bishop", "p1", Side::White, PieceType::Bishop);
+        add_piece(&mut board, "w_witch", "p1", Side::White, PieceType::Witch);
         let gs = gs_playing(board);
-        let moves = get_legal_moves(&gs, "w_bishop");
+        let moves = get_legal_moves(&gs, "w_witch");
         assert!(!moves.contains(&"p2".to_string()));
         assert!(moves.contains(&"p3".to_string()));
     }
 
     #[test]
-    fn test_bishop_no_capture() {
+    fn test_witch_no_capture() {
         let mut board = create_mock_board();
         add_poly_split(&mut board, "p1", "white", vec![], vec!["p2"]);
         add_poly_split(&mut board, "p2", "white", vec![], vec!["p1"]);
-        add_piece(&mut board, "w_bishop", "p1", Side::White, PieceType::Bishop);
+        add_piece(&mut board, "w_witch", "p1", Side::White, PieceType::Witch);
         add_piece(&mut board, "b_soldier", "p2", Side::Black, PieceType::Soldier);
         let gs = gs_playing(board);
-        let moves = get_legal_moves(&gs, "w_bishop");
+        let moves = get_legal_moves(&gs, "w_witch");
         assert!(!moves.contains(&"p2".to_string()));
     }
 
     #[test]
-    fn test_bishop_can_move_to_empty() {
+    fn test_witch_can_move_to_empty() {
         let mut board = create_mock_board();
         add_poly_split(&mut board, "p1", "white", vec![], vec!["p2"]);
         add_poly_split(&mut board, "p2", "white", vec![], vec!["p1"]);
-        add_piece(&mut board, "w_bishop", "p1", Side::White, PieceType::Bishop);
+        add_piece(&mut board, "w_witch", "p1", Side::White, PieceType::Witch);
         let gs = gs_playing(board);
-        let moves = get_legal_moves(&gs, "w_bishop");
+        let moves = get_legal_moves(&gs, "w_witch");
         assert!(moves.contains(&"p2".to_string()));
     }
 
     #[test]
-    fn test_bishop_jump_over_pieces() {
+    fn test_witch_jump_over_pieces() {
         let mut board = create_mock_board();
         add_poly_split(&mut board, "p1", "white", vec![], vec!["p2"]);
         add_poly_split(&mut board, "p2", "grey", vec![], vec!["p1", "p3"]);
         add_poly_split(&mut board, "p3", "white", vec![], vec!["p2"]);
-        add_piece(&mut board, "w_bishop", "p1", Side::White, PieceType::Bishop);
+        add_piece(&mut board, "w_witch", "p1", Side::White, PieceType::Witch);
         add_piece(&mut board, "w_soldier", "p2", Side::White, PieceType::Soldier); // Intervening friendly
         let gs = gs_playing(board);
-        let moves = get_legal_moves(&gs, "w_bishop");
+        let moves = get_legal_moves(&gs, "w_witch");
         assert!(moves.contains(&"p3".to_string()));
     }
 
@@ -1057,7 +1057,7 @@ mod tests {
     }
 
     // ---------------------------------------------------------
-    // §3.7 Soldier & Berserker 
+    // §3.7 Soldier & Golem 
     // ---------------------------------------------------------
     #[test]
     fn test_soldier_chain_through_multiple_friendlies() {
@@ -1123,17 +1123,17 @@ mod tests {
     }
 
     #[test]
-    fn test_berserker_chain_same_as_soldier() {
+    fn test_golem_chain_same_as_soldier() {
         let mut board = create_mock_board();
         add_poly(&mut board, "p1", "white", vec!["p2"]);
         add_poly(&mut board, "p2", "black", vec!["p1", "p3"]);
         add_poly(&mut board, "p3", "grey", vec!["p2", "p4"]);
         add_poly(&mut board, "p4", "orange", vec!["p3"]);
-        add_piece(&mut board, "w_berserker", "p1", Side::White, PieceType::Berserker);
+        add_piece(&mut board, "w_golem", "p1", Side::White, PieceType::Golem);
         add_piece(&mut board, "w_soldier_2", "p2", Side::White, PieceType::Soldier);
         add_piece(&mut board, "w_soldier_3", "p3", Side::White, PieceType::Soldier);
         let gs = gs_playing(board);
-        let moves = get_legal_moves(&gs, "w_berserker");
+        let moves = get_legal_moves(&gs, "w_golem");
         assert!(moves.contains(&"p4".to_string())); // Traverses p2, p3 to reach p4
     }
 
@@ -1155,31 +1155,31 @@ mod tests {
     }
 
     // ---------------------------------------------------------
-    // §4.2 Bishop AoE
+    // §4.2 Witch AoE
     // ---------------------------------------------------------
     #[test]
-    fn test_bishop_aoe_fires_even_on_empty_landing() {
+    fn test_witch_aoe_fires_even_on_empty_landing() {
         let mut board = create_mock_board();
         add_poly(&mut board, "p1", "white", vec!["p2"]);
         add_poly(&mut board, "p2", "white", vec!["p1", "p3"]);
         add_poly(&mut board, "p3", "white", vec!["p2"]); // slide adj to p2
-        add_piece(&mut board, "w_bishop", "p1", Side::White, PieceType::Bishop);
+        add_piece(&mut board, "w_witch", "p1", Side::White, PieceType::Witch);
         add_piece(&mut board, "b_soldier", "p3", Side::Black, PieceType::Soldier);
         let mut gs = gs_playing(board);
-        apply_move(&mut gs, "w_bishop", "p2"); // Landing on empty p2
+        apply_move(&mut gs, "w_witch", "p2"); // Landing on empty p2
         assert_eq!(gs.board.pieces.get("b_soldier").unwrap().position, "returned");
     }
 
     #[test]
-    fn test_bishop_aoe_spares_friendlies() {
+    fn test_witch_aoe_spares_friendlies() {
         let mut board = create_mock_board();
         add_poly(&mut board, "p1", "white", vec!["p2"]);
         add_poly(&mut board, "p2", "white", vec!["p1", "p3"]);
         add_poly(&mut board, "p3", "white", vec!["p2"]); 
-        add_piece(&mut board, "w_bishop", "p1", Side::White, PieceType::Bishop);
+        add_piece(&mut board, "w_witch", "p1", Side::White, PieceType::Witch);
         add_piece(&mut board, "w_soldier", "p3", Side::White, PieceType::Soldier);
         let mut gs = gs_playing(board);
-        apply_move(&mut gs, "w_bishop", "p2");
+        apply_move(&mut gs, "w_witch", "p2");
         assert_eq!(gs.board.pieces.get("w_soldier").unwrap().position, "p3"); // Safe
     }
 
@@ -1350,20 +1350,20 @@ mod tests {
     }
 
     #[test]
-    fn test_berserker_lands_on_different_color_clears_lock() {
+    fn test_golem_lands_on_different_color_clears_lock() {
         let mut board = create_mock_board();
         add_poly(&mut board, "p1", "orange", vec!["p2"]);
         add_poly(&mut board, "p2", "blue", vec!["p1", "p3"]); // different color
         add_poly(&mut board, "p3", "orange", vec!["p2"]);
         
-        add_piece(&mut board, "w_berserker", "p1", Side::White, PieceType::Berserker);
+        add_piece(&mut board, "w_golem", "p1", Side::White, PieceType::Golem);
         add_piece(&mut board, "w_goddess", "p3", Side::White, PieceType::Goddess);
 
         let mut gs = gs_playing(board);
         gs.color_chosen.insert(Side::White, "orange".to_string());
         
-        let captured = apply_move(&mut gs, "w_berserker", "p2");
-        apply_move_turnover(&mut gs, "w_berserker", "p2", false, captured.is_empty(), false);
+        let captured = apply_move(&mut gs, "w_golem", "p2");
+        apply_move_turnover(&mut gs, "w_golem", "p2", false, captured.is_empty(), false);
         
         assert_eq!(gs.locked_sequence_piece, None); // Lock cleared because landed on different color
         assert_eq!(gs.turn, Side::White); // Turn continues because it's a phalanx on different color

@@ -7,11 +7,11 @@ pub enum PieceType {
     Heroe,
     Goddess,
     Mage,
-    Bishop,
+    Witch,
     Soldier,
     Siren,
     Ghoul,
-    Berserker,
+    Golem,
 }
 
 impl Serialize for PieceType {
@@ -23,11 +23,11 @@ impl Serialize for PieceType {
             PieceType::Heroe => "heroe",
             PieceType::Goddess => "goddess",
             PieceType::Mage => "mage",
-            PieceType::Bishop => "bishop",
+            PieceType::Witch => "witch",
             PieceType::Soldier => "soldier",
             PieceType::Siren => "siren",
             PieceType::Ghoul => "ghoul",
-            PieceType::Berserker => "berserker",
+            PieceType::Golem => "golem",
         };
         serializer.serialize_str(s)
     }
@@ -43,11 +43,11 @@ impl<'de> Deserialize<'de> for PieceType {
             "heroe" | "heroes" | "king" | "kings" => Ok(PieceType::Heroe),
             "goddess" | "goddesses" => Ok(PieceType::Goddess),
             "mage" | "mages" => Ok(PieceType::Mage),
-            "bishop" | "bishops" => Ok(PieceType::Bishop),
+            "witch" | "witchs" | "witch" | "witchs" => Ok(PieceType::Witch),
             "soldier" | "soldiers" => Ok(PieceType::Soldier),
             "siren" | "sirens" => Ok(PieceType::Siren),
             "ghoul" | "ghouls" => Ok(PieceType::Ghoul),
-            "berserker" | "berserkers" | "trifox" | "trifoxes" => Ok(PieceType::Berserker),
+            "golem" | "golems" | "golem" | "golems" | "trifox" | "trifoxes" => Ok(PieceType::Golem),
             _ => Err(serde::de::Error::custom(format!("Unknown piece type: {}" , s))),
         }
     }

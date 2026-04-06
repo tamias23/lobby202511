@@ -14,8 +14,8 @@ The objective is to capture the opponent's **Goddess**. A game ends immediately 
 ## The Board
 
 The board consists of a tessellation of coloured polygons. Each polygon has two distinct adjacency graphs:
-1. **Jump Adjacency (`neighbours`)**: Used for leap-based movement (Goddess, Heroe, Mage, Bishop, Siren) and setup distance calculations.
-2. **Slide Adjacency (`neighbors`)**: Used for chaining movement (Soldier, Berserker, Ghoul), AoE effects (Bishop, Mage), Siren pin checks, and deployment proximity.
+1. **Jump Adjacency (`neighbours`)**: Used for leap-based movement (Goddess, Heroe, Mage, Witch, Siren) and setup distance calculations.
+2. **Slide Adjacency (`neighbors`)**: Used for chaining movement (Soldier, Golem, Ghoul), AoE effects (Witch, Mage), Siren pin checks, and deployment proximity.
 
 ## Pieces & Quantities (per player)
 
@@ -23,12 +23,12 @@ The board consists of a tessellation of coloured polygons. Each polygon has two 
 |------------|:-----:|---------------|------------|
 | Goddess    |   1   | Jump          | 2 hops     |
 | Heroe      |   2   | Jump          | 3 hops     |
-| Bishop     |   4   | Jump          | 4 hops     |
+| Witch     |   4   | Jump          | 4 hops     |
 | Mage       |   1   | Jump          | 3 hops     |
 | Soldier    |   9   | Slide (Chain) | 1+ hop     |
 | Ghoul      |   9   | Slide (Chain) | 1-3 hops   |
 | Siren      |   9   | Jump          | 2 hops     |
-| Berserker  |   2   | Slide (Chain) | 1+ hop     |
+| Golem  |   2   | Slide (Chain) | 1+ hop     |
 | **Total**  | **37**|               |            |
 
 ---
@@ -42,10 +42,10 @@ Pieces are placed in stages with specific spatial constraints:
    - Heroes are placed on the same edge, but must be **more than 6 jump-hops apart** from each other.
    - Each Heroe must be **between 4 and 6 jump-hops** from their own Goddess (not within 3, but within 6).
 
-2. **Berserkers (Guardians)**
+2. **Golems (Guardians)**
    - Placed within **1 jump-hop** of the Goddess (expanded to 2 if no space is available).
 
-3. **Bishops (Chromatic Spread)**
+3. **Witchs (Chromatic Spread)**
    - Placed on polygons of **different colours** from one another.
    - Candidates are usually within 1–4 hops of existing anchors.
 
@@ -68,7 +68,7 @@ Pieces are placed in stages with specific spatial constraints:
 A piece can move if:
 - It is in the **"returned"** state (is being deployed).
 - Its current polygon colour matches the **chosen colour**.
-- It is currently **sequence-locked** (e.g., a Soldier/Berserker that landed on chosen color or a Heroe after a capture).
+- It is currently **sequence-locked** (e.g., a Soldier/Golem that landed on chosen color or a Heroe after a capture).
 
 ### 2.3 Turnover Logic (`apply_move_turnover`)
 Landing on a polygon triggers checks that determine if the move or turn ends:
@@ -82,7 +82,7 @@ Landing on a polygon triggers checks that determine if the move or turn ends:
 - The **turn ends** ONLY if the piece is pinned on a **chosen colour** polygon.
 
 #### C. Landing on Chosen Colour (Rule 15/16)
-- **Soldiers & Berserkers**: The piece becomes **sequence-locked**. The turn does NOT end; this piece must move again (or pass) before other pieces can act.
+- **Soldiers & Golems**: The piece becomes **sequence-locked**. The turn does NOT end; this piece must move again (or pass) before other pieces can act.
 - **Other Pieces**: The **turn ends immediately**.
 
 #### D. Landing on Different Colour (Rule 14)
@@ -95,17 +95,17 @@ Landing on a polygon triggers checks that determine if the move or turn ends:
 
 ### 3.1 Global Restrictions
 - No piece may land on a polygon occupied by a **Friendly** piece.
-- No piece may land on or capture a **Berserker** (Ally or Enemy).
-- **Siren** and **Bishop** cannot capture; they only move to empty polygons.
+- No piece may land on or capture a **Golem** (Ally or Enemy).
+- **Siren** and **Witch** cannot capture; they only move to empty polygons.
 - **Siren Pin**: A piece slide-adjacent to an enemy Siren has **zero legal moves** (immobilized).
 
 ### 3.2 Specific Piece Ranges
 - **Goddess**: 2 jump-hops.
 - **Heroe**: 3 jump-hops. Limited to one bonus move per turn after a capture.
 - **Mage**: 3 jump-hops. **Must** land on a colour different from its start.
-- **Bishop**: 4 jump-hops. **Must** land on a colour matching its start.
+- **Witch**: 4 jump-hops. **Must** land on a colour matching its start.
 - **Siren**: 2 jump-hops. Passive pin aura (slide topology).
-- **Soldier / Berserker (Phalanx)**: May traverse a chain of slide-adjacent polygons. A chain can pass through friendly pieces or empty chosen-colour polygons (if not pinned by a Siren). The piece can then "step/capture" to any slide-adjacent polygon from any point in the chain.
+- **Soldier / Golem (Phalanx)**: May traverse a chain of slide-adjacent polygons. A chain can pass through friendly pieces or empty chosen-colour polygons (if not pinned by a Siren). The piece can then "step/capture" to any slide-adjacent polygon from any point in the chain.
 - **Ghoul**: Depth-limited chain (max 2 internal hops). Can chain through empty, non-chosen-colour polygons (if not pinned). Reaches up to 3 slide-hops total.
 
 ---
@@ -113,12 +113,12 @@ Landing on a polygon triggers checks that determine if the move or turn ends:
 ## 4. Captures & Area-of-Effect (AoE)
 
 ### 4.1 Captures
-Moving onto an enemy-occupied polygon (non-Berserker) returns that piece to the **"returned"** stash.
+Moving onto an enemy-occupied polygon (non-Golem) returns that piece to the **"returned"** stash.
 
 ### 4.2 Initial AoE Blasts (`apply_move`)
-- **Bishop (Landing Blast)**: After moving to an empty polygon, all enemy pieces slide-adjacent to the destination are destroyed.
+- **Witch (Landing Blast)**: After moving to an empty polygon, all enemy pieces slide-adjacent to the destination are destroyed.
 - **Mage (Chain Attack)**: After **successfully capturing** an enemy piece, all enemy pieces slide-adjacent to the destination are destroyed.
-- **Berserkers are immune** to all AoE blasts.
+- **Golems are immune** to all AoE blasts.
 
 ---
 
@@ -128,7 +128,7 @@ Pieces in the "returned" stash can re-enter the board on empty polygons if:
 1. The polygon matches the **chosen colour**.
 2. The polygon is **slide-adjacent to a friendly Mage** already on the board.
 
-**Bishop Restriction**: A Bishop cannot be deployed slide-adjacent to **any enemy piece**.
+**Witch Restriction**: A Witch cannot be deployed slide-adjacent to **any enemy piece**.
 
 ---
 
@@ -157,7 +157,7 @@ The following rule numbers are referenced in the engine source code (`engine.rs`
 - **Explanation**: For most pieces, landing on a chosen-color polygon completes its action. This typically triggers a turn end unless a sequence lock is active.
 
 ### **Rule 16 / Rule 74: Piece-Specific Sequence Locking**
-- **Description**: Soldier and Berserker "lock the sequence" instead of ending the turn.
+- **Description**: Soldier and Golem "lock the sequence" instead of ending the turn.
 - **Explanation**: When these pieces land on a chosen-color polygon and if they are not immobilized by a siren, they become "sequence locked." Only this piece may move again during the current turn until the sequence is broken by landing on a different color or passing.
 
 ### **Rule 44: Heroe Bonus Action**

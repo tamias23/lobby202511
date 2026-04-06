@@ -25,8 +25,8 @@ pub fn build_graph_data(gs: &GameState) -> (Array2<f32>, Array2<i64>, HashMap<St
     // Add 16 static Stock nodes (8 PieceTypes × 2 Sides)
     let sides = vec![Side::White, Side::Black];
     let types = vec![
-        PieceType::Goddess, PieceType::Heroe, PieceType::Mage, PieceType::Bishop,
-        PieceType::Soldier, PieceType::Siren, PieceType::Ghoul, PieceType::Berserker,
+        PieceType::Goddess, PieceType::Heroe, PieceType::Mage, PieceType::Witch,
+        PieceType::Soldier, PieceType::Siren, PieceType::Ghoul, PieceType::Golem,
     ];
     for side in &sides {
         for p_type in &types {
@@ -53,17 +53,17 @@ pub fn build_graph_data(gs: &GameState) -> (Array2<f32>, Array2<i64>, HashMap<St
                 "Goddess" => PieceType::Goddess,
                 "Heroe" => PieceType::Heroe,
                 "Mage" => PieceType::Mage,
-                "Bishop" => PieceType::Bishop,
+                "Witch" => PieceType::Witch,
                 "Soldier" => PieceType::Soldier,
                 "Siren" => PieceType::Siren,
                 "Ghoul" => PieceType::Ghoul,
-                "Berserker" => PieceType::Berserker,
+                "Golem" => PieceType::Golem,
                 _ => PieceType::Soldier,
             };
             let type_idx = match p_type {
                 PieceType::Goddess => 1, PieceType::Heroe => 2, PieceType::Mage => 3,
-                PieceType::Bishop => 4, PieceType::Soldier => 5, PieceType::Siren => 6,
-                PieceType::Ghoul => 7, PieceType::Berserker => 8,
+                PieceType::Witch => 4, PieceType::Soldier => 5, PieceType::Siren => 6,
+                PieceType::Ghoul => 7, PieceType::Golem => 8,
             };
             x[[i, type_idx]] = 1.0;
 
@@ -86,8 +86,8 @@ pub fn build_graph_data(gs: &GameState) -> (Array2<f32>, Array2<i64>, HashMap<St
             x[[i, 9]] = 1.0;
             let type_idx = match p.piece_type {
                 PieceType::Goddess => 1, PieceType::Heroe => 2, PieceType::Mage => 3,
-                PieceType::Bishop => 4, PieceType::Soldier => 5, PieceType::Siren => 6,
-                PieceType::Ghoul => 7, PieceType::Berserker => 8,
+                PieceType::Witch => 4, PieceType::Soldier => 5, PieceType::Siren => 6,
+                PieceType::Ghoul => 7, PieceType::Golem => 8,
             };
             x[[i, type_idx]] = 1.0;
         }

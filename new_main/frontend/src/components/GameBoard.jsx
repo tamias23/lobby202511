@@ -9,7 +9,7 @@ const PieceIcon = ({ type, side }) => {
   const stroke = "#000";
 
   switch (type) {
-    case "berserker":
+    case "golem":
       return (
         <g transform="scale(0.09)">
           {[0, 120, 240].map((angle) => (
@@ -75,7 +75,7 @@ const PieceIcon = ({ type, side }) => {
           />
         </g>
       );
-    case "bishop":
+    case "witch":
       return (
         <g transform="translate(-40, -44)">
           <polygon

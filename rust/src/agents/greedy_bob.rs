@@ -43,7 +43,7 @@ impl GreedyBobAgent {
 
         let mut mages_immobilized = 0.0;
         let mut soldiers_immobilized = 0.0;
-        let mut berserkers_immobilized = 0.0;
+        let mut golems_immobilized = 0.0;
         let mut ghouls_immobilized = 0.0;
         let mut sirens_immobilized = 0.0;
         let mut heroes_immobilized = 0.0;
@@ -58,7 +58,7 @@ impl GreedyBobAgent {
             // Distance tracking logically evaluated for active combatants requested
             let is_combatant = matches!(
                 piece.piece_type, 
-                PieceType::Soldier | PieceType::Berserker | PieceType::Mage | PieceType::Bishop | PieceType::Ghoul | PieceType::Heroe
+                PieceType::Soldier | PieceType::Golem | PieceType::Mage | PieceType::Witch | PieceType::Ghoul | PieceType::Heroe
             );
 
             if is_combatant {
@@ -102,7 +102,7 @@ impl GreedyBobAgent {
                 match piece.piece_type {
                     PieceType::Mage => mages_immobilized += 1.0,
                     PieceType::Soldier => soldiers_immobilized += 1.0,
-                    PieceType::Berserker => berserkers_immobilized += 1.0,
+                    PieceType::Golem => golems_immobilized += 1.0,
                     PieceType::Ghoul => ghouls_immobilized += 1.0,
                     PieceType::Siren => sirens_immobilized += 1.0,
                     PieceType::Heroe => heroes_immobilized += 1.0,
@@ -122,7 +122,7 @@ impl GreedyBobAgent {
         metrics[6] = heroes_board;
         metrics[7] = mages_immobilized;
         metrics[8] = soldiers_immobilized;
-        metrics[9] = berserkers_immobilized;
+        metrics[9] = golems_immobilized;
         metrics[10] = ghouls_immobilized;
         metrics[11] = sirens_immobilized;
         metrics[12] = heroes_immobilized;

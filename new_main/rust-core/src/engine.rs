@@ -23,7 +23,7 @@ pub struct GameState {
     pub heroe_take_counter: u32,
     pub visited_polygons: HashSet<String>,
     pub phase: GamePhase,
-    pub setup_step: u8, // 0=goddess, 1=heroe, 2=berserker, 3=bishop, 4=ghoul_siren
+    pub setup_step: u8, // 0=goddess, 1=heroe, 2=golem, 3=witch, 4=ghoul_siren
     pub setup_placements_this_turn: u32,
 }
 
@@ -62,8 +62,8 @@ impl GameState {
                         let (step_type, _) = match self.setup_step {
                             0 => (PieceType::Goddess, 1),
                             1 => (PieceType::Heroe, 2),
-                            2 => (PieceType::Berserker, 2),
-                            3 => (PieceType::Bishop, 4),
+                            2 => (PieceType::Golem, 2),
+                            3 => (PieceType::Witch, 4),
                             4 => (PieceType::Ghoul, 18), // Ghouls + Sirens
                             _ => (PieceType::Soldier, 0), // Should not reach
                         };
@@ -329,7 +329,7 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
                 }
                 
                 if valid {
-                    if piece.piece_type == PieceType::Bishop {
+                    if piece.piece_type == PieceType::Witch {
                         let mut enemy_adj = false;
                         for n in state.get_slide_neighbors(poly_id) {
                             if let Some(s) = state.get_occupant_side(&n) {
@@ -374,7 +374,7 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
                 }
             }
         },
-        PieceType::Bishop => {
+        PieceType::Witch => {
             let start_color = &state.board.polygons[start].color;
             for t in get_polys_within_distance_jump(&state.board, start, 4) {
                 if state.board.polygons[&t].color == *start_color {
@@ -390,7 +390,7 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
         PieceType::Siren => {
             targets = get_polys_within_distance_jump(&state.board, start, 2);
         },
-        PieceType::Soldier | PieceType::Berserker => {
+        PieceType::Soldier | PieceType::Golem => {
             // Simplified soldier movement: 1 step, or chain over friendly pieces & empty matching-color polys
             let mut friendly_hops = HashSet::new();
             let mut explore = vec![start.clone()];
@@ -467,11 +467,11 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
 
     targets.into_iter().filter(|t| {
         if t == start || state.get_occupant_side(t) == Some(piece.side.clone()) { return false; }
-        if state.get_occupant_type(t) == Some(PieceType::Berserker) {
+        if state.get_occupant_type(t) == Some(PieceType::Golem) {
             return false;
         }
-        if piece.piece_type == PieceType::Siren || piece.piece_type == PieceType::Bishop {
-            if state.is_occupied(t) { return false; } // Siren and Bishop can never capture; they only move to empty polygons
+        if piece.piece_type == PieceType::Siren || piece.piece_type == PieceType::Witch {
+            if state.is_occupied(t) { return false; } // Siren and Witch can never capture; they only move to empty polygons
         }
         true
     }).collect()
@@ -504,12 +504,12 @@ pub fn apply_move(state: &mut GameState, piece_id: &str, target_poly: &str) -> V
     state.occupancy.insert(target_poly.to_string(), piece_id.to_string());
     
     // Process AoE Capabilities
-    if piece_type == PieceType::Bishop {
-        // Destroy all adjacent enemy pieces except Berserker utilizing strict `slide` topologies natively mirroring local blasts
+    if piece_type == PieceType::Witch {
+        // Destroy all adjacent enemy pieces except Golem utilizing strict `slide` topologies natively mirroring local blasts
         for n in state.get_slide_neighbors(target_poly) {
             if let Some(target_id) = state.occupancy.get(&n).cloned() {
                 let neighbor_piece = state.board.pieces.get(&target_id).unwrap();
-                if neighbor_piece.side != piece_side && neighbor_piece.piece_type != PieceType::Berserker {
+                if neighbor_piece.side != piece_side && neighbor_piece.piece_type != PieceType::Golem {
                     captured_types.push(neighbor_piece.piece_type.clone());
                     let mut_p = state.board.pieces.get_mut(&target_id).unwrap();
                     mut_p.position = "returned".to_string();
@@ -523,7 +523,7 @@ pub fn apply_move(state: &mut GameState, piece_id: &str, target_poly: &str) -> V
         for n in state.get_slide_neighbors(target_poly) {
             if let Some(target_id) = state.occupancy.get(&n).cloned() {
                 let neighbor_piece = state.board.pieces.get(&target_id).unwrap();
-                if neighbor_piece.side == target_side && neighbor_piece.piece_type != PieceType::Berserker {
+                if neighbor_piece.side == target_side && neighbor_piece.piece_type != PieceType::Golem {
                     captured_types.push(neighbor_piece.piece_type.clone());
                     let mut_p = state.board.pieces.get_mut(&target_id).unwrap();
                     mut_p.position = "returned".to_string();
@@ -553,11 +553,11 @@ pub fn setup_pieces(state: &mut GameState) {
                 crate::models::PieceType::Heroe => "heroe",
                 crate::models::PieceType::Goddess => "goddess",
                 crate::models::PieceType::Mage => "mage",
-                crate::models::PieceType::Bishop => "bishop",
+                crate::models::PieceType::Witch => "witch",
                 crate::models::PieceType::Soldier => "soldier",
                 crate::models::PieceType::Siren => "siren",
                 crate::models::PieceType::Ghoul => "ghoul",
-                crate::models::PieceType::Berserker => "berserker",
+                crate::models::PieceType::Golem => "golem",
             };
             for i in 0..count {
                 let id = format!("{}_{}_{}", side_str, p_str, i);
@@ -572,12 +572,12 @@ pub fn setup_pieces(state: &mut GameState) {
         
         add_pieces(crate::models::PieceType::Goddess, 1);
         add_pieces(crate::models::PieceType::Heroe, 2);
-        add_pieces(crate::models::PieceType::Bishop, 4);
+        add_pieces(crate::models::PieceType::Witch, 4);
         add_pieces(crate::models::PieceType::Mage, 1);
         add_pieces(crate::models::PieceType::Soldier, 9);
         add_pieces(crate::models::PieceType::Ghoul, 9);
         add_pieces(crate::models::PieceType::Siren, 9);
-        add_pieces(crate::models::PieceType::Berserker, 2);
+        add_pieces(crate::models::PieceType::Golem, 2);
     }
 }
 
@@ -641,8 +641,8 @@ pub fn setup_random_board(state: &mut GameState, side_filter: Option<Side>) {
         let mut heroe0_id = String::new();
         let mut heroe1_id = String::new();
         
-        let mut bishop_ids = Vec::new();
-        let mut berserker_ids = Vec::new();
+        let mut witch_ids = Vec::new();
+        let mut golem_ids = Vec::new();
         let mut ghoul_ids = Vec::new();
         let mut siren_ids = Vec::new();
 
@@ -654,8 +654,8 @@ pub fn setup_random_board(state: &mut GameState, side_filter: Option<Side>) {
                         if heroe0_id.is_empty() { heroe0_id = id.clone(); }
                         else { heroe1_id = id.clone(); }
                     },
-                    PieceType::Bishop => bishop_ids.push(id.clone()),
-                    PieceType::Berserker => berserker_ids.push(id.clone()),
+                    PieceType::Witch => witch_ids.push(id.clone()),
+                    PieceType::Golem => golem_ids.push(id.clone()),
                     PieceType::Ghoul => ghoul_ids.push(id.clone()),
                     PieceType::Siren => siren_ids.push(id.clone()),
                     _ => {}
@@ -703,15 +703,15 @@ pub fn setup_random_board(state: &mut GameState, side_filter: Option<Side>) {
             continue; // No valid edges found for safety
         }
 
-        // B. Protectors (Berserkers)
+        // B. Protectors (Golems)
         let mut set1_goddess: Vec<String> = get_polys_within_distance_jump(&state.board, &g_poly, 1).into_iter().collect();
-        if set1_goddess.len() < berserker_ids.len() {
+        if set1_goddess.len() < golem_ids.len() {
             set1_goddess = get_polys_within_distance_jump(&state.board, &g_poly, 2).into_iter().collect();
         }
         set1_goddess.shuffle(&mut rng);
         
         let mut k = 0;
-        for id in berserker_ids {
+        for id in golem_ids {
             while k < set1_goddess.len() && state.occupancy.contains_key(&set1_goddess[k]) {
                 k += 1;
             }
@@ -739,7 +739,7 @@ pub fn setup_random_board(state: &mut GameState, side_filter: Option<Side>) {
             }
         }
         
-        // C. Chromatic Spread (Bishops)
+        // C. Chromatic Spread (Witchs)
         let mut color_found_set = HashSet::new();
         let mut color_found_arr = Vec::new();
         for p in &set_all {
@@ -749,14 +749,14 @@ pub fn setup_random_board(state: &mut GameState, side_filter: Option<Side>) {
             }
         }
         color_found_arr.shuffle(&mut rng);
-        color_found_arr.truncate(bishop_ids.len());
+        color_found_arr.truncate(witch_ids.len());
         
         let mut pieces_to_set = Vec::new();
-        let mut bishop_colors = HashMap::new();
+        let mut witch_colors = HashMap::new();
         
-        for (i, id) in bishop_ids.into_iter().enumerate() {
+        for (i, id) in witch_ids.into_iter().enumerate() {
             if i < color_found_arr.len() {
-                bishop_colors.insert(id.clone(), color_found_arr[i].clone());
+                witch_colors.insert(id.clone(), color_found_arr[i].clone());
                 pieces_to_set.push(id);
             }
         }
@@ -774,7 +774,7 @@ pub fn setup_random_board(state: &mut GameState, side_filter: Option<Side>) {
                 
                 if !state.occupancy.contains_key(&id_poly) {
                     let poly_color = &state.board.polygons[&id_poly].color;
-                    if let Some(target_col) = bishop_colors.get(&p_id) {
+                    if let Some(target_col) = witch_colors.get(&p_id) {
                         if poly_color == target_col {
                             state.occupancy.insert(id_poly.clone(), p_id.clone());
                             state.board.pieces.get_mut(&p_id).unwrap().position = id_poly.clone();
@@ -800,13 +800,13 @@ pub fn setup_random_board(state: &mut GameState, side_filter: Option<Side>) {
 
     // Only transition to Playing if BOTH sides are actually setup (all pieces placed)
     let any_returned = state.board.pieces.values().any(|p| {
-        // Pieces that SHOULD be placed (Goddess, Heroes, Berserkers, Bishops, Infantry)
+        // Pieces that SHOULD be placed (Goddess, Heroes, Golems, Witchs, Infantry)
         // Note: Soldiers and Mages might stay returned until late-game, but for setup, we check others.
         p.position == "returned" && 
         (p.piece_type == PieceType::Goddess || 
          p.piece_type == PieceType::Heroe || 
-         p.piece_type == PieceType::Berserker || 
-         p.piece_type == PieceType::Bishop || 
+         p.piece_type == PieceType::Golem || 
+         p.piece_type == PieceType::Witch || 
          p.piece_type == PieceType::Ghoul || 
          p.piece_type == PieceType::Siren)
     });
@@ -828,8 +828,8 @@ pub fn get_setup_legal_placements(state: &GameState) -> HashMap<String, Vec<Stri
     let (step_type, _count_needed) = match state.setup_step {
         0 => (PieceType::Goddess, 1),
         1 => (PieceType::Heroe, 2),
-        2 => (PieceType::Berserker, 2),
-        3 => (PieceType::Bishop, 4),
+        2 => (PieceType::Golem, 2),
+        3 => (PieceType::Witch, 4),
         4 => (PieceType::Ghoul, 18), // Ghouls + Sirens
         _ => return placements,
     };
@@ -901,7 +901,7 @@ pub fn get_setup_legal_placements(state: &GameState) -> HashMap<String, Vec<Stri
                 }
             }
         },
-        2 => { // Berserkers near Goddess
+        2 => { // Golems near Goddess
             let goddess_pos = get_piece_pos_by_type(state, current_side, PieceType::Goddess);
             if let Some(g_pos) = goddess_pos {
                 let mut near = get_polys_within_distance_jump(&state.board, &g_pos, 1);
@@ -915,10 +915,10 @@ pub fn get_setup_legal_placements(state: &GameState) -> HashMap<String, Vec<Stri
                 }
             }
         },
-        3 => { // Bishops on unique colors - closest possible ring (dist 1-4)
+        3 => { // Witchs on unique colors - closest possible ring (dist 1-4)
             let anchors = get_anchor_positions(state, current_side);
-            let placed_bishops = get_placed_piece_ids_by_type(state, current_side, PieceType::Bishop);
-            let used_colors: HashSet<_> = placed_bishops.iter()
+            let placed_witchs = get_placed_piece_ids_by_type(state, current_side, PieceType::Witch);
+            let used_colors: HashSet<_> = placed_witchs.iter()
                 .map(|id| state.board.polygons[&state.board.pieces[id].position].color.clone())
                 .collect();
             
@@ -1063,8 +1063,8 @@ fn check_setup_step_complete(state: &GameState, side: Side) -> bool {
     let (step_type, count) = match state.setup_step {
         0 => (PieceType::Goddess, 1),
         1 => (PieceType::Heroe, 2),
-        2 => (PieceType::Berserker, 2),
-        3 => (PieceType::Bishop, 4),
+        2 => (PieceType::Golem, 2),
+        3 => (PieceType::Witch, 4),
         4 => (PieceType::Ghoul, 18), // Ghouls + Sirens
         _ => return true,
     };
@@ -1113,7 +1113,7 @@ pub fn apply_move_turnover(state: &mut GameState, chosen_piece: &str, chosen_tar
     let p_obj = &state.board.pieces[chosen_piece];
     let piece_type = p_obj.piece_type.clone();
     let is_heroe = piece_type == PieceType::Heroe;
-    let is_chainable = piece_type == PieceType::Soldier || piece_type == PieceType::Berserker;
+    let is_chainable = piece_type == PieceType::Soldier || piece_type == PieceType::Golem;
 
     println!("[Engine] Turnover check: piece={:?}, target={}, target_color={}, chosen_color={}", piece_type, chosen_target, target_color, chosen_color);
     
@@ -1147,7 +1147,7 @@ pub fn apply_move_turnover(state: &mut GameState, chosen_piece: &str, chosen_tar
             state.locked_sequence_piece = None;
         } else if target_color == chosen_color {
             // Rule 15: Landing on chosen color ends the MOVE.
-            // Rule 16/74: Soldier and Berserker "lock the sequence" instead of ending turn.
+            // Rule 16/74: Soldier and Golem "lock the sequence" instead of ending turn.
             if is_chainable {
                 turn_ends = false;
                 state.locked_sequence_piece = Some(chosen_piece.to_string());
@@ -1160,7 +1160,7 @@ pub fn apply_move_turnover(state: &mut GameState, chosen_piece: &str, chosen_tar
         } else {
             // Landing on a DIFFERENT color (Different-Color, Grey, etc.)
             if is_chainable {
-                // Rule 16/74: Landing on a different color BREAKS the sequence for Soldiers/Berserker.
+                // Rule 16/74: Landing on a different color BREAKS the sequence for Soldiers/Golem.
                 state.locked_sequence_piece = None;
                 state.heroe_take_counter = 0;
                 turn_ends = false; 
@@ -1414,7 +1414,7 @@ mod tests {
 
         let mut pieces = HashMap::new();
         pieces.insert("B1".to_string(), Piece {
-            id: "B1".to_string(), piece_type: PieceType::Bishop, side: Side::White, position: "P1".to_string(),
+            id: "B1".to_string(), piece_type: PieceType::Witch, side: Side::White, position: "P1".to_string(),
         });
         pieces.insert("S1".to_string(), Piece {
             id: "S1".to_string(), piece_type: PieceType::Soldier, side: Side::White, position: "P2".to_string(),
@@ -1433,7 +1433,7 @@ mod tests {
         state.color_chosen.insert(Side::White, "blue".to_string());
         state.is_new_turn = true;
 
-        // Move 1: Bishop moves to P2 (empty, Blue)
+        // Move 1: Witch moves to P2 (empty, Blue)
         apply_move(&mut state, "B1", "P2");
         apply_move_turnover(&mut state, "B1", "P2", false, true, false);
 
@@ -1506,9 +1506,9 @@ mod tests {
         });
 
         let mut pieces = HashMap::new();
-        // White Berserker moving to P2
+        // White Golem moving to P2
         pieces.insert("W_B1".to_string(), Piece {
-            id: "W_B1".to_string(), piece_type: PieceType::Berserker, side: Side::White, position: "P1".to_string(),
+            id: "W_B1".to_string(), piece_type: PieceType::Golem, side: Side::White, position: "P1".to_string(),
         });
         // Black Siren on P3
         pieces.insert("B_S1".to_string(), Piece {
@@ -1590,7 +1590,7 @@ mod tests {
     }
 
     #[test]
-    fn test_user_reported_berserker_move_to_different_color() {
+    fn test_user_reported_golem_move_to_different_color() {
         use std::collections::HashMap;
         let mut polygons = HashMap::new();
         // Chosen color: green. Landing color: grey.
@@ -1604,9 +1604,9 @@ mod tests {
         });
 
         let mut pieces = HashMap::new();
-        // White Berserker moving from start to P2.
+        // White Golem moving from start to P2.
         pieces.insert("W_B1".to_string(), Piece {
-            id: "W_B1".to_string(), piece_type: PieceType::Berserker, side: Side::White, position: "P1".to_string(),
+            id: "W_B1".to_string(), piece_type: PieceType::Golem, side: Side::White, position: "P1".to_string(),
         });
         // OTHER White piece to prevent turn switch
         pieces.insert("W_S2".to_string(), Piece {
@@ -1642,13 +1642,13 @@ mod tests {
 
         // Verify result:
         // 1. Should be UNLOCKED (None) because grey != green.
-        assert!(state.locked_sequence_piece.is_none(), "Berserker should unlock after moving to non-chosen color even after capture");
+        assert!(state.locked_sequence_piece.is_none(), "Golem should unlock after moving to non-chosen color even after capture");
         // 2. Turn should NOT end.
         assert_eq!(state.turn, Side::White);
     }
 
     #[test]
-    fn test_berserker_deadlock_recovery_on_grey() {
+    fn test_golem_deadlock_recovery_on_grey() {
         use std::collections::HashMap;
         let mut polygons = HashMap::new();
         polygons.insert("P1".to_string(), Polygon {
@@ -1665,9 +1665,9 @@ mod tests {
         });
 
         let mut pieces = HashMap::new();
-        // White Berserker at P2 (grey).
+        // White Golem at P2 (grey).
         pieces.insert("W_B1".to_string(), Piece {
-            id: "W_B1".to_string(), piece_type: PieceType::Berserker, side: Side::White, position: "P2".to_string(),
+            id: "W_B1".to_string(), piece_type: PieceType::Golem, side: Side::White, position: "P2".to_string(),
         });
         // Other white piece on P3 (on-color).
         pieces.insert("W_S1".to_string(), Piece {
@@ -1685,7 +1685,7 @@ mod tests {
         state.color_chosen.insert(Side::White, "green".to_string());
         state.is_new_turn = false;
 
-        // Force a sequence lock on the Berserker.
+        // Force a sequence lock on the Golem.
         state.locked_sequence_piece = Some("W_B1".to_string());
         
         // Apply turnover at P2 (grey). 
@@ -1693,7 +1693,7 @@ mod tests {
         apply_move_turnover(&mut state, "W_B1", "P2", false, true, false);
 
         // Verification:
-        // 1. Berserker should be UNLOCKED (None).
+        // 1. Golem should be UNLOCKED (None).
         assert!(state.locked_sequence_piece.is_none(), "Lock must be cleared if piece has no moves");
         assert_eq!(state.turn, Side::White, "Turn should remain White because other pieces are eligible");
 
@@ -1772,7 +1772,7 @@ mod tests {
     }
 
     #[test]
-    fn test_berserker_capture_different_color_unlocks_even_if_moves_remain() {
+    fn test_golem_capture_different_color_unlocks_even_if_moves_remain() {
         let mut polygons = HashMap::new();
         polygons.insert("P1".to_string(), Polygon {
             id: 1, name: "P1".to_string(), color: "green".to_string(), shape: "tri".to_string(),
@@ -1789,7 +1789,7 @@ mod tests {
 
         let mut pieces = HashMap::new();
         pieces.insert("W_B1".to_string(), Piece {
-            id: "W_B1".to_string(), piece_type: PieceType::Berserker, side: Side::White, position: "P1".to_string(),
+            id: "W_B1".to_string(), piece_type: PieceType::Golem, side: Side::White, position: "P1".to_string(),
         });
         pieces.insert("B_S1".to_string(), Piece {
             id: "B_S1".to_string(), piece_type: PieceType::Soldier, side: Side::Black, position: "P2".to_string(),
@@ -1805,7 +1805,7 @@ mod tests {
         assert!(!captured.is_empty());
         apply_move_turnover(&mut state, "W_B1", "P2", false, false, false);
 
-        // Verification: Berserker SHOULD be unlocked because it landed on GREY.
+        // Verification: Golem SHOULD be unlocked because it landed on GREY.
         assert!(state.locked_sequence_piece.is_none(), "Sequence must break on non-chosen color landing");
         
         // Note: Turn swaps to Black only if no OTHER pieces can move.
@@ -1815,7 +1815,7 @@ mod tests {
     }
 
     #[test]
-    fn test_berserker_capture_different_color_unlocks_with_other_pieces_remaining() {
+    fn test_golem_capture_different_color_unlocks_with_other_pieces_remaining() {
         let mut polygons = HashMap::new();
         polygons.insert("P1".to_string(), Polygon {
             id: 1, name: "P1".to_string(), color: "green".to_string(), shape: "tri".to_string(),
@@ -1836,7 +1836,7 @@ mod tests {
 
         let mut pieces = HashMap::new();
         pieces.insert("W_B1".to_string(), Piece {
-            id: "W_B1".to_string(), piece_type: PieceType::Berserker, side: Side::White, position: "P1".to_string(),
+            id: "W_B1".to_string(), piece_type: PieceType::Golem, side: Side::White, position: "P1".to_string(),
         });
         pieces.insert("W_S1".to_string(), Piece {
             id: "W_S1".to_string(), piece_type: PieceType::Soldier, side: Side::White, position: "P3".to_string(),
