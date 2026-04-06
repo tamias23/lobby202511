@@ -125,7 +125,7 @@ pub struct Edge {
 pub struct BoardMap {
     #[serde(rename = "allPolygons")]
     pub polygons: HashMap<String, Polygon>,
-    #[serde(rename = "allPieces")]
+    #[serde(rename = "allPieces", default)]
     pub pieces: HashMap<String, Piece>,
     #[serde(rename = "allEdges")]
     pub edges: HashMap<String, Edge>,

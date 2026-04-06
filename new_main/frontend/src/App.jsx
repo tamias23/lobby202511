@@ -69,7 +69,7 @@ function App() {
   };
 
   return (
-    <div className="App" style={appStyle}>
+    <div className="App" style={{ ...appStyle, padding: view === 'playing' ? '8px' : '20px' }}>
       {/* Theme Toggle Button */}
       <button 
         onClick={() => {

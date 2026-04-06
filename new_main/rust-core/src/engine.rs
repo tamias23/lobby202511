@@ -210,7 +210,8 @@ pub fn get_legal_colors(state: &GameState, side: &Side) -> Vec<String> {
 
     for c in colors {
         let mut clone_state = state.clone();
-        clone_state.color_chosen.insert(*side, c.clone());
+        let lc = c.to_lowercase();
+        clone_state.color_chosen.insert(*side, lc.clone());
         let mut has_move = false;
         for p in clone_state.board.pieces.values() {
             if p.side == *side {
@@ -218,7 +219,7 @@ pub fn get_legal_colors(state: &GameState, side: &Side) -> Vec<String> {
                 if p.position == "returned" {
                     can_start = true;
                 } else if p.position != "graveyard"
-                    && clone_state.board.polygons.get(&p.position).map(|x| &x.color) == Some(&c)
+                    && clone_state.board.polygons.get(&p.position).map(|x| x.color.to_lowercase()) == Some(lc.clone())
                 {
                     can_start = true;
                 }
@@ -1113,6 +1114,8 @@ pub fn apply_move_turnover(state: &mut GameState, chosen_piece: &str, chosen_tar
     let piece_type = p_obj.piece_type.clone();
     let is_heroe = piece_type == PieceType::Heroe;
     let is_chainable = piece_type == PieceType::Soldier || piece_type == PieceType::Berserker;
+
+    println!("[Engine] Turnover check: piece={:?}, target={}, target_color={}, chosen_color={}", piece_type, chosen_target, target_color, chosen_color);
     
     let turn_ends;
 
@@ -1201,6 +1204,7 @@ pub fn apply_move_turnover(state: &mut GameState, chosen_piece: &str, chosen_tar
 
         // Check if the player is actually stuck.
         if !state.has_any_legal_moves() {
+            println!("[Engine] Turnover: Turn swapped because player {:?} has no legal moves (Stuck check).", state.turn);
             state.turn_counter += 1;
             state.turn = state.get_enemy_side();
             state.color_chosen.clear();
@@ -1212,10 +1216,15 @@ pub fn apply_move_turnover(state: &mut GameState, chosen_piece: &str, chosen_tar
         }
     }
     
+    if turn_ends {
+        println!("[Engine] Turnover: Turn ends naturally. Now {:?}'s turn.", state.turn);
+    }
+    
     goddess_captured
 }
 
 pub fn pass_turn(state: &mut GameState) {
+    println!("[Engine] pass_turn called for {:?}", state.turn);
     state.turn_counter += 1;
     state.turn = state.get_enemy_side();
     state.color_chosen.clear();

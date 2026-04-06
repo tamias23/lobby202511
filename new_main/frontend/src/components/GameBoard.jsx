@@ -809,11 +809,13 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
 
       if (isOffBoard) {
         if (actualPieceSide === "white") {
-          cx = -60 - (returnedCounters.white % 3) * 30;
+          // Tightened horizontal placement
+          cx = -25 - (returnedCounters.white % 3) * 26;
           cy = 60 + Math.floor(returnedCounters.white / 3) * 30;
           returnedCounters.white++;
         } else {
-          cx = 468 + (returnedCounters.black % 3) * 30;
+          // Tightened horizontal placement
+          cx = 435 + (returnedCounters.black % 3) * 26;
           cy = 60 + Math.floor(returnedCounters.black / 3) * 30;
           returnedCounters.black++;
         }
@@ -1134,7 +1136,7 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
       <div className="game-board-wrapper" style={{ position: 'relative', flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', minWidth: 0, minHeight: 0 }}>
         <svg
           ref={svgRef}
-          viewBox="-143 -19 695 457"
+          viewBox="-100 -10 610 445"
           style={svgStyle}
           onMouseMove={handleGlobalMouseMove}
           onMouseUp={handleGlobalMouseUp}
@@ -1358,9 +1360,9 @@ const boardContainerStyle = {
   alignItems: "stretch",
   width: "100%",
   height: "100%",
-  padding: "10px",
+  padding: "4px",
   boxSizing: "border-box",
-  gap: "15px",
+  gap: "8px",
 };
 
 const leftHudStyle = {
@@ -1387,7 +1389,7 @@ const statusBarStyle = {
 const svgStyle = {
   width: "100%",
   height: "100%",
-  maxHeight: "95vh",
+  maxHeight: "100vh",
   filter: "drop-shadow(0px 10px 20px rgba(0,0,0,0.5))",
   transformOrigin: "center center",
 };

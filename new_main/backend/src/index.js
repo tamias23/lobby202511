@@ -9,32 +9,56 @@ const { generateGuestId } = require('./utils/auth');
 const fs = require('fs');
 const path = require('path');
 const { sendVerificationEmail } = require('./utils/email');
-const { getLegalMovesNapi, applyMoveNapi, initGameStateNapi, randomizeSetupNapi, endTurnSetupNapi, passTurnPlayingNapi, selectColorNapi } = require('../rust-napi');
+let getLegalMovesNapi, applyMoveNapi, initGameStateNapi, randomizeSetupNapi, endTurnSetupNapi, passTurnPlayingNapi, selectColorNapi;
+
+try {
+    const napi = require('../rust-napi');
+    getLegalMovesNapi = napi.getLegalMovesNapi;
+    applyMoveNapi = napi.applyMoveNapi;
+    initGameStateNapi = napi.initGameStateNapi;
+    randomizeSetupNapi = napi.randomizeSetupNapi;
+    endTurnSetupNapi = napi.endTurnSetupNapi;
+    passTurnPlayingNapi = napi.passTurnPlayingNapi;
+    selectColorNapi = napi.selectColorNapi;
+} catch (err) {
+    console.error("CRITICAL: Failed to load Rust NAPI module from '../rust-napi'");
+    console.error("Current __dirname:", __dirname);
+    try {
+        const parentDir = path.join(__dirname, '..');
+        console.error("Parent directory contents:", fs.readdirSync(parentDir));
+        const napiDir = path.join(parentDir, 'rust-napi');
+        if (fs.existsSync(napiDir)) {
+            console.error("rust-napi directory contents:", fs.readdirSync(napiDir));
+        } else {
+            console.error("rust-napi directory does NOT exist at:", napiDir);
+        }
+    } catch (e) {
+        console.error("Failed to read directory info:", e.message);
+    }
+    throw err;
+}
+
 const { saveMatchResult } = require('./utils/gameStorage');
 
-// --- BOARD LOADING ---
+// --- BOARD LOADING (Lazy Loading) ---
 const BOARDS_PATH = path.join(__dirname, 'utils', 'boards');
-const boardPool = [];
+const boardPool = []; // Now stores filenames instead of full objects
 
 function loadBoards() {
     try {
         const files = fs.readdirSync(BOARDS_PATH);
         files.forEach(file => {
             if (file.endsWith('.json')) {
-                try {
-                    const data = JSON.parse(fs.readFileSync(path.join(BOARDS_PATH, file), 'utf8'));
-                    boardPool.push(data);
-                } catch (e) {
-                    console.error(`Failed to load board ${file}:`, e);
-                }
+                // Just keep the filename, don't load the content yet
+                boardPool.push(file);
             }
         });
         if (boardPool.length === 0) {
             throw new Error("No boards found in utils/boards");
         }
-        console.log(`Successfully loaded ${boardPool.length} boards into the pool.`);
+        console.log(`Detected ${boardPool.length} boards for on-demand loading.`);
     } catch (e) {
-        console.error("Defaulting to empty pool. Please provide board.json in the boards directory.", e);
+        console.error("Critical error: No boards detected in utils/boards.", e.message);
     }
 }
 
@@ -243,7 +267,17 @@ io.on('connection', (socket) => {
             lobby.waitingPlayers = lobby.waitingPlayers.filter(p => p.socketId !== opponent.socketId);
             
             // 1. Randomize Board Selection
-            const boardData = boardPool[Math.floor(Math.random() * boardPool.length)];
+            // 1. Randomize Board Selection (On-demand load)
+            const randomBoardFile = boardPool[Math.floor(Math.random() * boardPool.length)];
+            let boardData;
+            try {
+                const boardPath = path.join(BOARDS_PATH, randomBoardFile);
+                boardData = JSON.parse(fs.readFileSync(boardPath, 'utf8'));
+            } catch (err) {
+                console.error(`Failed to lazy-load board ${randomBoardFile}:`, err);
+                // Fallback to minimal board structure if somehow the file is missing/invalid
+                boardData = { allPolygons: {}, allEdges: {}, pieces: {} }; 
+            }
 
             // 2. Randomize Sides
             const isPlayerWhite = Math.random() > 0.5;
@@ -257,12 +291,11 @@ io.on('connection', (socket) => {
                     boardJson: JSON.stringify(boardData),
                     randomSetup: false
                 });
-                piecesJsonString = response.piecesJson;
-                initPieces = JSON.parse(piecesJsonString);
+                initPieces = JSON.parse(response.piecesJson);
             } catch (e) {
                 console.error("Error initializing game via NAPI:", e);
-                piecesJsonString = JSON.stringify(Object.values(boardData.allPieces)); 
-                initPieces = Object.values(boardData.allPieces);
+                // The authoritative Rust setup failed.
+                initPieces = [];
             }
 
             const gameId = `game_${Date.now()}`;
@@ -398,7 +431,7 @@ io.on('connection', (socket) => {
                 clocks: game.clocks,
                 lastTurnTimestamp: game.lastTurnTimestamp
             });
-            console.log(`Setting authoritative color ${color} for ${side} in game ${gameId}`);
+            console.log(`[Backend] Authoritative color ${color} set for ${game.turn} by ${side} in game ${gameId}. isNewTurn=${game.isNewTurn}`);
         } catch (error) {
             console.error('Error selecting color:', error);
         }
@@ -621,53 +654,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('select_color', ({ gameId, color }) => {
-        const game = lobby.activeGames.get(gameId);
-        if (!game) return;
-
-        try {
-            const response = selectColorNapi({
-                boardJson: JSON.stringify(game.board),
-                piecesJson: JSON.stringify(game.pieces),
-                color: color,
-                turn: game.turn,
-                phase: game.phase,
-                setupStep: game.setupStep,
-                colorChosen: game.colorChosen || {},
-                colorsEverChosen: game.colorsEverChosen || [],
-                turnCounter: game.turnCounter || 0,
-                isNewTurn: game.isNewTurn !== undefined ? game.isNewTurn : true,
-                movesThisTurn: game.movesThisTurn || 0,
-                lockedSequencePiece: game.lockedSequencePiece || undefined,
-                heroeTakeCounter: game.heroeTakeCounter || 0
-            });
-
-            game.colorChosen = response.colorChosen;
-            game.colorsEverChosen = response.colorsEverChosen;
-            game.mageUnlocked = response.mageUnlocked;
-            game.isNewTurn = response.isNewTurn;
-
-            io.to(gameId).emit('game_update', {
-                pieces: game.pieces,
-                turn: game.turn,
-                colorChosen: game.colorChosen,
-                colorsEverChosen: game.colorsEverChosen,
-                mageUnlocked: game.mageUnlocked,
-                phase: game.phase,
-                setupStep: game.setupStep,
-                turnCounter: game.turnCounter,
-                isNewTurn: game.isNewTurn,
-                movesThisTurn: game.movesThisTurn,
-                lockedSequencePiece: game.lockedSequencePiece || null,
-                heroeTakeCounter: game.heroeTakeCounter,
-                clocks: game.clocks,
-                lastTurnTimestamp: game.lastTurnTimestamp
-            });
-            console.log(`Color ${color} selected for ${game.turn} in ${gameId}`);
-        } catch (e) {
-            console.error('Error selecting color:', e);
-        }
-    });
+    // Redundant select_color removed (frontend uses color_selected)
 
     socket.on('apply_move', ({ gameId, pieceId, targetPoly }) => {
         const game = lobby.activeGames.get(gameId);
@@ -799,6 +786,34 @@ io.on('connection', (socket) => {
         console.log('User disconnected:', socket.id);
     });
 });
+
+// --- PRODUCTION STATIC SERVING ---
+const possibleDistPaths = [
+    path.join(__dirname, '../../frontend/dist'),
+    path.join(__dirname, '../dist'),
+    path.join(__dirname, '../../dist'),
+];
+
+const distPath = possibleDistPaths.find(p => fs.existsSync(p));
+
+if (distPath) {
+    app.use(express.static(distPath));
+    console.log('Serving production assets from:', distPath);
+
+    // Single Page Application (SPA) catch-all
+    app.get('*', (req, res, next) => {
+        // Skip API, Socket.io, and other backend routes
+        if (req.url.startsWith('/socket.io') || 
+            req.url.startsWith('/verify-email') || 
+            req.url.startsWith('/register') ||
+            req.url.startsWith('/login')) {
+            return next();
+        }
+        res.sendFile(path.join(distPath, 'index.html'));
+    });
+} else {
+    console.warn('WARNING: Production frontend assets (dist) not found in expected locations.');
+}
 
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`Backend server running on port ${PORT}`);

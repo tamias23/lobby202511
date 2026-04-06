@@ -2,16 +2,6 @@ import json
 import sys
 import os
 
-# Updated mapping based on user feedback
-TYPE_MAPPING = {
-    "king": "goddess",
-    "mage": "heroe",
-    "soldier": "soldier", # Kept as soldier per user request
-    "siren": "siren",
-    "bishop": "bishop",
-    "ghoul": "ghoul"
-}
-
 def migrate_file(filepath):
     if not filepath.lower().endswith(".json"):
         return False
@@ -23,36 +13,14 @@ def migrate_file(filepath):
             print(f"  [X] Error: {filepath} is not a valid JSON file.")
             return False
 
-    if "allPieces" not in data:
-        return False
-
-    is_old = False
-    new_pieces = {}
-    
-    for old_id, piece in data["allPieces"].items():
-        old_type = piece.get("type", "")
+    if "allPieces" in data:
+        print(f"  [+] Stripping allPieces from {os.path.basename(filepath)}...")
+        del data["allPieces"]
         
-        # Identification Logic
-        if old_type in ["king", "mage"] or "_king_" in old_id or "_mage_" in old_id:
-            is_old = True
-
-        new_type = TYPE_MAPPING.get(old_type, old_type)
-        
-        # ID Transformation
-        new_id = old_id.replace("_king_", "_goddess_").replace("_mage_", "_heroe_")
-        
-        updated_piece = piece.copy()
-        updated_piece["type"] = new_type
-        updated_piece["id"] = new_id
-        
-        new_pieces[new_id] = updated_piece
-
-    if is_old:
-        print(f"  [+] Migrating {os.path.basename(filepath)}...")
-        data["allPieces"] = new_pieces
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2)
         return True
+        
     return False
 
 def process_path(target):
@@ -64,7 +32,7 @@ def process_path(target):
         for filename in os.listdir(target):
             if migrate_file(os.path.join(target, filename)):
                 count += 1
-        print(f"Batch complete. {count} files migrated.")
+        print(f"Batch complete. {count} files were cleaned (allPieces removed).")
     else:
         print(f"Error: {target} is not a valid file or directory.")
 

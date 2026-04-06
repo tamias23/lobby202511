@@ -675,6 +675,8 @@ pub fn apply_move_napi(req: ApplyMoveRequest) -> napi::Result<ApplyMoveResponse>
     let captured_strs = captured.iter().map(|c| format!("{:?}", c).to_lowercase()).collect();
     let colors = state.color_chosen.iter().map(|(s, c)| (format!("{:?}", s).to_lowercase(), c.clone())).collect();
     
+    println!("[NAPI] apply_move: turn={:?}, color_chosen={:?}, is_new_turn={}", state.turn, state.color_chosen, state.is_new_turn);
+
     Ok(ApplyMoveResponse { 
         pieces_json: updated_pieces_json,
         captured: captured_strs,
@@ -753,6 +755,8 @@ pub fn pass_turn_playing_napi(req: ApplyMoveRequest) -> napi::Result<ApplyMoveRe
 
     let colors = state.color_chosen.iter().map(|(s, c)| (format!("{:?}", s).to_lowercase(), c.clone())).collect();
 
+    println!("[NAPI] pass_turn_playing: turn={:?}, color_chosen={:?}, is_new_turn={}", state.turn, state.color_chosen, state.is_new_turn);
+
     Ok(ApplyMoveResponse { 
         pieces_json: updated_pieces_json,
         captured: Vec::new(),
@@ -822,6 +826,8 @@ pub fn select_color_napi(req: SelectColorRequest) -> napi::Result<ApplyMoveRespo
         .map_err(|e| napi::Error::from_reason(format!("Failed to serialize updated pieces: {}", e)))?;
 
     let colors = state.color_chosen.iter().map(|(s, c)| (format!("{:?}", s).to_lowercase(), c.clone())).collect();
+
+    println!("[NAPI] select_color: color={}, turn={:?}, is_new_turn={}", req.color, state.turn, state.is_new_turn);
 
     Ok(ApplyMoveResponse { 
         pieces_json: updated_pieces_json,
