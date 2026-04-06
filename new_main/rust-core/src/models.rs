@@ -43,11 +43,11 @@ impl<'de> Deserialize<'de> for PieceType {
             "heroe" | "heroes" | "king" | "kings" => Ok(PieceType::Heroe),
             "goddess" | "goddesses" => Ok(PieceType::Goddess),
             "mage" | "mages" => Ok(PieceType::Mage),
-            "witch" | "witchs" | "witch" | "witchs" => Ok(PieceType::Witch),
+            "witch" | "witchs" | "bishop" | "bishops" => Ok(PieceType::Witch),
             "soldier" | "soldiers" => Ok(PieceType::Soldier),
             "siren" | "sirens" => Ok(PieceType::Siren),
             "ghoul" | "ghouls" => Ok(PieceType::Ghoul),
-            "golem" | "golems" | "golem" | "golems" | "trifox" | "trifoxes" => Ok(PieceType::Golem),
+            "golem" | "golems" | "berserker" | "berserkers" | "trifox" | "trifoxes" => Ok(PieceType::Golem),
             _ => Err(serde::de::Error::custom(format!("Unknown piece type: {}" , s))),
         }
     }

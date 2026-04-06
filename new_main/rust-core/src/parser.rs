@@ -27,9 +27,6 @@ fn validate_board(board: &BoardMap) -> Result<(), Box<dyn Error>> {
         return Err("Board has no polygons".into());
     }
 
-    if board.pieces.is_empty() {
-        return Err("Board has no pieces".into());
-    }
 
     // Verify all neighbors genuinely correspond to valid polygon strings.
     for (poly_name, polygon) in &board.polygons {
