@@ -17,68 +17,6 @@ from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GATConv, global_mean_pool
 from torch_geometric.utils import softmax as pyg_softmax
-from torch.utils.data import Dataset
-
-class MCTSDataset(Dataset):
-    def __init__(self, data_dir):
-        self.data_dir = data_dir
-        self.files = glob.glob(os.path.join(data_dir, "*.json"))
-        self.samples = []
-        
-        # Pre-scan files to build a turnkey index
-        # This only loads a tiny amount of meta-info per file
-        for f in self.files:
-            try:
-                with open(f, 'r') as file:
-                    content = json.load(file)
-                    num_items = len(content) if isinstance(content, list) else 1
-                    for i in range(num_items):
-                        self.samples.append((f, i))
-            except Exception as e:
-                print(f"Warning: Failed to scan {f}: {e}")
-
-    def __len__(self):
-        return len(self.samples)
-
-    def __getitem__(self, idx):
-        file_path, item_idx = self.samples[idx]
-        with open(file_path, 'r') as f:
-            content = json.load(f)
-            
-        items = content if isinstance(content, list) else [content]
-        item = items[item_idx]
-        
-        # Process individual item into MCTSData (same logic as before)
-        x = torch.tensor(item['x'], dtype=torch.float32).view(-1, 12)
-        
-        if len(item["edge_index"]) == 0:
-            edge_index = torch.zeros((2, 0), dtype=torch.long)
-        else:
-            edge_index = torch.tensor(item['edge_index'], dtype=torch.long).view(2, -1)
-        
-        if len(item["legal_moves"]) == 0:
-            legal_moves = torch.zeros((2, 0), dtype=torch.long)
-        else:
-            legal_moves = torch.tensor(item['legal_moves'], dtype=torch.long).view(2, -1)
-        
-        move_keys = item['move_keys']
-        pi_dict = item['pi']
-        
-        valid_pi = []
-        for i, key in enumerate(move_keys):
-            if ":" in key and not key.startswith("COLOR:"):
-                valid_pi.append(pi_dict.get(key, 0.0))
-        
-        pi_target = torch.tensor(valid_pi, dtype=torch.float32)
-        if pi_target.sum() > 0:
-            pi_target = pi_target / pi_target.sum()
-            
-        z_val = item.get('z', 0.0)
-        z_target = torch.tensor([z_val], dtype=torch.float32)
-        
-        return MCTSData(x=x, edge_index=edge_index, legal_moves=legal_moves, 
-                        pi_target=pi_target, z_target=z_target)
-
 class MCTSData(Data):
     def __inc__(self, key, value, *args, **kwargs):
         if key == 'legal_moves':
@@ -159,6 +97,58 @@ class MCTS_GAT(nn.Module):
         probs = self.policy_head(node_embeddings, legal_moves, batch)
         return value, probs
 
+def load_data(data_dir):
+    files = glob.glob(os.path.join(data_dir, "*.json"))
+    dataset = []
+    
+    for file in files:
+        with open(file, 'r') as f:
+            content = json.load(f)
+            
+        # Support both single turn (dict) and multi-turn (list of dicts)
+        items = content if isinstance(content, list) else [content]
+        
+        for item in items:
+            x = torch.tensor(item['x'], dtype=torch.float32).view(-1, 12)
+            
+            # Handle empty edge_index properly
+            if len(item["edge_index"]) == 0:
+                edge_index = torch.zeros((2, 0), dtype=torch.long)
+            else:
+                edge_index = torch.tensor(item['edge_index'], dtype=torch.long).view(2, -1)
+            
+            # Handle empty legal_moves properly
+            if len(item["legal_moves"]) == 0:
+                legal_moves = torch.zeros((2, 0), dtype=torch.long)
+            else:
+                legal_moves = torch.tensor(item['legal_moves'], dtype=torch.long).view(2, -1)
+            
+            move_keys = item['move_keys']
+            pi_dict = item['pi']
+            
+            # Create target distribution ONLY for graph-based moves (piece_id:target)
+            # This ensures len(pi_target) matches legal_moves.size(1) in the batch.
+            # We skip "COLOR:X" and "PASS" moves for the Policy Head for now.
+            valid_pi = []
+            for i, key in enumerate(move_keys):
+                if ":" in key and not key.startswith("COLOR:"):
+                    valid_pi.append(pi_dict.get(key, 0.0))
+            
+            pi_target = torch.tensor(valid_pi, dtype=torch.float32)
+                
+            # For simplicity we normalize pi_target if it doesn't sum to 1
+            if pi_target.sum() > 0:
+                pi_target = pi_target / pi_target.sum()
+                
+            # z_target: game outcome (+1, -1, or 0)
+            z_val = item.get('z', 0.0)
+            z_target = torch.tensor([z_val], dtype=torch.float32)
+            
+            pyg_data = MCTSData(x=x, edge_index=edge_index, legal_moves=legal_moves, 
+                            pi_target=pi_target, z_target=z_target)
+            dataset.append(pyg_data)
+            
+    return dataset
 
 def train(epochs=10, batch_size=64):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -184,8 +174,8 @@ def train(epochs=10, batch_size=64):
         print(f"Data directory {data_dir} does not exist. Run MCTS agents first!")
         return
 
-    print(f"Indexing data from {data_dir}...")
-    dataset = MCTSDataset(data_dir)
+    print(f"Loading data from {data_dir}...")
+    dataset = load_data(data_dir)
     if len(dataset) == 0:
         print(f"No training data found in {data_dir}. Run MCTS against itself to generate self-play data.")
         return
