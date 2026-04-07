@@ -742,8 +742,8 @@ io.on('connection', (socket) => {
                     lastMove: { pieceId, targetPoly, captured: response.captured }
                 });
 
-                if (response.captured.includes('goddess')) {
-                    const winnerSide = game.turn === 'white' ? 'black' : 'white'; 
+                if (response.phase === 'GameOver') {
+                    const winnerSide = response.winner;
                     const winnerId = winnerSide === 'white' ? game.white : game.black;
                     game.phase = 'GameOver';
                     

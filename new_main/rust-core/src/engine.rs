@@ -7,6 +7,7 @@ use crate::models::{BoardMap, PieceType, Side};
 pub enum GamePhase {
     Setup,
     Playing,
+    GameOver,
 }
 
 #[derive(Debug, Clone)]
@@ -23,6 +24,7 @@ pub struct GameState {
     pub heroe_take_counter: u32,
     pub visited_polygons: HashSet<String>,
     pub phase: GamePhase,
+    pub winner: Option<Side>,
     pub setup_step: u8, // 0=goddess, 1=heroe, 2=golem, 3=witch, 4=ghoul_siren
     pub setup_placements_this_turn: u32,
 }
@@ -144,6 +146,7 @@ impl GameState {
             heroe_take_counter: 0,
             visited_polygons: HashSet::new(),
             phase: GamePhase::Setup,
+            winner: None,
             setup_step: 0,
             setup_placements_this_turn: 0,
         }
@@ -1189,7 +1192,15 @@ pub fn apply_move_turnover(state: &mut GameState, chosen_piece: &str, chosen_tar
         }
     }
 
-    if turn_ends || goddess_captured {
+    if goddess_captured {
+        state.phase = GamePhase::GameOver;
+        state.winner = Some(current_turn);
+        // Do NOT swap turns or increment turn_counter. Game stops here.
+        state.is_new_turn = false;
+        state.locked_sequence_piece = None;
+        state.heroe_take_counter = 0;
+        state.visited_polygons.clear();
+    } else if turn_ends {
         state.turn_counter += 1;
         state.turn = state.get_enemy_side();
         state.color_chosen.clear();
@@ -1979,5 +1990,41 @@ mod tests {
 
         let eligible = state.get_eligible_piece_ids();
         assert!(eligible.contains(&"M1".to_string()), "Mage must be eligible when all 4 colors chosen");
+    }
+
+    #[test]
+    fn test_goddess_capture_halts_turnover() {
+        let mut polygons = HashMap::new();
+        polygons.insert("P1".to_string(), crate::models::Polygon {
+            id: 1, name: "P1".to_string(), color: "green".to_string(), shape: "tri".to_string(),
+            center: [0.0, 0.0], points: vec![], neighbors: vec![], neighbours: vec![],
+        });
+        polygons.insert("P2".to_string(), crate::models::Polygon {
+            id: 2, name: "P2".to_string(), color: "blue".to_string(), shape: "tri".to_string(),
+            center: [1.0, 1.0], points: vec![], neighbors: vec![], neighbours: vec![],
+        });
+        
+        let mut pieces = HashMap::new();
+        pieces.insert("W_G1".to_string(), crate::models::Piece {
+            id: "W_G1".to_string(), piece_type: crate::models::PieceType::Goddess, side: crate::models::Side::White, position: "P1".to_string(),
+        });
+        pieces.insert("B_S1".to_string(), crate::models::Piece {
+            id: "B_S1".to_string(), piece_type: crate::models::PieceType::Soldier, side: crate::models::Side::Black, position: "P2".to_string(),
+        });
+
+        let mut state = GameState::new(crate::models::BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.turn = Side::Black;
+        state.set_color_chosen(Side::Black, "blue");
+
+        // Black Soldier captures White Goddess
+        apply_move(&mut state, "B_S1", "P1");
+        apply_move_turnover(&mut state, "B_S1", "P1", true, false, false);
+
+        // Verification
+        assert_eq!(state.phase, GamePhase::GameOver);
+        assert_eq!(state.winner, Some(Side::Black));
+        assert_eq!(state.turn, Side::Black); // Turn must NOT swap to White
+        assert_eq!(state.turn_counter, 0); // Turn counter must NOT increment
     }
 }

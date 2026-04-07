@@ -15,6 +15,7 @@ export interface InitGameResponse {
   turnCounter: number
   isNewTurn: boolean
   movesThisTurn: number
+  winner?: string
 }
 export declare function initGameStateNapi(req: InitGameRequest): InitGameResponse
 export interface RandomizeRequest {
@@ -41,6 +42,7 @@ export interface RandomizeResponse {
   movesThisTurn: number
   lockedSequencePiece?: string
   heroeTakeCounter: number
+  winner?: string
 }
 export declare function randomizeSetupNapi(req: RandomizeRequest): RandomizeResponse
 export interface MoveRequest {
@@ -71,6 +73,7 @@ export interface MoveResponse {
   movesThisTurn: number
   lockedSequencePiece?: string
   heroeTakeCounter: number
+  winner?: string
 }
 export declare function getLegalMovesNapi(req: MoveRequest): MoveResponse
 export interface ApplyMoveRequest {
@@ -118,6 +121,7 @@ export interface ApplyMoveResponse {
   movesThisTurn: number
   lockedSequencePiece?: string
   heroeTakeCounter: number
+  winner?: string
 }
 export interface EndTurnSetupRequest {
   boardJson: string
