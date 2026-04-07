@@ -7,6 +7,7 @@ import re
 import sys
 import time
 from pathlib import Path
+import json
 import os
 import shutil
 import tempfile
@@ -178,15 +179,20 @@ async def run_match(sem, agent1, agent2, board_path, temp_dir):
         stdout, stderr = await proc.communicate()
         output = stdout.decode('utf-8')
 
-        w_match = re.search(r"White wins\s*:\s*(\d+)", output)
-        b_match = re.search(r"Black wins\s*:\s*(\d+)", output)
-        d_match = re.search(r"Draws\s*:\s*(\d+)",      output)
+        stats = None
+        for line in output.splitlines():
+            if "BATCH_STATS: " in line:
+                try:
+                    stats = json.loads(line.split("BATCH_STATS: ", 1)[1])
+                    break
+                except:
+                    pass
 
         w_pts = b_pts = 0
-        if w_match and b_match and d_match:
-            w_win = int(w_match.group(1))
-            b_win = int(b_match.group(1))
-            draws = int(d_match.group(1))
+        if stats:
+            w_win = stats.get("white_wins", 0)
+            b_win = stats.get("black_wins", 0)
+            draws = stats.get("draws", 0)
             if w_win > 0:
                 w_pts = 3
             elif b_win > 0:
@@ -195,6 +201,7 @@ async def run_match(sem, agent1, agent2, board_path, temp_dir):
                 w_pts = b_pts = 1
         else:
             print(f"Failed to parse match output for {white.name} vs {black.name}")
+            print(f"STDOUT SNIPPET:\n{output[:500]}")
             print(f"Stderr: {stderr.decode('utf-8')}")
 
         return white, black, w_pts, b_pts
