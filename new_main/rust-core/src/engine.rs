@@ -1059,7 +1059,7 @@ pub fn apply_setup_placement_turnover(state: &mut GameState, piece_id: &str, tar
 
 // perform_setup_turn removed: Core library focuses on rules, not agent orchestration.
 
-fn check_setup_step_complete(state: &GameState, side: Side) -> bool {
+pub fn check_setup_step_complete(state: &GameState, side: Side) -> bool {
     let (step_type, count) = match state.setup_step {
         0 => (PieceType::Goddess, 1),
         1 => (PieceType::Heroe, 2),

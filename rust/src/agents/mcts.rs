@@ -1,5 +1,5 @@
 use crate::agents::{Agent, AgentMove};
-use crate::engine::{get_legal_moves, GameState, apply_move, apply_move_turnover, get_legal_colors, GamePhase, get_setup_legal_placements, apply_setup_placement_turnover, perform_setup_turn};
+use crate::engine::{get_legal_moves, GameState, apply_move, apply_move_turnover, get_legal_colors, GamePhase, get_setup_legal_placements, apply_setup_placement_turnover, perform_setup_turn, check_setup_step_complete};
 use crate::models::{Side, PieceType};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -126,6 +126,7 @@ pub struct MctsAgent {
     pub(crate) game_buffer: Mutex<Vec<serde_json::Value>>,
     pub data_dir: String,
     pub record_data: bool,
+    pub verbosity: u8,
 }
 
 #[derive(Clone, Debug)]
@@ -162,11 +163,23 @@ impl Node {
 }
 
 impl MctsAgent {
-    pub fn new(time_budget_ms: u64, model_path: Option<String>, data_dir: String, record_data: bool) -> Self {
+    pub fn new(time_budget_ms: u64, model_path: Option<String>, data_dir: String, record_data: bool, verbosity: u8) -> Self {
+        if verbosity >= 1 {
+            println!("[MCTS] Initializing agent (budget={}ms, model={:?})", time_budget_ms, model_path);
+            std::io::Write::flush(&mut std::io::stdout()).unwrap();
+        }
         let session = model_path.as_ref().and_then(|path| {
+            if verbosity >= 1 {
+                println!("[MCTS] Loading ONNX model from {}...", path);
+                std::io::Write::flush(&mut std::io::stdout()).unwrap();
+            }
             let bytes = std::fs::read(path).ok()?;
             let session = Session::builder().ok()?
                 .commit_from_memory(&bytes).ok()?;
+            if verbosity >= 1 {
+                println!("[MCTS] ONNX model loaded successfully.");
+                std::io::Write::flush(&mut std::io::stdout()).unwrap();
+            }
             Some(Mutex::new(session))
         });
 
@@ -177,6 +190,7 @@ impl MctsAgent {
             game_buffer: Mutex::new(Vec::new()),
             data_dir,
             record_data,
+            verbosity,
         }
     }
 
@@ -212,8 +226,16 @@ impl MctsAgent {
                     }
                 }
             }
+            // PASS during setup: allowed only if:
+            // 1. Player placed at least 1 piece this turn
+            // 2. The opponent still has pieces to place for the current setup step
+            //    (if opponent is done, this player must finish too before advancing)
             if gs.setup_placements_this_turn > 0 {
-                legal_move_keys.push("PASS".to_string());
+                let enemy = gs.get_enemy_side();
+                let enemy_done = check_setup_step_complete(gs, enemy);
+                if !enemy_done {
+                    legal_move_keys.push("PASS".to_string());
+                }
             }
         } else if gs.is_new_turn {
              let colors = get_legal_colors(gs, &gs.turn);
@@ -281,8 +303,16 @@ impl MctsAgent {
                 "edge_index" => edge_val,
                 "legal_moves" => legal_val
             ]; 
-            
+
+            if self.verbosity >= 3 {
+                println!("[MCTS] Running ONNX inference...");
+                std::io::Write::flush(&mut std::io::stdout()).unwrap();
+            }
             if let Ok(outputs) = session.run(inputs) {
+                if self.verbosity >= 3 {
+                    println!("[MCTS] ONNX inference success.");
+                    std::io::Write::flush(&mut std::io::stdout()).unwrap();
+                }
                 let (_v_shape, v_data) = outputs["value"].try_extract_tensor::<f32>().unwrap();
                 value = v_data[0] as f64;
                 let (_p_shape, p_data) = outputs["probs"].try_extract_tensor::<f32>().unwrap();
@@ -335,15 +365,25 @@ impl MctsAgent {
         let mut root = Node::new(1.0, gs.turn);
         let c_puct = 1.0;
 
+        let mut max_depth_reached = 0;
+        let mut sim_count = 0;
+
         while start_time.elapsed() < budget {
+            if self.verbosity >= 3 {
+                println!("[MCTS] Starting simulation {}", sim_count + 1);
+                std::io::Write::flush(&mut std::io::stdout()).unwrap();
+            }
             let mut current_gs = gs.clone();
+            sim_count += 1;
             
             // 1. Selection & Expansion
             let mut path = Vec::new(); // move_key
             let mut current_node = &mut root;
             let mut terminal_value = None;
+            let mut current_depth = 0;
 
             while current_node.is_expanded() {
+                current_depth += 1;
                 let best_child_key = {
                     let parent = &current_node;
                     if let Some(key) = parent.children.iter()
@@ -409,6 +449,10 @@ impl MctsAgent {
                 current_node.turn = current_gs.turn;
                 if terminal_value.is_some() { break; }
             }
+            
+            if current_depth > max_depth_reached {
+                max_depth_reached = current_depth;
+            }
 
             // 2. Evaluation & Expansion
             let v_leaf = if let Some(val) = terminal_value {
@@ -440,6 +484,13 @@ impl MctsAgent {
                 node.value_sum += curr_v;
             }
         }
+        
+        if self.verbosity >= 2 {
+            let elapsed = start_time.elapsed().as_millis();
+            println!("[MCTS] Search Complete: {} sims, max_depth={}, time={}ms, best_q={:.3}", 
+                sim_count, max_depth_reached, elapsed, root.q_value());
+        }
+        
         root
     }
 
@@ -506,6 +557,11 @@ impl Agent for MctsAgent {
         
         let root = self.run_mcts(gs);
         let best_key = self.get_best_move_key(&root).unwrap_or_else(|| format!("COLOR:{}", valid_colors[0]));
+        
+        if self.verbosity >= 1 {
+            println!("[Agent] Selected Color Decision: {}", best_key);
+        }
+
         if self.record_data {
             self.save_search_data(gs, &root);
         }
@@ -528,6 +584,11 @@ impl Agent for MctsAgent {
     ) -> AgentMove {
         let root = self.run_mcts(gs);
         let best_key = self.get_best_move_key(&root).unwrap_or_else(|| "PASS".to_string());
+        
+        if self.verbosity >= 1 {
+            println!("[Agent] Selected Move Decision: {}", best_key);
+        }
+
         if self.record_data {
             self.save_search_data(gs, &root);
         }
@@ -600,14 +661,14 @@ mod tests {
 
     #[test]
     fn test_mcts_name() {
-        let agent = MctsAgent::new(100, None, "mcts_temp".to_string(), true);
+        let agent = MctsAgent::new(100, None, "mcts_temp".to_string(), true, 0);
         assert_eq!(agent.name(), "MCTS");
     }
 
     #[test]
     fn test_graph_data_shape() {
         let gs = setup_test_board();
-        let agent = MctsAgent::new(10, None, "mcts_temp".to_string(), true);
+        let agent = MctsAgent::new(10, None, "mcts_temp".to_string(), true, 0);
         let (x, edge_index, _, _) = agent.get_graph_data(&gs);
         // 3 polygons + 16 stock nodes = 19 nodes
         assert_eq!(x.dim().0, 19);
@@ -638,7 +699,7 @@ mod tests {
         gs.color_chosen.insert(Side::Black, "Blue".to_string());
         gs.is_new_turn = false;
         
-        let agent = MctsAgent::new(10, None, "mcts_temp".to_string(), true);
+        let agent = MctsAgent::new(10, None, "mcts_temp".to_string(), true, 0);
         let (x, _, legal_moves, move_keys) = agent.get_graph_data(&gs);
         
         // Find the index of STOCK_Black_Goddess
@@ -659,7 +720,7 @@ mod tests {
 
     #[test]
     fn test_ucb_score_sanity() {
-        let agent = MctsAgent::new(10, None, "mcts_temp".to_string(), true);
+        let agent = MctsAgent::new(10, None, "mcts_temp".to_string(), true, 0);
         let mut parent = Node::new(1.0, Side::White);
         parent.visit_count = 1.0;
         let score1 = agent.ucb_score(&parent, &Node::new(0.9, Side::White), 1.0);
@@ -673,7 +734,7 @@ mod tests {
         gs.phase = GamePhase::Playing;
         gs.color_chosen.insert(gs.turn, "Blue".to_string());
         gs.is_new_turn = false;
-        let agent = MctsAgent::new(300, None, "mcts_temp".to_string(), true);
+        let agent = MctsAgent::new(300, None, "mcts_temp".to_string(), true, 0);
         let m = agent.choose_move(&gs, &std::collections::HashMap::new(), false);
         match m {
             AgentMove::Move { .. } => {},
@@ -685,7 +746,7 @@ mod tests {
     fn test_choose_color_mcts() {
         let mut gs = setup_test_board();
         gs.is_new_turn = true;
-        let agent = MctsAgent::new(50, None, "mcts_temp".to_string(), true);
+        let agent = MctsAgent::new(50, None, "mcts_temp".to_string(), true, 0);
         let valid_colors = vec!["Blue".to_string(), "Yellow".to_string()];
         let c = agent.choose_color(&gs, &valid_colors);
         assert!(valid_colors.contains(c));

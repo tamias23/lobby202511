@@ -18,12 +18,12 @@ fn parse_flag_str<'a>(args: &'a [String], flag: &str, default: &'a str) -> &'a s
         .unwrap_or(default)
 }
 
-fn make_agent(name: &str, weights_str: Option<&String>, mcts_budget: u64, mcts_data_dir: String, model_path: Option<String>, mcts_record: bool) -> Arc<dyn agents::Agent> {
+fn make_agent(name: &str, weights_str: Option<&String>, mcts_budget: u64, mcts_data_dir: String, model_path: Option<String>, mcts_record: bool, verbosity: u8) -> Arc<dyn agents::Agent> {
     match name {
         "random" => Arc::new(agents::random::RandomAgent),
         "mcts" => {
             let path = model_path.unwrap_or_else(|| "./rust/model.onnx".to_string());
-            Arc::new(agents::mcts::MctsAgent::new(mcts_budget, Some(path), mcts_data_dir, mcts_record))
+            Arc::new(agents::mcts::MctsAgent::new(mcts_budget, Some(path), mcts_data_dir, mcts_record, verbosity))
         }, 
         "greedy_bob" => {
             let mut weights = [1.0; 26]; // Default baseline
@@ -77,6 +77,29 @@ fn make_agent(name: &str, weights_str: Option<&String>, mcts_budget: u64, mcts_d
 #[tokio::main]
 async fn main() {
     let args: Vec<String> = std::env::args().collect();
+
+    // Suppress ONNX Runtime C++ warnings (VerifyOutputSizes) written directly to stderr.
+    // These bypass all logging APIs, so we redirect stderr to /dev/null when not at max verbosity.
+    let verbosity_early = args.iter().position(|a| a == "--verbose")
+        .and_then(|i| args.get(i + 1))
+        .and_then(|s| s.parse::<u8>().ok())
+        .unwrap_or(0);
+    if verbosity_early < 3 {
+        use std::os::unix::io::{AsRawFd, FromRawFd};
+        if let Ok(devnull) = std::fs::File::open("/dev/null") {
+            let devnull_fd = devnull.as_raw_fd();
+            // SAFETY: dup2 is safe here — called single-threaded before tokio runtime starts.  
+            // We redirect fd 2 (stderr) to /dev/null to suppress C++ ORT warnings.
+            unsafe {
+                // Use the libc dup2 syscall via the platform's C library (always linked)
+                unsafe extern "C" { fn dup2(oldfd: i32, newfd: i32) -> i32; }
+                dup2(devnull_fd, 2);
+            }
+            // Keep devnull alive so the fd doesn't get closed
+            std::mem::forget(devnull);
+        }
+    }
+
     if args.len() < 2 {
         println!("Usage:");
         println!("  cargo run -- <board.json> [--delay <ms>] [--max-turns <N>] [--white <agent>] [--black <agent>] [--mcts-budget <ms>] [--mcts-data-dir <dir>]");
@@ -113,6 +136,7 @@ async fn main() {
     let display_white_name = parse_flag_str(&args, "--white-name", &white_agent_name).to_string();
     let display_black_name = parse_flag_str(&args, "--black-name", &black_agent_name).to_string();
     let parquet_dir = args.iter().position(|a| a == "--store-parquet").and_then(|i| args.get(i + 1)).cloned();
+    let verbosity = parse_flag_value(&args, "--verbose", 0) as u8;
     
     let white_weights = args.iter().position(|a| a == "--greedy-weights-white").and_then(|i| args.get(i + 1));
     let black_weights = args.iter().position(|a| a == "--greedy-weights-black").and_then(|i| args.get(i + 1));
@@ -122,8 +146,8 @@ async fn main() {
     
     let mcts_record = !args.contains(&"--mcts-no-record".to_string());
 
-    let white_agent = make_agent(&white_agent_name, white_weights, mcts_budget, mcts_data_dir.clone(), white_model_path, mcts_record);
-    let black_agent = make_agent(&black_agent_name, black_weights, mcts_budget, mcts_data_dir, black_model_path, mcts_record);
+    let white_agent = make_agent(&white_agent_name, white_weights, mcts_budget, mcts_data_dir.clone(), white_model_path, mcts_record, verbosity);
+    let black_agent = make_agent(&black_agent_name, black_weights, mcts_budget, mcts_data_dir, black_model_path, mcts_record, verbosity);
 
     if let Some(batch_pos) = args.iter().position(|a| a == "--batch") {
         let n_games: u32 = args.get(batch_pos + 1)
@@ -139,7 +163,8 @@ async fn main() {
             white_agent.as_ref(), 
             black_agent.as_ref(),
             parquet_dir,
-            path
+            path,
+            verbosity
         );
     } else {
         // Visual server mode
@@ -147,7 +172,7 @@ async fn main() {
 
         println!("Loading board layout from {}...", path);
         println!("Board parsed perfectly. Initializing core engine simulator...");
-        server::start_server(board, delay_ms, max_turns, white_agent, black_agent).await;
+        server::start_server(board, delay_ms, max_turns, white_agent, black_agent, verbosity).await;
     }
 }
 
@@ -161,6 +186,7 @@ fn run_batch(
     black_agent: &dyn agents::Agent,
     parquet_dir: Option<String>,
     board_path: &str,
+    verbosity: u8,
 ) {
     use crate::engine::{GameState, GamePhase, perform_turn, perform_setup_turn, setup_pieces};
     use crate::models::Side;
@@ -212,7 +238,7 @@ fn run_batch(
                 Side::White => white_agent,
                 Side::Black => black_agent,
             };
-            let (_, move_made) = perform_setup_turn(&mut gs, agent);
+            let (_, move_made) = perform_setup_turn(&mut gs, agent, verbosity);
             
             if recorder.is_some() {
                 if let Some((piece, target)) = move_made {
@@ -238,7 +264,7 @@ fn run_batch(
                 Side::Black => black_agent,
             };
             
-            let (goddess_captured, move_made) = perform_turn(&mut gs, agent);
+            let (goddess_captured, move_made) = perform_turn(&mut gs, agent, verbosity);
 
             if gs.turn_counter > 0 && gs.turn_counter % 50 == 0 {
                 use std::io::{self, Write};

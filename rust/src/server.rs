@@ -18,6 +18,7 @@ pub struct AppState {
     pub max_turns: u32,
     pub white_agent: Arc<dyn Agent>,
     pub black_agent: Arc<dyn Agent>,
+    pub verbosity: u8,
 }
 
 pub async fn start_server(
@@ -25,7 +26,8 @@ pub async fn start_server(
     delay_ms: u64, 
     max_turns: u32,
     white_agent: Arc<dyn Agent>,
-    black_agent: Arc<dyn Agent>
+    black_agent: Arc<dyn Agent>,
+    verbosity: u8,
 ) {
     let mut state = GameState::new(initial_board);
     setup_random_board(&mut state, None);
@@ -36,6 +38,7 @@ pub async fn start_server(
         max_turns,
         white_agent,
         black_agent,
+        verbosity,
     });
 
     let app = Router::new()
@@ -99,7 +102,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                 crate::models::Side::Black => &*state.black_agent,
             };
             
-            let (won, _) = perform_turn(&mut gs, agent);
+            let (won, _) = perform_turn(&mut gs, agent, state.verbosity);
             let drawn = gs.turn_counter >= state.max_turns;
             let c = gs.color_chosen.get(&gs.turn).cloned();
             let payload = SocketPayload {

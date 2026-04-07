@@ -5,7 +5,7 @@ import json
 import glob
 import time
 from torch_geometric.loader import DataLoader
-from train_mcts import MCTS_GAT, MCTSData, load_data
+from train_mcts import MCTS_GAT, MCTSData, MCTSDataset
 
 def test_gpu_performance():
     print("--- Full GPU Performance Test ---")
@@ -19,7 +19,7 @@ def test_gpu_performance():
     data_dir = "./rust/mcts_temp"
     print(f"\nLoading all data from {data_dir}...")
     start_load = time.time()
-    dataset = load_data(data_dir)
+    dataset = MCTSDataset(data_dir)
     end_load = time.time()
     
     num_states = len(dataset)
@@ -27,8 +27,21 @@ def test_gpu_performance():
     print(f"Loaded {num_states} states in {load_duration:.2f} seconds.")
     
     if num_states == 0:
-        print("Error: No data found!")
-        return
+        print("Warning: No data files found. Generating synthetic patterns for performance testing...")
+        dataset = []
+        for _ in range(100):
+            # Create a synthetic graph matching the expected GAT dimensions (12 nodes, 19 polygons/stock nodes typical)
+            num_nodes = 352 # Matches board.json complexity
+            x = torch.randn(num_nodes, 12, dtype=torch.float32)
+            edge_index = torch.randint(0, num_nodes, (2, 2000), dtype=torch.long)
+            legal_moves = torch.randint(0, num_nodes, (2, 50), dtype=torch.long)
+            pi_target = torch.randn(50, dtype=torch.float32)
+            z_target = torch.tensor([1.0], dtype=torch.float32)
+            
+            dataset.append(MCTSData(x=x, edge_index=edge_index, legal_moves=legal_moves, 
+                            pi_target=pi_target, z_target=z_target))
+        num_states = len(dataset)
+        print(f"Generated {num_states} synthetic samples.")
         
     loader = DataLoader(dataset, batch_size=32, shuffle=True)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
