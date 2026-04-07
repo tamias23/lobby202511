@@ -78,17 +78,19 @@ async def run_match(sem, agent1, agent2, board_path):
         stdout, _ = await proc.communicate()
         output = stdout.decode('utf-8')
         
-        # "White wins : X ("
-        # "Black wins : Y ("
-        # "Draws      : Z ("
-        w_match = re.search(r"White wins\s*:\s*(\d+)", output)
-        b_match = re.search(r"Black wins\s*:\s*(\d+)", output)
-        d_match = re.search(r"Draws\s*:\s*(\d+)", output)
+        stats = None
+        for line in output.splitlines():
+            if "BATCH_STATS: " in line:
+                try:
+                    stats = json.loads(line.split("BATCH_STATS: ", 1)[1])
+                    break
+                except:
+                    pass
         
-        if w_match and b_match and d_match:
-            w_win = int(w_match.group(1))
-            b_win = int(b_match.group(1))
-            draws = int(d_match.group(1))
+        if stats:
+            w_win = stats.get("white_wins", 0)
+            b_win = stats.get("black_wins", 0)
+            draws = stats.get("draws", 0)
             
             # Distribute standard competitive scoring format points dynamically
             if w_win > 0:
@@ -100,7 +102,7 @@ async def run_match(sem, agent1, agent2, board_path):
                 black.score += 1
         else:
             print(f"Failed to parse match output for Agents: {white.id} vs {black.id}")
-            print(f"RAW OUTPUT:\\n{output}")
+            print(f"RAW OUTPUT:\n{output}")
 
 async def run_generation(agents, sem, start_time, board_path):
     # Wipe scores completely mapping across generations freshly
