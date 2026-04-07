@@ -32,6 +32,7 @@ parser.add_argument("--mcts_budget", type=int, default=30, help="MCTS time budge
 parser.add_argument("--train_epochs", type=int, default=3, help="Number of training epochs per batch")
 parser.add_argument("--train_batch_size", type=int, default=32, help="Batch size for training the GAT model")
 parser.add_argument("--max_data_files", type=int, default=720, help="Maximum number of game JSON files to keep in mcts_temp")
+parser.add_argument("--verbose", type=int, default=0, help="Verbosity level for Rust engine (0-3)")
 args = parser.parse_args()
 
 RUST_BIN = Path("rust/target/release/rust")
@@ -47,7 +48,8 @@ async def run_self_play_games(sem, board_path, n_games):
             "--white", "mcts",
             "--black", "mcts",
             "--mcts-budget", str(args.mcts_budget),
-            "--mcts-data-dir", "./rust/mcts_temp"
+            "--mcts-data-dir", "./rust/mcts_temp",
+            "--verbose", str(args.verbose)
         ]
         
         proc = await asyncio.create_subprocess_exec(

@@ -625,13 +625,11 @@ pub fn setup_random_board(state: &mut GameState, side_filter: Option<Side>) {
             }
         }
     }
-    println!("Extracted Edges -> Top: {}, Bottom: {}", top_edges.len(), bottom_edges.len());
 
     let mut side_counts = std::collections::HashMap::new();
     for p in state.board.pieces.values() {
         *side_counts.entry(format!("{:?} {:?}", p.side, p.piece_type)).or_insert(0) += 1;
     }
-    println!("Piece Distribution: {:?}", side_counts);
 
     for side in [Side::White, Side::Black] {
         if let Some(filter) = side_filter {
@@ -694,7 +692,6 @@ pub fn setup_random_board(state: &mut GameState, side_filter: Option<Side>) {
         }
 
         if !g_poly.is_empty() && !goddess_id.is_empty() {
-            println!("Faction {} successfully locked anchor coordinates: Goddess={}, H0={}, H1={}", side_str, g_poly, h0_poly, h1_poly);
             state.occupancy.insert(g_poly.clone(), goddess_id.clone());
             state.board.pieces.get_mut(&goddess_id).unwrap().position = g_poly.clone();
             state.occupancy.insert(h0_poly.clone(), heroe0_id.clone());
@@ -702,7 +699,6 @@ pub fn setup_random_board(state: &mut GameState, side_filter: Option<Side>) {
             state.occupancy.insert(h1_poly.clone(), heroe1_id.clone());
             state.board.pieces.get_mut(&heroe1_id).unwrap().position = h1_poly.clone();
         } else {
-            println!("Faction {} failed to find geometrical anchors!", side_str);
             continue; // No valid edges found for safety
         }
 
@@ -1118,7 +1114,6 @@ pub fn apply_move_turnover(state: &mut GameState, chosen_piece: &str, chosen_tar
     let is_heroe = piece_type == PieceType::Heroe;
     let is_chainable = piece_type == PieceType::Soldier || piece_type == PieceType::Golem;
 
-    println!("[Engine] Turnover check: piece={:?}, target={}, target_color={}, chosen_color={}", piece_type, chosen_target, target_color, chosen_color);
     
     let turn_ends;
 
@@ -1215,7 +1210,6 @@ pub fn apply_move_turnover(state: &mut GameState, chosen_piece: &str, chosen_tar
 
         // Check if the player is actually stuck.
         if !state.has_any_legal_moves() {
-            println!("[Engine] Turnover: Turn swapped because player {:?} has no legal moves (Stuck check).", state.turn);
             state.turn_counter += 1;
             state.turn = state.get_enemy_side();
             state.color_chosen.clear();
@@ -1228,14 +1222,12 @@ pub fn apply_move_turnover(state: &mut GameState, chosen_piece: &str, chosen_tar
     }
     
     if turn_ends {
-        println!("[Engine] Turnover: Turn ends naturally. Now {:?}'s turn.", state.turn);
     }
     
     goddess_captured
 }
 
 pub fn pass_turn(state: &mut GameState) {
-    println!("[Engine] pass_turn called for {:?}", state.turn);
     state.turn_counter += 1;
     state.turn = state.get_enemy_side();
     state.color_chosen.clear();

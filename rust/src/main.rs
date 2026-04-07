@@ -18,12 +18,12 @@ fn parse_flag_str<'a>(args: &'a [String], flag: &str, default: &'a str) -> &'a s
         .unwrap_or(default)
 }
 
-fn make_agent(name: &str, weights_str: Option<&String>, mcts_budget: u64, mcts_data_dir: String, model_path: Option<String>, mcts_record: bool, verbosity: u8) -> Arc<dyn agents::Agent> {
+fn make_agent(name: &str, weights_str: Option<&String>, mcts_budget: u64, mcts_data_dir: String, model_path: Option<String>, mcts_record: bool, verbosity: u8, num_threads: usize) -> Arc<dyn agents::Agent> {
     match name {
         "random" => Arc::new(agents::random::RandomAgent),
         "mcts" => {
             let path = model_path.unwrap_or_else(|| "./rust/model.onnx".to_string());
-            Arc::new(agents::mcts::MctsAgent::new(mcts_budget, Some(path), mcts_data_dir, mcts_record, verbosity))
+            Arc::new(agents::mcts::MctsAgent::with_threads(mcts_budget, Some(path), mcts_data_dir, mcts_record, verbosity, num_threads))
         }, 
         "greedy_bob" => {
             let mut weights = [1.0; 26]; // Default baseline
@@ -102,8 +102,12 @@ async fn main() {
 
     if args.len() < 2 {
         println!("Usage:");
-        println!("  cargo run -- <board.json> [--delay <ms>] [--max-turns <N>] [--white <agent>] [--black <agent>] [--mcts-budget <ms>] [--mcts-data-dir <dir>]");
-        println!("  cargo run -- <board.json> --batch <n_games> [--max-turns <N>] [--white <agent>] [--black <agent>] [--store-parquet <dir>] [--mcts-budget <ms>] [--mcts-data-dir <dir>]");
+        println!("  cargo run -- <board.json> [--delay <ms>] [--max-turns <N>] [--white <agent>] [--black <agent>]");
+        println!("              [--mcts-budget <ms>] [--mcts-budget-white <ms>] [--mcts-budget-black <ms>]");
+        println!("              [--mcts-threads <N>] [--mcts-threads-white <N>] [--mcts-threads-black <N>] [--mcts-data-dir <dir>]");
+        println!("  cargo run -- <board.json> --batch <n_games> [--max-turns <N>] [--white <agent>] [--black <agent>] [--store-parquet <dir>]");
+        println!("              [--mcts-budget <ms>] [--mcts-budget-white <ms>] [--mcts-budget-black <ms>]");
+        println!("              [--mcts-threads <N>] [--mcts-threads-white <N>] [--mcts-threads-black <N>] [--mcts-data-dir <dir>]");
         println!("  Optional Agent Traits:");
         println!("      --white-name \"Agent 1\"");
         println!("      --black-name \"Agent 2\"");
@@ -130,6 +134,26 @@ async fn main() {
 
     let max_turns = parse_flag_value(&args, "--max-turns", 500);
     let mcts_budget = parse_flag_value(&args, "--mcts-budget", 100) as u64;
+    // Per-side budget overrides: fall back to the shared --mcts-budget if not specified
+    let mcts_budget_white = {
+        let v = parse_flag_value(&args, "--mcts-budget-white", 0);
+        if v > 0 { v as u64 } else { mcts_budget }
+    };
+    let mcts_budget_black = {
+        let v = parse_flag_value(&args, "--mcts-budget-black", 0);
+        if v > 0 { v as u64 } else { mcts_budget }
+    };
+    // Per-side thread counts: --mcts-threads sets the shared default (1 = single-threaded).
+    // Self-play training leaves this unset, so it always defaults to 1 (no overhead).
+    let mcts_threads = parse_flag_value(&args, "--mcts-threads", 1) as usize;
+    let mcts_threads_white = {
+        let v = parse_flag_value(&args, "--mcts-threads-white", 0) as usize;
+        if v > 0 { v } else { mcts_threads }
+    };
+    let mcts_threads_black = {
+        let v = parse_flag_value(&args, "--mcts-threads-black", 0) as usize;
+        if v > 0 { v } else { mcts_threads }
+    };
     let white_agent_name = parse_flag_str(&args, "--white", "random").to_string();
     let black_agent_name = parse_flag_str(&args, "--black", "random").to_string();
     let mcts_data_dir = parse_flag_str(&args, "--mcts-data-dir", "./rust/mcts_temp").to_string();
@@ -146,8 +170,8 @@ async fn main() {
     
     let mcts_record = !args.contains(&"--mcts-no-record".to_string());
 
-    let white_agent = make_agent(&white_agent_name, white_weights, mcts_budget, mcts_data_dir.clone(), white_model_path, mcts_record, verbosity);
-    let black_agent = make_agent(&black_agent_name, black_weights, mcts_budget, mcts_data_dir, black_model_path, mcts_record, verbosity);
+    let white_agent = make_agent(&white_agent_name, white_weights, mcts_budget_white, mcts_data_dir.clone(), white_model_path, mcts_record, verbosity, mcts_threads_white);
+    let black_agent = make_agent(&black_agent_name, black_weights, mcts_budget_black, mcts_data_dir, black_model_path, mcts_record, verbosity, mcts_threads_black);
 
     if let Some(batch_pos) = args.iter().position(|a| a == "--batch") {
         let n_games: u32 = args.get(batch_pos + 1)
@@ -193,10 +217,12 @@ fn run_batch(
     use uuid::Uuid;
     use crate::recorder::{Recorder, GameRecord, MoveEvent, current_timestamp_ms, current_date_string};
 
-    println!(
-        "Running {} headless games (max {} turns, White={}, Black={})...",
-        n_games, max_turns, white_name, black_name
-    );
+    if verbosity >= 1 {
+        println!(
+            "Running {} headless games (max {} turns, White={}, Black={})...",
+            n_games, max_turns, white_name, black_name
+        );
+    }
 
     let mut white_wins = 0u32;
     let mut black_wins = 0u32;
@@ -212,9 +238,11 @@ fn run_batch(
         .to_string();
 
     for game in 1..=n_games {
-        println!("  --- Game {}/{} starting ---", game, n_games);
-        use std::io::{self, Write};
-        io::stdout().flush().unwrap();
+        if verbosity >= 1 {
+            println!("  --- Game {}/{} starting ---", game, n_games);
+            use std::io::{self, Write};
+            io::stdout().flush().unwrap();
+        }
 
         let mut gs = GameState::new(board.clone());
         setup_pieces(&mut gs);
@@ -266,7 +294,7 @@ fn run_batch(
             
             let (goddess_captured, move_made) = perform_turn(&mut gs, agent, verbosity);
 
-            if gs.turn_counter > 0 && gs.turn_counter % 50 == 0 {
+            if verbosity >= 1 && gs.turn_counter > 0 && gs.turn_counter % 50 == 0 {
                 use std::io::{self, Write};
                 println!("      [Game {}] Turn {}...", game, gs.turn_counter);
                 io::stdout().flush().unwrap();
@@ -318,9 +346,11 @@ fn run_batch(
             });
         }
 
-        let report_every = (n_games / 10).max(1);
-        if n_games <= 20 || game % report_every == 0 {
-            println!("  Game {}/{} done — turns: {}", game, n_games, gs.turn_counter);
+        if verbosity >= 1 {
+            let report_every = (n_games / 10).max(1);
+            if n_games <= 20 || game % report_every == 0 {
+                println!("  Game {}/{} done — turns: {}", game, n_games, gs.turn_counter);
+            }
         }
 
         // Structured telemetry for scripts
@@ -333,11 +363,13 @@ fn run_batch(
     }
 
     let avg_turns = total_turns as f64 / n_games as f64;
-    println!("\n=== Batch Results ({} games, White={}, Black={}) ===", n_games, white_name, black_name);
-    println!("  White wins : {} ({:.1}%)", white_wins, 100.0 * white_wins as f64 / n_games as f64);
-    println!("  Black wins : {} ({:.1}%)", black_wins, 100.0 * black_wins as f64 / n_games as f64);
-    println!("  Draws      : {} ({:.1}%)", draws, 100.0 * draws as f64 / n_games as f64);
-    println!("  Avg turns  : {:.1}", avg_turns);
+    if verbosity >= 1 {
+        println!("\n=== Batch Results ({} games, White={}, Black={}) ===", n_games, white_name, black_name);
+        println!("  White wins : {} ({:.1}%)", white_wins, 100.0 * white_wins as f64 / n_games as f64);
+        println!("  Black wins : {} ({:.1}%)", black_wins, 100.0 * black_wins as f64 / n_games as f64);
+        println!("  Draws      : {} ({:.1}%)", draws, 100.0 * draws as f64 / n_games as f64);
+        println!("  Avg turns  : {:.1}", avg_turns);
+    }
 
     // Structured telemetry for batch
     let telemetry_batch = serde_json::json!({
@@ -351,14 +383,18 @@ fn run_batch(
     println!("BATCH_STATS: {}", telemetry_batch);
     
     if let Some(dir) = parquet_dir {
-        println!("Writing session games to parquet in {}...", dir);
+        if verbosity >= 1 {
+            println!("Writing session games to parquet in {}...", dir);
+        }
         if let Some(rec) = recorder {
             let file_id = Uuid::new_v4().to_string();
             let p = std::path::Path::new(&dir).join(format!("batch_{}_{}.parquet", current_timestamp_ms(), file_id));
             if let Err(e) = rec.write_parquet(p.to_str().unwrap()) {
                 eprintln!("Failed to write parquet: {}", e);
             } else {
-                println!("Successfully saved {} games to {}", rec.records.len(), p.display());
+                if verbosity >= 1 {
+                    println!("Successfully saved {} games to {}", rec.records.len(), p.display());
+                }
             }
         }
     }

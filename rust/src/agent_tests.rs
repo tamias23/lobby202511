@@ -204,12 +204,12 @@ mod agent_tests {
 
         // First call: colour selection phase (is_new_turn == true)
         // DeterministicAgent picks 'blue' (first sorted). p1 is 'blue'.
-        perform_turn(&mut gs, &DeterministicAgent);
+        perform_turn(&mut gs, &DeterministicAgent, 0);
         assert!(!gs.is_new_turn);
         assert_eq!(gs.color_chosen.get(&Side::White).unwrap(), "blue");
 
         // Second call: move execution phase
-        perform_turn(&mut gs, &DeterministicAgent);
+        perform_turn(&mut gs, &DeterministicAgent, 0);
         // Soldier landed on grey (not chosen=blue) → turn doesn't end
         assert_eq!(gs.board.pieces.get("w_soldier").unwrap().position, "p2");
     }
@@ -226,9 +226,9 @@ mod agent_tests {
         gs.turn = Side::White;
 
         // Colour phase -> Picks 'blue'
-        perform_turn(&mut gs, &DeterministicAgent);
+        perform_turn(&mut gs, &DeterministicAgent, 0);
         // Move phase — lands on chosen colour (blue) → turn ends (Goddess is not Soldier)
-        perform_turn(&mut gs, &DeterministicAgent);
+        perform_turn(&mut gs, &DeterministicAgent, 0);
 
         assert_eq!(gs.turn, Side::Black);
         assert!(gs.is_new_turn);
@@ -245,9 +245,9 @@ mod agent_tests {
         gs.turn = Side::White;
 
         // Call 1: Colour phase
-        perform_turn(&mut gs, &DeterministicAgent);
+        perform_turn(&mut gs, &DeterministicAgent, 0);
         // Call 2: Move phase — no legal moves -> skipped to opponent
-        let result = perform_turn(&mut gs, &DeterministicAgent).0;
+        let result = perform_turn(&mut gs, &DeterministicAgent, 0).0;
         assert!(!result); // No Goddess captured
         assert_eq!(gs.turn, Side::Black); // Skipped to opponent
     }
@@ -263,13 +263,13 @@ mod agent_tests {
 
         // Manually set up a locked sequence scenario
         // Colour phase
-        perform_turn(&mut gs, &DeterministicAgent);
+        perform_turn(&mut gs, &DeterministicAgent, 0);
         // Move soldier to p2 (chosen colour orange) → soldier gets locked
-        perform_turn(&mut gs, &DeterministicAgent);
+        perform_turn(&mut gs, &DeterministicAgent, 0);
         // Soldier is now locked on p2, it's still White's turn
         if gs.turn == Side::White {
             // Now the AlwaysPassAgent will see pass_allowed=true and end the turn
-            perform_turn(&mut gs, &AlwaysPassAgent);
+            perform_turn(&mut gs, &AlwaysPassAgent, 0);
             assert_eq!(gs.turn, Side::Black);
         }
     }
@@ -285,9 +285,9 @@ mod agent_tests {
         gs.turn = Side::White;
 
         // Colour phase
-        perform_turn(&mut gs, &DeterministicAgent);
+        perform_turn(&mut gs, &DeterministicAgent, 0);
         // Move phase — Heroe captures Black Goddess
-        let (result, _) = perform_turn(&mut gs, &DeterministicAgent);
+        let (result, _) = perform_turn(&mut gs, &DeterministicAgent, 0);
         assert!(result, "perform_turn should return true when a Goddess is captured");
     }
 
@@ -308,7 +308,7 @@ mod agent_tests {
 
         // Both should complete a full turn in two calls (colour + move)
         perform_random_turn(&mut gs1);
-        perform_turn(&mut gs2, &RandomAgent);
+        perform_turn(&mut gs2, &RandomAgent, 0);
         // Both should be in the same phase (move phase, colour chosen)
         assert!(!gs1.is_new_turn);
         assert!(!gs2.is_new_turn);

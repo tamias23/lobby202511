@@ -176,13 +176,19 @@ async fn get_turn(
         if piece_opt.is_none() {
             continue;
         }
-        let grabbed_position = piece_opt.unwrap().position.clone();
-        let captured = apply_move(&mut gs, &m.piece_id, &m.target_pos);
-        let goddess_captured = captured.contains(&rust::models::PieceType::Goddess);
 
         if gs.phase == rust::engine::GamePhase::Setup {
+            // Setup phase: use ONLY the setup-specific function.
+            // apply_move() must NOT be called here — it is for game-phase only and
+            // would corrupt setup_placements_this_turn, causing advance_setup_step()
+            // to fire prematurely and reshuffle pieces back to the sidebar.
             rust::engine::apply_setup_placement_turnover(&mut gs, &m.piece_id, &m.target_pos);
+            moves_run = gs.setup_placements_this_turn;
         } else {
+            // Game phase: standard move + turnover path.
+            let grabbed_position = piece_opt.unwrap().position.clone();
+            let captured = apply_move(&mut gs, &m.piece_id, &m.target_pos);
+            let goddess_captured = captured.contains(&rust::models::PieceType::Goddess);
             apply_move_turnover(
                 &mut gs,
                 &m.piece_id,
@@ -191,8 +197,8 @@ async fn get_turn(
                 captured.is_empty(),
                 grabbed_position == "returned",
             );
+            moves_run = gs.moves_this_turn;
         }
-        moves_run = gs.moves_this_turn;
     }
     
     // Explicitly sync the `moves_this_turn` counter

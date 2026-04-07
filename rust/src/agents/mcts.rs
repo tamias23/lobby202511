@@ -3,7 +3,7 @@ use crate::engine::{get_legal_moves, GameState, apply_move, apply_move_turnover,
 use crate::models::{Side, PieceType};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-use std::sync::Mutex;
+use std::sync::{Mutex, Arc};
 use ort::session::Session;
 use ort::value::Value;
 use ndarray::Array2;
@@ -121,8 +121,11 @@ pub fn build_graph_data(gs: &GameState) -> (Array2<f32>, Array2<i64>, HashMap<St
 
 pub struct MctsAgent {
     pub time_budget_ms: u64,
+    /// Number of parallel root-search threads (1 = single-threaded, unchanged behaviour).
+    pub num_threads: usize,
     pub model_path: Option<String>,
-    pub session: Option<Mutex<Session>>,
+    /// One compiled ONNX session per thread slot (empty if no model loaded).
+    sessions: Vec<Arc<Mutex<Session>>>,
     pub(crate) game_buffer: Mutex<Vec<serde_json::Value>>,
     pub data_dir: String,
     pub record_data: bool,
@@ -163,30 +166,58 @@ impl Node {
 }
 
 impl MctsAgent {
+    /// Create a single-threaded MCTS agent (backwards-compatible constructor).
     pub fn new(time_budget_ms: u64, model_path: Option<String>, data_dir: String, record_data: bool, verbosity: u8) -> Self {
+        Self::with_threads(time_budget_ms, model_path, data_dir, record_data, verbosity, 1)
+    }
+
+    /// Create an MCTS agent with root-parallel search across `num_threads` threads.
+    /// `num_threads = 1` is identical in behaviour to `new()`.
+    pub fn with_threads(time_budget_ms: u64, model_path: Option<String>, data_dir: String, record_data: bool, verbosity: u8, num_threads: usize) -> Self {
+        let num_threads = num_threads.max(1);
         if verbosity >= 1 {
-            println!("[MCTS] Initializing agent (budget={}ms, model={:?})", time_budget_ms, model_path);
+            println!("[MCTS] Initializing agent (budget={}ms, threads={}, model={:?})", time_budget_ms, num_threads, model_path);
             std::io::Write::flush(&mut std::io::stdout()).unwrap();
         }
-        let session = model_path.as_ref().and_then(|path| {
+
+        // Load model bytes once, then compile N sessions (one per thread slot).
+        let sessions = if let Some(ref path) = model_path {
             if verbosity >= 1 {
-                println!("[MCTS] Loading ONNX model from {}...", path);
+                println!("[MCTS] Loading ONNX model from {} ({} session(s))...", path, num_threads);
                 std::io::Write::flush(&mut std::io::stdout()).unwrap();
             }
-            let bytes = std::fs::read(path).ok()?;
-            let session = Session::builder().ok()?
-                .commit_from_memory(&bytes).ok()?;
-            if verbosity >= 1 {
-                println!("[MCTS] ONNX model loaded successfully.");
-                std::io::Write::flush(&mut std::io::stdout()).unwrap();
+            match std::fs::read(path) {
+                Ok(bytes) => {
+                    let mut built = Vec::with_capacity(num_threads);
+                    for _ in 0..num_threads {
+                        if let Ok(mut builder) = Session::builder() {
+                            if let Ok(session) = builder.commit_from_memory(&bytes) {
+                                built.push(Arc::new(Mutex::new(session)));
+                            }
+                        }
+                    }
+                    if verbosity >= 1 {
+                        println!("[MCTS] Loaded {} ONNX session(s) successfully.", built.len());
+                        std::io::Write::flush(&mut std::io::stdout()).unwrap();
+                    }
+                    built
+                }
+                Err(e) => {
+                    if verbosity >= 1 {
+                        println!("[MCTS] Warning: could not read model file '{}': {}. Using uniform priors.", path, e);
+                    }
+                    Vec::new()
+                }
             }
-            Some(Mutex::new(session))
-        });
+        } else {
+            Vec::new()
+        };
 
         Self {
             time_budget_ms,
+            num_threads,
             model_path,
-            session,
+            sessions,
             game_buffer: Mutex::new(Vec::new()),
             data_dir,
             record_data,
@@ -285,14 +316,16 @@ impl MctsAgent {
     }
 
 
-    pub(crate) fn evaluate(&self, gs: &GameState) -> (f64, HashMap<String, f64>) {
+    /// Evaluate a game state using the given ONNX session, returning (value, priors).
+    /// Falls back to uniform priors if no session is provided.
+    pub(crate) fn evaluate_with(&self, gs: &GameState, session: Option<&Arc<Mutex<Session>>>) -> (f64, HashMap<String, f64>) {
         let (x, edge_index, legal_moves, move_keys) = self.get_graph_data(gs);
         
         let mut priors = HashMap::new();
         let mut value = 0.0;
 
-        if let Some(ref session_mutex) = self.session {
-            let mut session = session_mutex.lock().unwrap();
+        if let Some(session_arc) = session {
+            let mut session = session_arc.lock().unwrap();
             
             let x_val = Value::from_array(x).unwrap();
             let edge_val = Value::from_array(edge_index).unwrap();
@@ -326,7 +359,7 @@ impl MctsAgent {
                 }
             }
         } else {
-            // Uniform priors
+            // Uniform priors (no model)
             if !move_keys.is_empty() {
                 let p = 1.0 / (move_keys.len() as f64);
                 for m_key in move_keys {
@@ -335,6 +368,11 @@ impl MctsAgent {
             }
         }
         (value, priors)
+    }
+
+    /// Backwards-compatible wrapper: evaluate using the first available session.
+    pub(crate) fn evaluate(&self, gs: &GameState) -> (f64, HashMap<String, f64>) {
+        self.evaluate_with(gs, self.sessions.first())
     }
 
     fn get_best_move_key(&self, root: &Node) -> Option<String> {
@@ -358,7 +396,9 @@ impl MctsAgent {
         }
     }
 
-    fn run_mcts(&self, gs: &GameState) -> Node {
+    /// Core MCTS search — single-threaded, uses the given session for evaluation.
+    /// This is the inner loop; call `run_mcts_parallel` for the public entry point.
+    fn run_mcts_core(&self, gs: &GameState, session: Option<&Arc<Mutex<Session>>>) -> Node {
         let start_time = Instant::now();
         let budget = Duration::from_millis(self.time_budget_ms);
 
@@ -458,7 +498,7 @@ impl MctsAgent {
             let v_leaf = if let Some(val) = terminal_value {
                 val
             } else {
-                let (val, priors) = self.evaluate(&current_gs);
+                let (val, priors) = self.evaluate_with(&current_gs, session);
                 if !current_node.is_expanded() {
                     for (m_key, prob) in priors {
                         current_node.children.insert(m_key, Node::new(prob, current_gs.turn));
@@ -492,6 +532,69 @@ impl MctsAgent {
         }
         
         root
+    }
+
+    /// Merge multiple root nodes from independent trees by summing visit counts.
+    fn aggregate_roots(&self, mut roots: Vec<Node>) -> Node {
+        if roots.is_empty() {
+            return Node::new(1.0, Side::White); // shouldn't happen
+        }
+        if roots.len() == 1 {
+            return roots.remove(0);
+        }
+        let mut base = roots.remove(0);
+        for other in roots {
+            base.visit_count += other.visit_count;
+            base.value_sum += other.value_sum;
+            for (key, child) in other.children {
+                let entry = base.children
+                    .entry(key)
+                    .or_insert_with(|| Node::new(child.prior_prob, child.turn));
+                entry.visit_count += child.visit_count;
+                entry.value_sum += child.value_sum;
+            }
+        }
+        base
+    }
+
+    /// Main entry point for MCTS search. Uses root-parallelisation when num_threads > 1.
+    ///
+    /// With 1 thread (default): identical to the original single-threaded behaviour.
+    /// With N threads: spawns N independent trees and aggregates visit counts.
+    fn run_mcts_parallel(&self, gs: &GameState) -> Node {
+        let effective_threads = if self.sessions.is_empty() {
+            // No model: thread count is still controlled by num_threads field
+            self.num_threads
+        } else {
+            // Have model: one session per thread; actual thread count = sessions.len()
+            self.sessions.len()
+        };
+
+        if effective_threads <= 1 {
+            // Single-threaded — no overhead, same as original.
+            return self.run_mcts_core(gs, self.sessions.first());
+        }
+
+        // Root parallelisation: spawn one thread per slot, each with its own session.
+        let roots: Vec<Node> = if self.sessions.is_empty() {
+            // No model — spawn threads using uniform priors.
+            std::thread::scope(|scope| {
+                let handles: Vec<_> = (0..effective_threads)
+                    .map(|_| scope.spawn(|| self.run_mcts_core(gs, None)))
+                    .collect();
+                handles.into_iter().map(|h| h.join().expect("MCTS thread panicked")).collect()
+            })
+        } else {
+            // With model — each thread gets its own dedicated session.
+            std::thread::scope(|scope| {
+                let handles: Vec<_> = self.sessions.iter()
+                    .map(|session| scope.spawn(|| self.run_mcts_core(gs, Some(session))))
+                    .collect();
+                handles.into_iter().map(|h| h.join().expect("MCTS thread panicked")).collect()
+            })
+        };
+
+        self.aggregate_roots(roots)
     }
 
     fn save_search_data(&self, gs: &GameState, root: &Node) {
@@ -555,7 +658,7 @@ impl Agent for MctsAgent {
     fn choose_color<'a>(&self, gs: &GameState, valid_colors: &'a [String]) -> &'a String {
         if valid_colors.len() == 1 { return &valid_colors[0]; }
         
-        let root = self.run_mcts(gs);
+        let root = self.run_mcts_parallel(gs);
         let best_key = self.get_best_move_key(&root).unwrap_or_else(|| format!("COLOR:{}", valid_colors[0]));
         
         if self.verbosity >= 1 {
@@ -582,7 +685,7 @@ impl Agent for MctsAgent {
         _all_moves: &HashMap<String, Vec<String>>,
         _pass_allowed: bool,
     ) -> AgentMove {
-        let root = self.run_mcts(gs);
+        let root = self.run_mcts_parallel(gs);
         let best_key = self.get_best_move_key(&root).unwrap_or_else(|| "PASS".to_string());
         
         if self.verbosity >= 1 {
@@ -750,5 +853,20 @@ mod tests {
         let valid_colors = vec!["Blue".to_string(), "Yellow".to_string()];
         let c = agent.choose_color(&gs, &valid_colors);
         assert!(valid_colors.contains(c));
+    }
+
+    #[test]
+    fn test_root_parallel_same_result_shape() {
+        // Ensure parallel search returns a valid move (not a panic).
+        let mut gs = setup_test_board();
+        gs.phase = GamePhase::Playing;
+        gs.color_chosen.insert(gs.turn, "Blue".to_string());
+        gs.is_new_turn = false;
+        // 2 threads, no model → uniform priors, still must pick a move.
+        let agent = MctsAgent::with_threads(100, None, "mcts_temp".to_string(), false, 0, 2);
+        let m = agent.choose_move(&gs, &std::collections::HashMap::new(), false);
+        match m {
+            AgentMove::Move { .. } | AgentMove::Pass => {},
+        }
     }
 }

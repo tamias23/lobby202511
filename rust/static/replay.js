@@ -217,7 +217,7 @@ function renderBoard(board) {
 
             let innerHTML = "";
 
-            if (type === "berserker") {
+            if (type === "golem") {
                 scale = 0.09;
                 const fill = isBlack ? "black" : "white";
                 const stroke = isBlack ? "black" : "black"; 
@@ -226,7 +226,7 @@ function renderBoard(board) {
                     innerHTML += `<path d="M 0 0 A 10 25 0 0 1 110 110 Z" fill="${fill}" stroke="${stroke}" stroke-width="20" transform="rotate(${j * 120} 0 0)"></path>`;
                 }
                 if (isBlack) {
-                    // Add inner white contours for black berserkers
+                    // Add inner white contours for black golems
                     for (let j = 0; j < 3; j++) {
                         innerHTML += `<path d="M 0 0 A 10 25 0 0 1 110 110 Z" fill="black" stroke="white" stroke-width="15" transform="rotate(${j * 120} 0 0) scale(0.5)"></path>`;
                     }
@@ -250,7 +250,7 @@ function renderBoard(board) {
                     innerHTML += `<polygon points="0,-15 20,10 0,20 -20,10" fill="black" stroke="black" stroke-width="8"></polygon>`;
                 }
             }
-            else if (type === "bishop") {
+            else if (type === "witch") {
                 scale = 1.0;
                 ox = -40; oy = -44; // Translate to center the points "40 32 30 50 50 50"
                 const fill = isBlack ? "black" : "white";
