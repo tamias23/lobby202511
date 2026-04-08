@@ -4,6 +4,37 @@ import { socket } from "../socket";
 import init, { get_legal_moves_wasm, get_eligible_pieces_wasm } from "../wasm_pkg/frontend_wasm";
 import Clock from "./Clock";
 
+// ── Board Color Themes ─────────────────────────────────────────────────────────
+// 'classic' = faithful reproduction of the legacy JS rgb() values (createMush06.js)
+// 'ember'   = warm earth palette derived from the legacy JS extended color set
+// 'arctic'  = cool crystalline palette (new)
+const COLOR_THEMES = {
+  classic: {
+    orange: 'rgb(100%,54.9%,0%)',
+    green:  'rgb(0%,80%,32.2%)',
+    blue:   'rgb(20%,60%,100%)',
+    grey:   'rgb(66.7%,66.7%,66.7%)',
+  },
+  ember: {
+    orange: '#c0392b',   // deep red
+    green:  '#d4ac0d',   // gold
+    blue:   '#8e44ad',   // purple
+    grey:   '#795548',   // warm brown
+  },
+  arctic: {
+    orange: '#00bcd4',   // cyan
+    green:  '#1e88e5',   // deep sky blue
+    blue:   '#7c4dff',   // electric violet
+    grey:   '#546e7a',   // blue-grey slate
+  },
+};
+
+const THEME_LABELS = {
+  classic: '🎨 Classic',
+  ember:   '🔥 Ember',
+  arctic:  '❄️ Arctic',
+};
+
 const PieceIcon = ({ type, side }) => {
   const isBlack = side === "black" || side === "yellow";
   const fill = isBlack ? "black" : "white";
@@ -509,6 +540,14 @@ const GameBoard = ({
   const [lastTurnTimestamp, setLastTurnTimestamp] = useState(initialState.lastTurnTimestamp || null);
   const [isDebugFolded, setIsDebugFolded] = useState(true);
   const [showGameOverOverlay, setShowGameOverOverlay] = useState(false);
+  const [colorTheme, setColorTheme] = useState('classic');
+  const [showSettings, setShowSettings] = useState(false);
+
+  // Resolve a logical board color name to the current theme's CSS color
+  const getThemeColor = (logicalColor) => {
+    const theme = COLOR_THEMES[colorTheme] || COLOR_THEMES.classic;
+    return theme[logicalColor] || logicalColor;
+  };
 
   // Add local state for history, defaulting to empty until backend passes it explicitly in all events
   const [moveHistory, setMoveHistory] = useState(initialState.history || []);
@@ -784,7 +823,7 @@ const GameBoard = ({
             <polygon
               key={id}
               points={poly.points.map((p) => `${p[0]},${p[1]}`).join(" ")}
-              fill={poly.color}
+              fill={getThemeColor(poly.color)}
               stroke="black"
               strokeWidth="0.5"
               style={{
@@ -1375,6 +1414,82 @@ const GameBoard = ({
           >
             Flip Board
           </button>
+
+          {/* ── Settings Panel ── */}
+          <button
+            onClick={() => setShowSettings(s => !s)}
+            style={{
+              ...buttonStyle,
+              backgroundColor: showSettings ? "#1a252f" : "#2c3e50",
+              boxShadow: "0 2px 8px rgba(44,62,80,0.4)",
+              width: "100%",
+              padding: "8px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "6px",
+            }}
+          >
+            <span style={{ fontSize: "14px" }}>⚙️</span>
+            <span>Settings</span>
+            <span style={{ marginLeft: "auto", fontSize: "10px", opacity: 0.6 }}>{showSettings ? "▲" : "▼"}</span>
+          </button>
+
+          {showSettings && (
+            <div style={{
+              background: "rgba(0,0,0,0.35)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: "10px",
+              padding: "12px 10px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px",
+              animation: "fadeIn 0.2s ease",
+            }}>
+              <div style={{ fontSize: "10px", fontWeight: "700", color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "2px" }}>
+                Board Colors
+              </div>
+              {Object.entries(THEME_LABELS).map(([key, label]) => {
+                const palette = COLOR_THEMES[key];
+                const isActive = colorTheme === key;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setColorTheme(key)}
+                    style={{
+                      background: isActive ? "rgba(255,255,255,0.12)" : "transparent",
+                      border: isActive ? "1px solid rgba(255,255,255,0.35)" : "1px solid rgba(255,255,255,0.08)",
+                      borderRadius: "8px",
+                      padding: "7px 10px",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      width: "100%",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {/* 4-swatch mini preview */}
+                    <span style={{ display: "flex", gap: "3px", flexShrink: 0 }}>
+                      {['orange','green','blue','grey'].map(c => (
+                        <span key={c} style={{
+                          width: "10px", height: "10px",
+                          borderRadius: "3px",
+                          background: palette[c],
+                          border: "1px solid rgba(0,0,0,0.3)",
+                          display: "inline-block",
+                        }} />
+                      ))}
+                    </span>
+                    <span style={{ fontSize: "11px", color: isActive ? "#fff" : "rgba(255,255,255,0.6)", fontWeight: isActive ? "700" : "400" }}>
+                      {label}
+                    </span>
+                    {isActive && <span style={{ marginLeft: "auto", fontSize: "10px", color: "#2ecc71" }}>✓</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
