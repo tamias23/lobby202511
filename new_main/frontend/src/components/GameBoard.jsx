@@ -5,34 +5,26 @@ import init, { get_legal_moves_wasm, get_eligible_pieces_wasm } from "../wasm_pk
 import Clock from "./Clock";
 
 // ── Board Color Themes ─────────────────────────────────────────────────────────
-// 'classic' = faithful reproduction of the legacy JS rgb() values (createMush06.js)
-// 'ember'   = warm earth palette derived from the legacy JS extended color set
-// 'arctic'  = cool crystalline palette (new)
+// 'default' = original CSS named colors (orange, green, blue, grey) — as shipped
+// 'classic'  = faithful reproduction of the legacy JS rgb() values (createMush06.js)
 const COLOR_THEMES = {
+  default: {
+    orange: 'orange',
+    green:  'green',
+    blue:   'blue',
+    grey:   'grey',
+  },
   classic: {
     orange: 'rgb(100%,54.9%,0%)',
     green:  'rgb(0%,80%,32.2%)',
     blue:   'rgb(20%,60%,100%)',
     grey:   'rgb(66.7%,66.7%,66.7%)',
   },
-  ember: {
-    orange: '#c0392b',   // deep red
-    green:  '#d4ac0d',   // gold
-    blue:   '#8e44ad',   // purple
-    grey:   '#795548',   // warm brown
-  },
-  arctic: {
-    orange: '#00bcd4',   // cyan
-    green:  '#1e88e5',   // deep sky blue
-    blue:   '#7c4dff',   // electric violet
-    grey:   '#546e7a',   // blue-grey slate
-  },
 };
 
 const THEME_LABELS = {
+  default: '🟠 Default',
   classic: '🎨 Classic',
-  ember:   '🔥 Ember',
-  arctic:  '❄️ Arctic',
 };
 
 const PieceIcon = ({ type, side }) => {
@@ -540,7 +532,7 @@ const GameBoard = ({
   const [lastTurnTimestamp, setLastTurnTimestamp] = useState(initialState.lastTurnTimestamp || null);
   const [isDebugFolded, setIsDebugFolded] = useState(true);
   const [showGameOverOverlay, setShowGameOverOverlay] = useState(false);
-  const [colorTheme, setColorTheme] = useState('classic');
+  const [colorTheme, setColorTheme] = useState('default');
   const [showSettings, setShowSettings] = useState(false);
 
   // Resolve a logical board color name to the current theme's CSS color
