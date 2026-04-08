@@ -20,11 +20,18 @@ const COLOR_THEMES = {
     blue:   'rgb(20%,60%,100%)',
     grey:   'rgb(66.7%,66.7%,66.7%)',
   },
+  tutorial: {
+    orange: '#f97316',
+    green:  '#22c55e',
+    blue:   '#3b82f6',
+    grey:   '#64748b',
+  },
 };
 
 const THEME_LABELS = {
   default: '🟠 Default',
   classic: '🎨 Classic',
+  tutorial: '📖 Tutorial',
 };
 
 const PieceIcon = ({ type, side }) => {
