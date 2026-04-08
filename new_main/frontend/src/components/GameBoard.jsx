@@ -552,13 +552,11 @@ const GameBoard = ({
   // Add local state for history, defaulting to empty until backend passes it explicitly in all events
   const [moveHistory, setMoveHistory] = useState(initialState.history || []);
 
-  // Calculate board center for flipping
-  const boardCenter = useMemo(() => {
-    if (!board || !board.allPolygons) return { x: 0, y: 0 };
-    let minX = Infinity,
-      minY = Infinity,
-      maxX = -Infinity,
-      maxY = -Infinity;
+  // Calculate board bounding box for dynamic viewBox and center for flipping
+  const { boardCenter, boardViewBox } = useMemo(() => {
+    const fallback = { boardCenter: { x: 0, y: 0 }, boardViewBox: '-100 -10 610 445' };
+    if (!board || !board.allPolygons) return fallback;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     Object.values(board.allPolygons).forEach((poly) => {
       poly.points.forEach((p) => {
         minX = Math.min(minX, p[0]);
@@ -567,7 +565,15 @@ const GameBoard = ({
         maxY = Math.max(maxY, p[1]);
       });
     });
-    return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+    const pad = 20;
+    const vbX = minX - pad;
+    const vbY = minY - pad;
+    const vbW = (maxX - minX) + pad * 2;
+    const vbH = (maxY - minY) + pad * 2;
+    return {
+      boardCenter: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 },
+      boardViewBox: `${vbX} ${vbY} ${vbW} ${vbH}`,
+    };
   }, [board]);
   const [colorChosen, setColorChosen] = useState(
     initialState.colorChosen || {},
@@ -1200,10 +1206,11 @@ const GameBoard = ({
       </div>
 
       {/* CENTER - Game Board */}
-      <div className="game-board-wrapper" style={{ position: 'relative', flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', minWidth: 0, minHeight: 0 }}>
+      <div className="game-board-wrapper" style={{ position: 'relative', flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', minWidth: 0, minHeight: 0 }}>
         <svg
           ref={svgRef}
-          viewBox="-100 -10 610 445"
+          viewBox={boardViewBox}
+          preserveAspectRatio="xMidYMin meet"
           style={svgStyle}
           onMouseMove={handleGlobalMouseMove}
           onMouseUp={handleGlobalMouseUp}
