@@ -31,7 +31,7 @@
   --border:   rgba(255, 255, 255, 0.18);
 }
 
-.bubble-mode, .bubble-slow-mode {
+.bubble-mode, .bubble-slow-mode, .bubble-color-mode {
   --bg-main: #2c3e50;
   --card-bg: rgba(30, 41, 59, 0.8);
   --text-main: #f8fafc;

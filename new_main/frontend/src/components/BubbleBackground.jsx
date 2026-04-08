@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 
-const BubbleBackground = ({ speedFactor = 1.0 }) => {
+const BubbleBackground = ({ speedFactor = 1.0, randomColors = false }) => {
   const canvasRef = useRef(null);
 
   useEffect(() => {
@@ -12,6 +12,9 @@ const BubbleBackground = ({ speedFactor = 1.0 }) => {
     let width, height;
     let bubbles = [];
     const numBubbles = 65; // between 50 and 80
+    const colorChoices = [
+      'DarkGreen', 'DarkOliveGreen', 'DarkBlue', 'DarkSlateGrey', 'Grey', 'Olive', 'OrangeRed'
+    ];
 
     const resize = () => {
       width = window.innerWidth;
@@ -28,9 +31,17 @@ const BubbleBackground = ({ speedFactor = 1.0 }) => {
         this.vx = (Math.random() - 0.5) * 1.5 * speedFactor; // movement scaled by factor
         this.vy = (Math.random() - 0.5) * 1.5 * speedFactor;
         this.mass = this.radius;
+        this.color = randomColors 
+          ? colorChoices[Math.floor(Math.random() * colorChoices.length)]
+          : 'rgba(13, 18, 56, 0.85)';
       }
 
       update() {
+        // Random color change logic
+        if (randomColors && Math.random() < 1 / 7200) { // On average once every 2 mins (120s * 60fps)
+          this.color = colorChoices[Math.floor(Math.random() * colorChoices.length)];
+        }
+
         this.x += this.vx;
         this.y += this.vy;
 
@@ -55,7 +66,9 @@ const BubbleBackground = ({ speedFactor = 1.0 }) => {
       draw() {
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(13, 18, 56, 0.85)';
+        ctx.fillStyle = this.color;
+        if (!randomColors) ctx.globalAlpha = 1.0; // Ensure consistency
+        else ctx.globalAlpha = 0.8;
         ctx.fill();
         ctx.closePath();
       }
@@ -133,7 +146,7 @@ const BubbleBackground = ({ speedFactor = 1.0 }) => {
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', resize);
     };
-  }, [speedFactor]);
+  }, [speedFactor, randomColors]);
 
   return (
     <canvas

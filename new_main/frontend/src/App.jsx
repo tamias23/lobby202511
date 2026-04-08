@@ -13,16 +13,17 @@ function App() {
   const location = useLocation();
   const [theme, setTheme] = useState(() => {
     const saved = localStorage.getItem('theme');
-    const validThemes = ['light', 'dark', 'rain', 'bubble', 'bubble_slow'];
+    const validThemes = ['light', 'dark', 'rain', 'bubble', 'bubble_slow', 'bubble_color'];
     return validThemes.includes(saved) ? saved : 'dark';
   });
 
   useEffect(() => {
-    document.body.classList.remove('light-mode', 'rain-mode', 'bubble-mode', 'bubble-slow-mode');
+    document.body.classList.remove('light-mode', 'rain-mode', 'bubble-mode', 'bubble-slow-mode', 'bubble-color-mode');
     if (theme === 'light') document.body.classList.add('light-mode');
     else if (theme === 'rain') document.body.classList.add('rain-mode');
     else if (theme === 'bubble') document.body.classList.add('bubble-mode');
     else if (theme === 'bubble_slow') document.body.classList.add('bubble-slow-mode');
+    else if (theme === 'bubble_color') document.body.classList.add('bubble-color-mode');
     localStorage.setItem('theme', theme);
   }, [theme]);
 
@@ -51,6 +52,7 @@ function App() {
     else if (theme === 'light') setTheme('rain');
     else if (theme === 'rain') setTheme('bubble');
     else if (theme === 'bubble') setTheme('bubble_slow');
+    else if (theme === 'bubble_slow') setTheme('bubble_color');
     else setTheme('dark');
   };
 
@@ -63,11 +65,12 @@ function App() {
         title="Toggle Theme"
         id="theme-toggle-btn"
       >
-        {theme === 'dark' ? '🌙' : theme === 'light' ? '☀️' : theme === 'rain' ? '🌧️' : theme === 'bubble' ? '🫧' : '🐌'}
+        {theme === 'dark' ? '🌙' : theme === 'light' ? '☀️' : theme === 'rain' ? '🌧️' : theme === 'bubble' ? '🫧' : theme === 'bubble_slow' ? '🐌' : '🎨'}
       </button>
 
       {theme === 'bubble' && <BubbleBackground speedFactor={1.0} />}
       {theme === 'bubble_slow' && <BubbleBackground speedFactor={0.33} />}
+      {theme === 'bubble_color' && <BubbleBackground speedFactor={0.33} randomColors={true} />}
 
       {/* Auth header top-right - ONLY on lobby page */}
       {location.pathname === '/' && (
