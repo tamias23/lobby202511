@@ -70,7 +70,7 @@ async function fetchAvailableBots() {
 
 // Poll every 10s so the panel appears/disappears quickly when the bot server starts/stops
 fetchAvailableBots();
-setInterval(fetchAvailableBots, 10000);
+setInterval(fetchAvailableBots, 60000);
 
 function getBotKey(agentType, modelName) {
     return `${agentType}:${modelName}`;
@@ -749,10 +749,10 @@ function buildInitialState(gameData) {
         heroeTakeCounter: gameData.heroeTakeCounter,
         clocks: gameData.clocks,
         lastTurnTimestamp: gameData.lastTurnTimestamp,
-        whiteRole: gameData.whiteRole,
         blackRole: gameData.blackRole,
         whiteName: gameData.whiteName,
         blackName: gameData.blackName,
+        boardName: gameData.boardName,
     };
 }
 
@@ -761,6 +761,7 @@ function createGame(whitePlayer, blackPlayer, timeControl) {
     const hash = getRandomHash();
 
     const randomBoardFile = boardPool[Math.floor(Math.random() * boardPool.length)];
+    const boardName = randomBoardFile ? randomBoardFile.replace('.json', '') : 'unknown';
     let boardData;
     try {
         const boardPath = path.join(BOARDS_PATH, randomBoardFile);
@@ -792,6 +793,7 @@ function createGame(whitePlayer, blackPlayer, timeControl) {
         blackName: blackPlayer.username || blackPlayer.userId,
         timeControl,
         board: boardData,
+        boardName,
         pieces: initPieces,
         turn: 'white',
         phase: 'Setup',
