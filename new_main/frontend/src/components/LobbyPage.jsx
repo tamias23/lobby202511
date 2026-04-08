@@ -196,9 +196,11 @@ const LobbyPage = ({ user }) => {
 
       {/* ── Title ── */}
       <div className="lobby-title-row">
-        <div>
-          <p className="lobby-welcome">welcome to ...</p>
-          <h1 className="lobby-title">DEDAL</h1>
+        <div className="lobby-title-container">
+          <h1 className="lobby-title">
+            <span className="lobby-welcome">welcome to ...</span>
+            DEDAL
+          </h1>
           <p className="lobby-subtitle">Choose a time control and jump into a game</p>
         </div>
       </div>
