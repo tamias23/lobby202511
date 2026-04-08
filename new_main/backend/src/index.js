@@ -749,6 +749,7 @@ function buildInitialState(gameData) {
         heroeTakeCounter: gameData.heroeTakeCounter,
         clocks: gameData.clocks,
         lastTurnTimestamp: gameData.lastTurnTimestamp,
+        passCount: gameData.passCount || { white: 0, black: 0 },
         blackRole: gameData.blackRole,
         whiteName: gameData.whiteName,
         blackName: gameData.blackName,
@@ -808,6 +809,7 @@ function createGame(whitePlayer, blackPlayer, timeControl) {
         heroeTakeCounter: 0,
         clocks: { white: clockMs, black: clockMs },
         lastTurnTimestamp: Date.now(),
+        passCount: { white: 0, black: 0 },
         history: [],
         // track which socket IDs are the players
         whiteSocketId: whitePlayer.socketId,
@@ -1263,6 +1265,11 @@ io.on('connection', (socket) => {
                 
                 updateClocks(game, true);
 
+                // Track consecutive passes — 3 in a row = loss
+                const passingSide = game.turn; // turn hasn't changed yet
+                if (!game.passCount) game.passCount = { white: 0, black: 0 };
+                game.passCount[passingSide] = (game.passCount[passingSide] || 0) + 1;
+
                 game.turn = response.turn;
                 game.phase = response.phase;
                 game.setupStep = response.setupStep;
@@ -1274,6 +1281,20 @@ io.on('connection', (socket) => {
                 game.colorChosen = response.colorChosen;
                 game.colorsEverChosen = response.colorsEverChosen;
                 game.mageUnlocked = response.mageUnlocked;
+
+                if (game.passCount[passingSide] >= 3) {
+                    game.phase = 'GameOver';
+                    const winnerId = passingSide === 'white' ? game.black : game.white;
+                    const winnerSide = passingSide === 'white' ? 'black' : 'white';
+                    console.log(`Game Over: ${gameId} - ${passingSide} passed 3 times`);
+                    io.to(gameId).emit('game_over', { winnerId, winnerSide, reason: 'pass_limit' });
+                    saveMatchResult(gameId, game.white, game.black, winnerId, game.pieces, game.history)
+                        .catch(err => console.error(`Failed to save pass-limit game ${gameId}:`, err));
+                    releaseBotIfNeeded(game);
+                    lobby.activeGames.delete(gameId);
+                    broadcastLobbyUpdate(io);
+                    return;
+                }
 
                 io.to(gameId).emit('game_update', {
                     pieces: game.pieces,
@@ -1289,9 +1310,10 @@ io.on('connection', (socket) => {
                     lockedSequencePiece: game.lockedSequencePiece || null,
                     heroeTakeCounter: game.heroeTakeCounter,
                     clocks: game.clocks,
-                    lastTurnTimestamp: game.lastTurnTimestamp
+                    lastTurnTimestamp: game.lastTurnTimestamp,
+                    passCount: game.passCount
                 });
-                console.log(`Playing turn passed in ${gameId}: Now ${game.turn}'s turn`);
+                console.log(`Playing turn passed in ${gameId}: Now ${game.turn}'s turn (${passingSide} passCount: ${game.passCount[passingSide]})`);
 
                 // If it's now the bot's turn, trigger it
                 if (game.botSide) setImmediate(() => triggerBotMoveIfNeeded(gameId));
@@ -1299,6 +1321,31 @@ io.on('connection', (socket) => {
                 console.error('Error in pass_turn_playing:', e);
             }
         }
+    });
+
+    socket.on('resign', ({ gameId }) => {
+        const game = lobby.activeGames.get(gameId);
+        if (!game || game.phase === 'GameOver') return;
+
+        // Identify the resigning side by socket ID
+        let resigningSide = null;
+        if (socket.id === game.whiteSocketId) resigningSide = 'white';
+        else if (socket.id === game.blackSocketId) resigningSide = 'black';
+        if (!resigningSide) return; // spectator / unknown
+
+        game.phase = 'GameOver';
+        const winnerSide = resigningSide === 'white' ? 'black' : 'white';
+        const winnerId = winnerSide === 'white' ? game.white : game.black;
+
+        console.log(`Game Over: ${gameId} - ${resigningSide} resigned`);
+        io.to(gameId).emit('game_over', { winnerId, winnerSide, reason: 'resign' });
+
+        saveMatchResult(gameId, game.white, game.black, winnerId, game.pieces, game.history)
+            .catch(err => console.error(`Failed to save resigned game ${gameId}:`, err));
+
+        releaseBotIfNeeded(game);
+        lobby.activeGames.delete(gameId);
+        broadcastLobbyUpdate(io);
     });
 
     socket.on('get_legal_moves', ({ gameId, pieceId }) => {
@@ -1406,6 +1453,9 @@ io.on('connection', (socket) => {
                 game.setupStep = response.setupStep;
                 if (oldTurn !== response.turn) {
                     updateClocks(game, true);
+                    // Turn changed = real move made, reset the mover's pass count
+                    if (!game.passCount) game.passCount = { white: 0, black: 0 };
+                    game.passCount[oldTurn] = 0;
                 }
 
                 game.turn = response.turn;
@@ -1433,7 +1483,8 @@ io.on('connection', (socket) => {
                     heroeTakeCounter: game.heroeTakeCounter,
                     clocks: game.clocks,
                     lastTurnTimestamp: game.lastTurnTimestamp,
-                    lastMove: { pieceId, targetPoly, captured: response.captured }
+                    lastMove: { pieceId, targetPoly, captured: response.captured },
+                    passCount: game.passCount
                 });
 
                 if (response.phase === 'GameOver') {

@@ -500,6 +500,7 @@ const GameBoard = ({
   opponent, 
   playerName, 
   initialState, 
+  spectatorMode,
   whiteRole, 
   blackRole, 
   whiteName, 
@@ -541,7 +542,10 @@ const GameBoard = ({
   const [showGameOverOverlay, setShowGameOverOverlay] = useState(false);
   const [colorTheme, setColorTheme] = useState('default');
   const [showSettings, setShowSettings] = useState(false);
+  const [resignConfirm, setResignConfirm] = useState(false);
   const [boardName] = useState(initialState.boardName || "Template");
+  const [passCount, setPassCount] = useState(initialState.passCount || { white: 0, black: 0 });
+  const [passWarningShown, setPassWarningShown] = useState(false);
 
   // Resolve a logical board color name to the current theme's CSS color
   const getThemeColor = (logicalColor) => {
@@ -589,6 +593,15 @@ const GameBoard = ({
   };
   const navigate = useNavigate();
   const [gameOverInfo, setGameOverInfo] = useState({ winnerId: null, reason: null });
+  // Track piece-state snapshot after every update, for post-game replay
+  const snapshotsRef = useRef([{
+    pieces: initialState.pieces || [],
+    clocks: initialState.clocks || null,
+    colorChosen: initialState.colorChosen || {},
+    turn: initialState.turn || 'white',
+    phase: initialState.phase || 'Setup',
+  }]);
+  const snapshotMetaRef = useRef([]); // parallel array: { turn, phase }
   
   useEffect(() => {
     if (phase === "GameOver") {
@@ -661,6 +674,23 @@ const GameBoard = ({
       if (data.lastTurnTimestamp) setLastTurnTimestamp(data.lastTurnTimestamp);
       if (data.colorsEverChosen !== undefined) setColorsEverChosen(data.colorsEverChosen);
       if (data.mageUnlocked !== undefined) setMageUnlocked(data.mageUnlocked);
+      if (data.passCount) {
+        setPassCount(data.passCount);
+        // Reset warning state if our pass count dropped back to 0 (a move was made)
+        if (data.passCount[side] === 0) setPassWarningShown(false);
+      }
+
+      // Capture snapshot for post-game replay
+      if (data.pieces) {
+        snapshotsRef.current.push({
+          pieces: JSON.parse(JSON.stringify(data.pieces)),
+          clocks: data.clocks ? { ...data.clocks } : null,
+          colorChosen: data.colorChosen ? { ...data.colorChosen } : {},
+          turn: data.turn,
+          phase: data.phase,
+        });
+        snapshotMetaRef.current.push({ turn: data.turn, phase: data.phase });
+      }
 
       setSelectedPiece(null);
       setLegalMoves([]);
@@ -1356,22 +1386,66 @@ const GameBoard = ({
             gap: "10px"
           }}
         >
-          {phase === "Setup" && turn === side && (
+          {turn === side && (phase === "Setup" || phase === "Playing") && (
             <button
-              onClick={() => socket.emit("end_turn_setup", { gameId })}
+              onClick={() => {
+                if (phase === "Setup") {
+                  if (movesThisTurn === 0) {
+                    // Block: no piece placed yet
+                    const el = document.getElementById('pass-warning-toast');
+                    if (el) { el.style.opacity = '1'; setTimeout(() => { if(el) el.style.opacity = '0'; }, 2500); }
+                    return;
+                  }
+                  socket.emit("end_turn_setup", { gameId });
+                } else {
+                  // Warn on 2nd pass (about to hit the 3-pass limit)
+                  const myPassCount = passCount[side] || 0;
+                  if (myPassCount === 2) {
+                    if (!passWarningShown) {
+                      setPassWarningShown(true);
+                      return; // first click shows the warning
+                    }
+                    setPassWarningShown(false);
+                  } else {
+                    setPassWarningShown(false);
+                  }
+                  socket.emit("pass_turn_playing", { gameId });
+                }
+              }}
               onMouseOver={(e) => (e.target.style.transform = "scale(1.03)")}
               onMouseOut={(e) => (e.target.style.transform = "scale(1)")}
               style={{
                 ...buttonStyle,
-                backgroundColor: "#2ecc71",
-                boxShadow: "0 2px 8px rgba(46, 204, 113, 0.3)",
+                backgroundColor: passWarningShown ? '#c0392b' : (phase === "Setup" ? "#2ecc71" : "#e67e22"),
+                boxShadow: passWarningShown
+                  ? '0 2px 8px rgba(192,57,43,0.5)'
+                  : phase === "Setup"
+                  ? "0 2px 8px rgba(46, 204, 113, 0.3)"
+                  : "0 2px 8px rgba(230, 126, 34, 0.3)",
                 width: "100%",
-                padding: "8px"
+                padding: "8px",
+                transition: 'all 0.2s',
               }}
             >
-              Confirm Placement
+              {passWarningShown ? '⚠️ Confirm Pass' : 'End Turn'}
             </button>
           )}
+
+          {/* Pass warning toast (setup: no piece placed) */}
+          <div
+            id="pass-warning-toast"
+            style={{
+              fontSize: '11px',
+              color: '#e74c3c',
+              textAlign: 'center',
+              opacity: 0,
+              transition: 'opacity 0.3s',
+              pointerEvents: 'none',
+              lineHeight: 1.4,
+            }}
+          >
+            Place at least one piece first.
+          </div>
 
           {phase === "Setup" && turn === side && (
             <button
@@ -1390,23 +1464,6 @@ const GameBoard = ({
             </button>
           )}
 
-          {phase === "Playing" && turn === side && (
-            <button
-              onClick={() => socket.emit("pass_turn_playing", { gameId })}
-              onMouseOver={(e) => (e.target.style.transform = "scale(1.03)")}
-              onMouseOut={(e) => (e.target.style.transform = "scale(1)")}
-              style={{
-                ...buttonStyle,
-                backgroundColor: "#e67e22",
-                boxShadow: "0 2px 8px rgba(230, 126, 34, 0.3)",
-                width: "100%",
-                padding: "8px"
-              }}
-            >
-              End Turn
-            </button>
-          )}
-
           <button
             onClick={() => setIsFlipped(!isFlipped)}
             onMouseOver={(e) => (e.target.style.transform = "scale(1.03)")}
@@ -1421,6 +1478,58 @@ const GameBoard = ({
           >
             Flip Board
           </button>
+
+          {/* Resign button — only for active players during a live game */}
+          {!spectatorMode && phase !== 'GameOver' && (
+            resignConfirm ? (
+              <div style={{ display: 'flex', gap: '6px', width: '100%' }}>
+                <button
+                  onClick={() => {
+                    socket.emit('resign', { gameId });
+                    setResignConfirm(false);
+                  }}
+                  style={{
+                    ...buttonStyle,
+                    flex: 1,
+                    backgroundColor: '#c0392b',
+                    boxShadow: '0 2px 8px rgba(192,57,43,0.4)',
+                    padding: '8px 4px',
+                    fontSize: '12px',
+                  }}
+                >
+                  Yes, resign
+                </button>
+                <button
+                  onClick={() => setResignConfirm(false)}
+                  style={{
+                    ...buttonStyle,
+                    flex: 1,
+                    backgroundColor: '#2c3e50',
+                    boxShadow: '0 2px 8px rgba(44,62,80,0.3)',
+                    padding: '8px 4px',
+                    fontSize: '12px',
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setResignConfirm(true)}
+                onMouseOver={(e) => (e.target.style.transform = 'scale(1.03)')}
+                onMouseOut={(e) => (e.target.style.transform = 'scale(1)')}
+                style={{
+                  ...buttonStyle,
+                  backgroundColor: '#922b21',
+                  boxShadow: '0 2px 8px rgba(146,43,33,0.3)',
+                  width: '100%',
+                  padding: '8px',
+                }}
+              >
+                Resign
+              </button>
+            )
+          )}
 
           {/* ── Settings Panel ── */}
           <button
@@ -1534,33 +1643,113 @@ const GameBoard = ({
                 ? "Goddess captured."
                 : gameOverInfo.reason === "abandoned"
                 ? "Opponent disconnected."
+                : gameOverInfo.reason === "resign"
+                ? "A player resigned."
+                : gameOverInfo.reason === "pass_limit"
+                ? "Passed 3 times in a row."
                 : null}
               <br />
               <span style={{ color: "var(--text-main)", fontWeight: "600" }}>
                 Winner: {gameOverInfo.winnerId}
               </span>
             </div>
-            <button
-              onClick={() => navigate("/")}
-              style={{
-                padding: "11px 28px",
-                background: "linear-gradient(135deg, #46b0d4, #f27813)",
-                color: "white",
-                border: "none",
-                borderRadius: "25px",
-                fontSize: "14px",
-                fontWeight: "700",
-                cursor: "pointer",
-                fontFamily: "'Outfit', sans-serif",
-                letterSpacing: "0.03em",
-                boxShadow: "0 4px 16px rgba(70,176,212,0.35)",
-                transition: "transform 0.15s, box-shadow 0.15s",
-              }}
-              onMouseEnter={e => { e.target.style.transform = "scale(1.04)"; e.target.style.boxShadow = "0 6px 24px rgba(70,176,212,0.5)"; }}
-              onMouseLeave={e => { e.target.style.transform = "scale(1)"; e.target.style.boxShadow = "0 4px 16px rgba(70,176,212,0.35)"; }}
-            >
-              Back to Lobby
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button
+                onClick={() => navigate("/")}
+                style={{
+                  padding: "11px 28px",
+                  background: "linear-gradient(135deg, #46b0d4, #f27813)",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "25px",
+                  fontSize: "14px",
+                  fontWeight: "700",
+                  cursor: "pointer",
+                  fontFamily: "'Outfit', sans-serif",
+                  letterSpacing: "0.03em",
+                  boxShadow: "0 4px 16px rgba(70,176,212,0.35)",
+                  transition: "transform 0.15s, box-shadow 0.15s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.04)"; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; }}
+              >
+                Back to Lobby
+              </button>
+              <button
+                onClick={() => {
+                  const record = {
+                    version: 2,
+                    boardName,
+                    whiteName: whiteName || 'White',
+                    blackName: blackName || 'Black',
+                    winner: gameOverInfo.winnerId,
+                    reason: gameOverInfo.reason,
+                    timeControl: initialState.timeControl || null,
+                    board,
+                    initialPieces: initialState.pieces || [],
+                    snapshots: snapshotsRef.current,
+                    history: moveHistory,
+                  };
+                  navigate('/analysis', { state: { record } });
+                }}
+                style={{
+                  padding: "11px 28px",
+                  background: "rgba(70,176,212,0.15)",
+                  color: "#46b0d4",
+                  border: "1px solid rgba(70,176,212,0.4)",
+                  borderRadius: "25px",
+                  fontSize: "14px",
+                  fontWeight: "700",
+                  cursor: "pointer",
+                  fontFamily: "'Outfit', sans-serif",
+                  transition: "transform 0.15s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.04)"; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; }}
+              >
+                🔍 Review Game
+              </button>
+              <button
+                onClick={() => {
+                  const record = {
+                    version: 2,
+                    boardName,
+                    whiteName: whiteName || 'White',
+                    blackName: blackName || 'Black',
+                    winner: gameOverInfo.winnerId,
+                    reason: gameOverInfo.reason,
+                    timeControl: initialState.timeControl || null,
+                    board,
+                    initialPieces: initialState.pieces || [],
+                    snapshots: snapshotsRef.current,
+                    history: moveHistory,
+                  };
+                  const blob = new Blob([JSON.stringify(record, null, 2)], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `dedal_${boardName}_${Date.now()}.json`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                style={{
+                  padding: "11px 28px",
+                  background: "rgba(255,255,255,0.05)",
+                  color: "var(--text-muted)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "25px",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                  fontFamily: "'Outfit', sans-serif",
+                  transition: "transform 0.15s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.04)"; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; }}
+              >
+                ⬇ Download JSON
+              </button>
+            </div>
           </div>
         </div>
       )}

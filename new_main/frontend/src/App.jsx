@@ -7,10 +7,12 @@ import GamePage from './components/GamePage';
 import LoginForm from './components/LoginForm';
 import RegistrationForm from './components/RegistrationForm';
 import BubbleBackground from './components/BubbleBackground';
+import AnalysisPage from './components/AnalysisPage';
 
 function App() {
   const [user, setUser] = useState(null);
   const location = useLocation();
+  const navigate = useNavigate();
   const [theme, setTheme] = useState(() => {
     const saved = localStorage.getItem('theme');
     const validThemes = ['light', 'dark', 'rain', 'bubble', 'bubble_slow', 'bubble_color'];
@@ -72,6 +74,18 @@ function App() {
       {theme === 'bubble_slow' && <BubbleBackground speedFactor={0.33} />}
       {theme === 'bubble_color' && <BubbleBackground speedFactor={0.33} randomColors={true} />}
 
+      {/* Analysis Board shortcut — top-left, lobby only */}
+      {location.pathname === '/' && (
+        <button
+          onClick={() => navigate('/analysis')}
+          style={analysisButtonStyle}
+          title="Analysis Board"
+          id="analysis-board-btn"
+        >
+          🔍 Analysis
+        </button>
+      )}
+
       {/* Auth header top-right - ONLY on lobby page */}
       {location.pathname === '/' && (
         <AuthHeader user={user} onLogout={handleLogout} />
@@ -82,10 +96,33 @@ function App() {
         <Route path="/login" element={<LoginForm onLoginSuccess={handleLoginSuccess} />} />
         <Route path="/register" element={<RegistrationForm />} />
         <Route path="/games/:hash" element={<GamePage user={user} />} />
+        <Route path="/analysis" element={<AnalysisPage />} />
       </Routes>
     </div>
   );
 }
+
+const analysisButtonStyle = {
+  position: 'fixed',
+  top: '14px',
+  left: '20px',
+  padding: '8px 16px',
+  borderRadius: '20px',
+  backgroundColor: 'var(--card-bg)',
+  backdropFilter: 'blur(12px)',
+  border: '1px solid var(--border)',
+  color: 'var(--text-main)',
+  fontSize: '13px',
+  fontWeight: '600',
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
+  zIndex: 1000,
+  boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+  transition: 'all 0.2s',
+  fontFamily: "'Outfit', sans-serif",
+};
 
 const themeToggleStyle = {
   position: 'fixed',
