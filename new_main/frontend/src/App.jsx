@@ -6,19 +6,22 @@ import AuthHeader from './components/AuthHeader';
 import GamePage from './components/GamePage';
 import LoginForm from './components/LoginForm';
 import RegistrationForm from './components/RegistrationForm';
+import BubbleBackground from './components/BubbleBackground';
 
 function App() {
   const [user, setUser] = useState(null);
   const location = useLocation();
   const [theme, setTheme] = useState(() => {
     const saved = localStorage.getItem('theme');
-    return saved === 'light' || saved === 'dark' || saved === 'rain' ? saved : 'dark';
+    const validThemes = ['light', 'dark', 'rain', 'bubble'];
+    return validThemes.includes(saved) ? saved : 'dark';
   });
 
   useEffect(() => {
-    document.body.classList.remove('light-mode', 'rain-mode');
+    document.body.classList.remove('light-mode', 'rain-mode', 'bubble-mode');
     if (theme === 'light') document.body.classList.add('light-mode');
     else if (theme === 'rain') document.body.classList.add('rain-mode');
+    else if (theme === 'bubble') document.body.classList.add('bubble-mode');
     localStorage.setItem('theme', theme);
   }, [theme]);
 
@@ -45,6 +48,7 @@ function App() {
   const cycleTheme = () => {
     if (theme === 'dark') setTheme('light');
     else if (theme === 'light') setTheme('rain');
+    else if (theme === 'rain') setTheme('bubble');
     else setTheme('dark');
   };
 
@@ -57,8 +61,10 @@ function App() {
         title="Toggle Theme"
         id="theme-toggle-btn"
       >
-        {theme === 'dark' ? '🌙' : theme === 'light' ? '☀️' : '🌧️'}
+        {theme === 'dark' ? '🌙' : theme === 'light' ? '☀️' : theme === 'rain' ? '🌧️' : '🫧'}
       </button>
+
+      {theme === 'bubble' && <BubbleBackground />}
 
       {/* Auth header top-right - ONLY on lobby page */}
       {location.pathname === '/' && (

@@ -31,6 +31,14 @@
   --border:   rgba(255, 255, 255, 0.18);
 }
 
+.bubble-mode {
+  --bg-main: #2c3e50;
+  --card-bg: rgba(30, 41, 59, 0.8);
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --border: rgba(255, 255, 255, 0.12);
+}
+
 /* ─────────────────── BASE ─────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
