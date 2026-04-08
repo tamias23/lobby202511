@@ -1052,11 +1052,6 @@ const GameBoard = ({
           
           {!isDebugFolded && (
             <div style={{ marginTop: "10px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px", borderBottom: "1px solid rgba(255,255,255,0.1)", paddingBottom: "4px" }}>
-                <span style={{ opacity: 0.6 }}>Board:</span>
-                <span style={{ color: "#f39c12", fontWeight: "bold" }}>{boardName}</span>
-              </div>
-
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
                 <span style={{ opacity: 0.6 }}>Phase:</span>
                 <span style={{ color: "#fff" }}>{phase}</span>
@@ -1560,6 +1555,28 @@ const GameBoard = ({
               Back to Lobby
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Board name overlay — visible only when debug panel is expanded */}
+      {!isDebugFolded && (
+        <div style={{
+          position: 'fixed',
+          bottom: '12px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'rgba(0,0,0,0.55)',
+          backdropFilter: 'blur(8px)',
+          border: '1px solid rgba(255,215,0,0.25)',
+          borderRadius: '20px',
+          padding: '5px 18px',
+          fontSize: '12px',
+          color: 'rgba(255,215,0,0.85)',
+          letterSpacing: '0.08em',
+          pointerEvents: 'none',
+          zIndex: 9999,
+        }}>
+          board: {boardName}
         </div>
       )}
     </div>
