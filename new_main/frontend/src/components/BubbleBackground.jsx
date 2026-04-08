@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 
-const BubbleBackground = () => {
+const BubbleBackground = ({ speedFactor = 1.0 }) => {
   const canvasRef = useRef(null);
 
   useEffect(() => {
@@ -25,8 +25,8 @@ const BubbleBackground = () => {
         this.radius = Math.random() * 25 + 5;
         this.x = Math.random() * (width - this.radius * 2) + this.radius;
         this.y = Math.random() * (height - this.radius * 2) + this.radius;
-        this.vx = (Math.random() - 0.5) * 1.5; // slow movement
-        this.vy = (Math.random() - 0.5) * 1.5;
+        this.vx = (Math.random() - 0.5) * 1.5 * speedFactor; // movement scaled by factor
+        this.vy = (Math.random() - 0.5) * 1.5 * speedFactor;
         this.mass = this.radius;
       }
 
@@ -133,7 +133,7 @@ const BubbleBackground = () => {
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', resize);
     };
-  }, []);
+  }, [speedFactor]);
 
   return (
     <canvas

@@ -13,15 +13,16 @@ function App() {
   const location = useLocation();
   const [theme, setTheme] = useState(() => {
     const saved = localStorage.getItem('theme');
-    const validThemes = ['light', 'dark', 'rain', 'bubble'];
+    const validThemes = ['light', 'dark', 'rain', 'bubble', 'bubble_slow'];
     return validThemes.includes(saved) ? saved : 'dark';
   });
 
   useEffect(() => {
-    document.body.classList.remove('light-mode', 'rain-mode', 'bubble-mode');
+    document.body.classList.remove('light-mode', 'rain-mode', 'bubble-mode', 'bubble-slow-mode');
     if (theme === 'light') document.body.classList.add('light-mode');
     else if (theme === 'rain') document.body.classList.add('rain-mode');
     else if (theme === 'bubble') document.body.classList.add('bubble-mode');
+    else if (theme === 'bubble_slow') document.body.classList.add('bubble-slow-mode');
     localStorage.setItem('theme', theme);
   }, [theme]);
 
@@ -49,6 +50,7 @@ function App() {
     if (theme === 'dark') setTheme('light');
     else if (theme === 'light') setTheme('rain');
     else if (theme === 'rain') setTheme('bubble');
+    else if (theme === 'bubble') setTheme('bubble_slow');
     else setTheme('dark');
   };
 
@@ -61,10 +63,11 @@ function App() {
         title="Toggle Theme"
         id="theme-toggle-btn"
       >
-        {theme === 'dark' ? '🌙' : theme === 'light' ? '☀️' : theme === 'rain' ? '🌧️' : '🫧'}
+        {theme === 'dark' ? '🌙' : theme === 'light' ? '☀️' : theme === 'rain' ? '🌧️' : theme === 'bubble' ? '🫧' : '🐌'}
       </button>
 
-      {theme === 'bubble' && <BubbleBackground />}
+      {theme === 'bubble' && <BubbleBackground speedFactor={1.0} />}
+      {theme === 'bubble_slow' && <BubbleBackground speedFactor={0.33} />}
 
       {/* Auth header top-right - ONLY on lobby page */}
       {location.pathname === '/' && (
