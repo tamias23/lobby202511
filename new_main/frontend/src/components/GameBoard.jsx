@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { socket } from "../socket";
 import init, { get_legal_moves_wasm, get_eligible_pieces_wasm } from "../wasm_pkg/frontend_wasm";
 import Clock from "./Clock";
@@ -463,7 +464,17 @@ const PieceIcon = ({ type, side }) => {
   }
 };
 
-const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
+const GameBoard = ({ 
+  gameId, 
+  side, 
+  opponent, 
+  playerName, 
+  initialState, 
+  whiteRole, 
+  blackRole, 
+  whiteName, 
+  blackName 
+}) => {
   const [wasmReady, setWasmReady] = useState(false);
   const [pieces, setPieces] = useState(initialState.pieces);
   const [turn, setTurn] = useState(initialState.turn);
@@ -492,10 +503,12 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
   const [mageUnlocked, setMageUnlocked] = useState(
     initialState.mageUnlocked || false,
   );
+  const [phase, setPhase] = useState(initialState.phase || "Setup");
   const [eligiblePieceIds, setEligiblePieceIds] = useState([]);
   const [clocks, setClocks] = useState(initialState.clocks || { white: 900000, black: 900000 });
   const [lastTurnTimestamp, setLastTurnTimestamp] = useState(initialState.lastTurnTimestamp || null);
   const [isDebugFolded, setIsDebugFolded] = useState(true);
+  const [showGameOverOverlay, setShowGameOverOverlay] = useState(false);
 
   // Add local state for history, defaulting to empty until backend passes it explicitly in all events
   const [moveHistory, setMoveHistory] = useState(initialState.history || []);
@@ -520,7 +533,30 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
   const [colorChosen, setColorChosen] = useState(
     initialState.colorChosen || {},
   );
-  const [phase, setPhase] = useState(initialState.phase || "Setup");
+  const [gameState, setGameState] = useState(initialState);
+  
+  const formatUsername = (name, role) => {
+    if (!name) return 'Guest';
+    if (role === 'guest' && name.startsWith('guest_')) {
+      return `guest_${name.slice(6, 13)}`;
+    }
+    return name;
+  };
+  const navigate = useNavigate();
+  const [gameOverInfo, setGameOverInfo] = useState({ winnerId: null, reason: null });
+  
+  useEffect(() => {
+    if (phase === "GameOver") {
+      // Small delay before showing the overlay to allow the final move to render and stick
+      const timer = setTimeout(() => {
+        setShowGameOverOverlay(true);
+      }, 800);
+      return () => clearTimeout(timer);
+    } else {
+      setShowGameOverOverlay(false);
+    }
+  }, [phase]);
+
   const [dragPos, setDragPos] = useState(null);
   const svgRef = useRef(null);
 
@@ -598,8 +634,8 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
     };
 
     const handleGameOver = ({ winnerId, reason }) => {
-      alert(`Game Over! ${reason === 'timeout' ? 'Time out for opponent. ' : ''}Winner: ${winnerId}`);
       setPhase("GameOver");
+      setGameOverInfo({ winnerId, reason });
     };
 
     socket.on("game_update", handleGameUpdate);
@@ -897,7 +933,7 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
           <div
             style={{
               fontWeight: "bold",
-              color: "#6366f1",
+              color: "#46b0d4",
               marginBottom: "20px",
               textAlign: "center",
             }}
@@ -1024,7 +1060,7 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
               margin: "0 0 15px 0",
               textAlign: "center",
               fontSize: "16px",
-              color: "#a855f7",
+              color: "#f27813",
             }}
           >
             Live Stats
@@ -1083,7 +1119,7 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
                 You ({side})
               </div>
               <div style={{ fontWeight: 'bold', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {playerName}
+                {formatUsername(playerName, side === 'white' ? whiteRole : blackRole)}
               </div>
               <div
                 style={{ fontSize: "12px", color: "#2ecc71", marginTop: "4px" }}
@@ -1111,16 +1147,8 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
               >
                 Opponent
               </div>
-              <div
-                style={{
-                  fontWeight: "bold",
-                  fontSize: "14px",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                }}
-              >
-                {opponent || "Guest"}
+              <div style={{ fontWeight: 'bold', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {formatUsername(opponent, side === 'white' ? blackRole : whiteRole)}
               </div>
               <div
                 style={{ fontSize: "12px", color: "#2ecc71", marginTop: "4px" }}
@@ -1155,7 +1183,7 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
       {/* RIGHT HUD - Color Selection & Status */}
       <div className="hud-panel" style={{ display: 'flex', flexDirection: 'column', gap: '15px', width: '180px', minWidth: '180px' }}>
         <div className="glass-panel" style={{ ...rightHudStyle, width: "100%", marginBottom: "10px" }}>
-          <Clock clocks={clocks} lastTurnTimestamp={lastTurnTimestamp} turn={turn} side={side} />
+          <Clock clocks={clocks} lastTurnTimestamp={lastTurnTimestamp} turn={turn} side={side} phase={phase} />
         </div>
 
         <div className="glass-panel" style={{ ...rightHudStyle, width: '100%' }}>
@@ -1349,6 +1377,71 @@ const GameBoard = ({ gameId, side, opponent, playerName, initialState }) => {
           </button>
         </div>
       </div>
+
+      {/* ── Game Over Overlay ── */}
+      {showGameOverOverlay && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,0.72)",
+          backdropFilter: "blur(6px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+        }}>
+          <div style={{
+            background: "var(--card-bg)",
+            border: "1px solid var(--border)",
+            borderRadius: "20px",
+            padding: "40px 48px",
+            textAlign: "center",
+            boxShadow: "0 24px 80px rgba(0,0,0,0.6)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "20px",
+            minWidth: "280px",
+          }}>
+            <div style={{ fontSize: "18px", fontWeight: "800", color: "var(--text-main)", fontFamily: "'Outfit', sans-serif" }}>
+              Game Over
+            </div>
+            <div style={{ fontSize: "13px", color: "var(--text-muted)", lineHeight: 1.6 }}>
+              {gameOverInfo.reason === "timeout"
+                ? "Time ran out."
+                : gameOverInfo.reason === "goddess_captured"
+                ? "Goddess captured."
+                : gameOverInfo.reason === "abandoned"
+                ? "Opponent disconnected."
+                : null}
+              <br />
+              <span style={{ color: "var(--text-main)", fontWeight: "600" }}>
+                Winner: {gameOverInfo.winnerId}
+              </span>
+            </div>
+            <button
+              onClick={() => navigate("/")}
+              style={{
+                padding: "11px 28px",
+                background: "linear-gradient(135deg, #46b0d4, #f27813)",
+                color: "white",
+                border: "none",
+                borderRadius: "25px",
+                fontSize: "14px",
+                fontWeight: "700",
+                cursor: "pointer",
+                fontFamily: "'Outfit', sans-serif",
+                letterSpacing: "0.03em",
+                boxShadow: "0 4px 16px rgba(70,176,212,0.35)",
+                transition: "transform 0.15s, box-shadow 0.15s",
+              }}
+              onMouseEnter={e => { e.target.style.transform = "scale(1.04)"; e.target.style.boxShadow = "0 6px 24px rgba(70,176,212,0.5)"; }}
+              onMouseLeave={e => { e.target.style.transform = "scale(1)"; e.target.style.boxShadow = "0 4px 16px rgba(70,176,212,0.35)"; }}
+            >
+              Back to Lobby
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

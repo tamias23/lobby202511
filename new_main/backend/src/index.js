@@ -3,6 +3,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { initDb, getDb } = require('./db');
 const { generateGuestId } = require('./utils/auth');
@@ -39,6 +40,391 @@ try {
 }
 
 const { saveMatchResult } = require('./utils/gameStorage');
+
+// --- BOT SERVER INTEGRATION ---
+const BOT_SERVER_URL = process.env.BOT_SERVER_URL || 'http://localhost:5001';
+
+// Available bot models (fetched from bot server) and busy tracking
+let availableBots = [];  // [{agent_type, model_name, display_name}]
+const busyBots = new Map(); // key: "agent_type:model_name" → gameId
+
+async function fetchAvailableBots() {
+    const prevCount = availableBots.length;
+    try {
+        const resp = await fetch(`${BOT_SERVER_URL}/models`, { signal: AbortSignal.timeout(3000) });
+        if (resp.ok) {
+            const data = await resp.json();
+            availableBots = data.models || [];
+        } else {
+            availableBots = [];
+        }
+    } catch (e) {
+        availableBots = [];
+    }
+    // Broadcast only when availability changes (server comes up, goes down, or model count changes)
+    if (availableBots.length !== prevCount) {
+        console.log(`[Bot] Bot availability changed: ${prevCount} → ${availableBots.length} models`);
+        if (typeof io !== 'undefined') broadcastLobbyUpdate(io);
+    }
+}
+
+// Poll every 10s so the panel appears/disappears quickly when the bot server starts/stops
+fetchAvailableBots();
+setInterval(fetchAvailableBots, 10000);
+
+function getBotKey(agentType, modelName) {
+    return `${agentType}:${modelName}`;
+}
+
+function getBotsForLobby() {
+    return availableBots.map(b => ({
+        ...b,
+        busy: busyBots.has(getBotKey(b.agent_type, b.model_name)),
+    }));
+}
+
+function releaseBotIfNeeded(game) {
+    if (game && game.botKey) {
+        busyBots.delete(game.botKey);
+        console.log(`[Bot] Released bot ${game.botKey}`);
+    }
+}
+
+/**
+ * Sends the current game state to the Bot Server and returns a move.
+ * @returns {Promise<{action, piece, target, color}>}
+ */
+async function requestBotMove(game) {
+    const payload = {
+        agent_type: game.botConfig.type,
+        model_name: game.botConfig.modelName || null,
+        mcts_budget_ms: game.botConfig.budgetMs || 500,
+        game_state: {
+            board: game.board,
+            pieces: game.pieces,
+            turn: game.turn,
+            phase: game.phase,
+            color_chosen: game.colorChosen || {},
+            colors_ever_chosen: game.colorsEverChosen || [],
+            is_new_turn: game.isNewTurn !== undefined ? game.isNewTurn : true,
+            moves_this_turn: game.movesThisTurn || 0,
+            locked_sequence_piece: game.lockedSequencePiece || null,
+            heroe_take_counter: game.heroeTakeCounter || 0,
+            setup_step: game.setupStep || 0,
+            turn_counter: game.turnCounter || 0,
+            visited_polygons: game.visitedPolygons || [],
+            setup_placements_this_turn: game.setupPlacementsThisTurn || 0,
+        }
+    };
+
+    const resp = await fetch(`${BOT_SERVER_URL}/move`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(30000),
+    });
+
+    if (!resp.ok) {
+        throw new Error(`Bot server returned ${resp.status}: ${await resp.text()}`);
+    }
+    return resp.json();
+}
+
+/**
+ * If it's the bot's turn in this game, request a bot move and apply it.
+ * Called after every game state change.
+ */
+async function triggerBotMoveIfNeeded(gameId) {
+    const game = lobby.activeGames.get(gameId);
+    if (!game || !game.botSide || game.phase === 'GameOver') {
+        console.log(`[Bot] triggerBotMoveIfNeeded(${gameId}): SKIP — game=${!!game}, botSide=${game?.botSide}, phase=${game?.phase}`);
+        return;
+    }
+    if (game.turn !== game.botSide) {
+        console.log(`[Bot] triggerBotMoveIfNeeded(${gameId}): SKIP — turn=${game.turn} !== botSide=${game.botSide}`);
+        return;
+    }
+    if (game.botThinking) {
+        console.log(`[Bot] triggerBotMoveIfNeeded(${gameId}): SKIP — already thinking`);
+        return;
+    }
+
+    console.log(`[Bot] triggerBotMoveIfNeeded(${gameId}): STARTING — phase=${game.phase}, turn=${game.turn}, botSide=${game.botSide}, isNewTurn=${game.isNewTurn}`);
+    game.botThinking = true;
+    try {
+        // ── Setup phase: call bot server for each piece placement ──
+        if (game.phase === 'Setup') {
+            // Ask the bot server for one placement at a time
+            console.log(`[Bot] Setup: calling bot server for gameId=${gameId}, step=${game.setupStep}, turn=${game.turn}`);
+            const botMove = await requestBotMove(game);
+            console.log(`[Bot] Setup: bot server responded: ${JSON.stringify(botMove)}`);
+            const currentGame = lobby.activeGames.get(gameId);
+            if (!currentGame || currentGame.phase === 'GameOver') return;
+
+            if (botMove.action === 'setup_place' && botMove.piece && botMove.target) {
+                // Bot placed a piece — apply it (just like the human does)
+                const pieceIndex = currentGame.pieces.findIndex(p => p.id === botMove.piece);
+                if (pieceIndex !== -1) {
+                    currentGame.pieces[pieceIndex] = { ...currentGame.pieces[pieceIndex], position: botMove.target };
+                    // Track placements for the NAPI state
+                    currentGame.setupPlacementsThisTurn = (currentGame.setupPlacementsThisTurn || 0) + 1;
+
+                    io.to(gameId).emit('game_update', {
+                        pieces: currentGame.pieces,
+                        turn: currentGame.turn,
+                        colorChosen: currentGame.colorChosen,
+                        phase: currentGame.phase,
+                        setupStep: currentGame.setupStep,
+                        turnCounter: currentGame.turnCounter,
+                        isNewTurn: currentGame.isNewTurn,
+                        movesThisTurn: currentGame.movesThisTurn,
+                        lockedSequencePiece: currentGame.lockedSequencePiece || null,
+                        heroeTakeCounter: currentGame.heroeTakeCounter,
+                        clocks: currentGame.clocks,
+                        lastTurnTimestamp: currentGame.lastTurnTimestamp,
+                    });
+
+                    console.log(`[Bot] Setup placement: ${botMove.piece} → ${botMove.target}`);
+                }
+                // Continue placing pieces
+                setImmediate(() => triggerBotMoveIfNeeded(gameId));
+                return;
+
+            } else if (botMove.action === 'setup_done') {
+                // Bot is done placing pieces for this step — end the setup turn
+                const oldTurn = currentGame.turn;
+                const endResp = endTurnSetupNapi({
+                    boardJson: JSON.stringify(currentGame.board),
+                    piecesJson: JSON.stringify(currentGame.pieces),
+                    turn: currentGame.turn,
+                    phase: currentGame.phase,
+                    setupStep: currentGame.setupStep,
+                    colorChosen: currentGame.colorChosen || {},
+                    colorsEverChosen: currentGame.colorsEverChosen || [],
+                    turnCounter: currentGame.turnCounter || 0,
+                    isNewTurn: currentGame.isNewTurn !== undefined ? currentGame.isNewTurn : true,
+                    movesThisTurn: currentGame.movesThisTurn || 0,
+                    lockedSequencePiece: currentGame.lockedSequencePiece || undefined,
+                    heroeTakeCounter: currentGame.heroeTakeCounter || 0,
+                });
+                if (oldTurn !== endResp.turn) {
+                    updateClocks(currentGame, true);
+                }
+                currentGame.turn = endResp.turn;
+                currentGame.phase = endResp.phase;
+                currentGame.setupStep = endResp.setupStep;
+                currentGame.turnCounter = endResp.turnCounter;
+                currentGame.isNewTurn = endResp.isNewTurn;
+                currentGame.movesThisTurn = endResp.movesThisTurn;
+                currentGame.lockedSequencePiece = endResp.lockedSequencePiece;
+                currentGame.heroeTakeCounter = endResp.heroeTakeCounter;
+                currentGame.setupPlacementsThisTurn = 0;
+
+                io.to(gameId).emit('game_update', {
+                    pieces: currentGame.pieces,
+                    turn: currentGame.turn,
+                    colorChosen: currentGame.colorChosen,
+                    colorsEverChosen: currentGame.colorsEverChosen,
+                    mageUnlocked: currentGame.mageUnlocked,
+                    phase: currentGame.phase,
+                    setupStep: currentGame.setupStep,
+                    turnCounter: currentGame.turnCounter,
+                    isNewTurn: currentGame.isNewTurn,
+                    movesThisTurn: currentGame.movesThisTurn,
+                    lockedSequencePiece: currentGame.lockedSequencePiece || null,
+                    heroeTakeCounter: currentGame.heroeTakeCounter,
+                    clocks: currentGame.clocks,
+                    lastTurnTimestamp: currentGame.lastTurnTimestamp,
+                });
+
+                console.log(`[Bot] Setup turn ended: phase=${currentGame.phase}, setupStep=${currentGame.setupStep}, turn=${currentGame.turn}`);
+
+                // If still the bot's turn (more setup steps or just transitioned to Playing)
+                if (currentGame.turn === currentGame.botSide) {
+                    setImmediate(() => triggerBotMoveIfNeeded(gameId));
+                }
+                return;
+            }
+        }
+
+
+        // ── Playing phase: ask the Bot Server ──
+        console.log(`[Bot] Playing: calling bot server for gameId=${gameId}, turn=${game.turn}, isNewTurn=${game.isNewTurn}`);
+        const botMove = await requestBotMove(game);
+        console.log(`[Bot] Playing: bot server responded: ${JSON.stringify(botMove)}`);
+
+        // Re-fetch game after await (might have been deleted)
+        const currentGame = lobby.activeGames.get(gameId);
+        if (!currentGame || currentGame.phase === 'GameOver') return;
+
+        if (botMove.action === 'color') {
+            // Bot chose a color
+            io.to(gameId).emit('force_bot_action', {
+                type: 'color',
+                color: botMove.color
+            });
+            // Apply it server-side too
+            const fakeSocket = { id: 'bot' };
+            const response = selectColorNapi({
+                boardJson: JSON.stringify(currentGame.board),
+                piecesJson: JSON.stringify(currentGame.pieces),
+                color: botMove.color,
+                turn: currentGame.turn,
+                phase: currentGame.phase,
+                setupStep: currentGame.setupStep,
+                colorChosen: currentGame.colorChosen || {},
+                colorsEverChosen: currentGame.colorsEverChosen || [],
+                turnCounter: currentGame.turnCounter || 0,
+                isNewTurn: currentGame.isNewTurn,
+                movesThisTurn: currentGame.movesThisTurn || 0,
+                lockedSequencePiece: currentGame.lockedSequencePiece || undefined,
+                heroeTakeCounter: currentGame.heroeTakeCounter || 0,
+            });
+            currentGame.pieces = JSON.parse(response.piecesJson);
+            currentGame.turn = response.turn;
+            currentGame.colorChosen = response.colorChosen;
+            currentGame.colorsEverChosen = response.colorsEverChosen;
+            currentGame.mageUnlocked = response.mageUnlocked;
+            currentGame.phase = response.phase;
+            currentGame.setupStep = response.setupStep;
+            currentGame.turnCounter = response.turnCounter;
+            currentGame.isNewTurn = response.isNewTurn;
+            currentGame.movesThisTurn = response.movesThisTurn;
+            currentGame.lockedSequencePiece = response.lockedSequencePiece;
+            currentGame.heroeTakeCounter = response.heroeTakeCounter;
+            io.to(gameId).emit('game_update', {
+                pieces: currentGame.pieces, turn: currentGame.turn,
+                colorChosen: currentGame.colorChosen, colorsEverChosen: currentGame.colorsEverChosen,
+                mageUnlocked: currentGame.mageUnlocked, phase: currentGame.phase,
+                setupStep: currentGame.setupStep, turnCounter: currentGame.turnCounter,
+                isNewTurn: currentGame.isNewTurn, movesThisTurn: currentGame.movesThisTurn,
+                lockedSequencePiece: currentGame.lockedSequencePiece || null,
+                heroeTakeCounter: currentGame.heroeTakeCounter,
+                clocks: currentGame.clocks, lastTurnTimestamp: currentGame.lastTurnTimestamp,
+            });
+            // Bot may need to make more moves in same turn
+            setImmediate(() => triggerBotMoveIfNeeded(gameId));
+
+        } else if (botMove.action === 'move' && botMove.piece && botMove.target) {
+            // Bot made a move
+            const oldTurn = currentGame.turn;
+            const response = applyMoveNapi({
+                boardJson: JSON.stringify(currentGame.board),
+                piecesJson: JSON.stringify(currentGame.pieces),
+                pieceId: botMove.piece,
+                targetPoly: botMove.target,
+                turn: currentGame.turn,
+                phase: currentGame.phase,
+                setupStep: currentGame.setupStep,
+                colorChosen: currentGame.colorChosen || {},
+                colorsEverChosen: currentGame.colorsEverChosen || [],
+                turnCounter: currentGame.turnCounter || 0,
+                isNewTurn: currentGame.isNewTurn,
+                movesThisTurn: currentGame.movesThisTurn || 0,
+                lockedSequencePiece: currentGame.lockedSequencePiece || undefined,
+                heroeTakeCounter: currentGame.heroeTakeCounter || 0,
+            });
+            currentGame.pieces = JSON.parse(response.piecesJson);
+            currentGame.colorChosen = response.colorChosen;
+            currentGame.colorsEverChosen = response.colorsEverChosen;
+            currentGame.mageUnlocked = response.mageUnlocked;
+            currentGame.phase = response.phase;
+            currentGame.setupStep = response.setupStep;
+            if (oldTurn !== response.turn) updateClocks(currentGame, true);
+            currentGame.turn = response.turn;
+            currentGame.turnCounter = response.turnCounter;
+            currentGame.isNewTurn = response.isNewTurn;
+            currentGame.movesThisTurn = response.movesThisTurn;
+            currentGame.lockedSequencePiece = response.lockedSequencePiece;
+            currentGame.heroeTakeCounter = response.heroeTakeCounter;
+            currentGame.history.push({ pieceId: botMove.piece, targetPoly: botMove.target, captured: response.captured });
+
+            io.to(gameId).emit('game_update', {
+                pieces: currentGame.pieces, turn: currentGame.turn,
+                colorChosen: currentGame.colorChosen, colorsEverChosen: currentGame.colorsEverChosen,
+                mageUnlocked: currentGame.mageUnlocked, phase: currentGame.phase,
+                setupStep: currentGame.setupStep, turnCounter: currentGame.turnCounter,
+                isNewTurn: currentGame.isNewTurn, movesThisTurn: currentGame.movesThisTurn,
+                lockedSequencePiece: currentGame.lockedSequencePiece || null,
+                heroeTakeCounter: currentGame.heroeTakeCounter,
+                clocks: currentGame.clocks, lastTurnTimestamp: currentGame.lastTurnTimestamp,
+                lastMove: { pieceId: botMove.piece, targetPoly: botMove.target, captured: response.captured },
+            });
+
+            if (response.phase === 'GameOver') {
+                const winnerSide = response.winner;
+                const winnerId = winnerSide === 'white' ? currentGame.white : currentGame.black;
+                currentGame.phase = 'GameOver';
+                io.to(gameId).emit('game_over', { 
+                    winnerId, 
+                    winnerSide: response.winner,
+                    reason: response.reason 
+                });
+                saveMatchResult(gameId, currentGame.white, currentGame.black, winnerId, currentGame.pieces, currentGame.history)
+                    .catch(err => console.error(`Bot game save error ${gameId}:`, err));
+                releaseBotIfNeeded(currentGame);
+                lobby.activeGames.delete(gameId);
+                broadcastLobbyUpdate(io);
+            } else {
+                // Bot might need to continue its turn (chaining)
+                setImmediate(() => triggerBotMoveIfNeeded(gameId));
+            }
+
+        } else if (botMove.action === 'pass') {
+            // Bot passes
+            const response = passTurnPlayingNapi({
+                boardJson: JSON.stringify(currentGame.board),
+                piecesJson: JSON.stringify(currentGame.pieces),
+                turn: currentGame.turn, phase: currentGame.phase,
+                setupStep: currentGame.setupStep,
+                colorChosen: currentGame.colorChosen || {},
+                colorsEverChosen: currentGame.colorsEverChosen || [],
+                turnCounter: currentGame.turnCounter || 0,
+                isNewTurn: currentGame.isNewTurn,
+                movesThisTurn: currentGame.movesThisTurn || 0,
+                lockedSequencePiece: currentGame.lockedSequencePiece || undefined,
+                heroeTakeCounter: currentGame.heroeTakeCounter || 0,
+                pieceId: '', targetPoly: ''
+            });
+            updateClocks(currentGame, true);
+            currentGame.turn = response.turn;
+            currentGame.phase = response.phase;
+            currentGame.setupStep = response.setupStep;
+            currentGame.turnCounter = response.turnCounter;
+            currentGame.isNewTurn = response.isNewTurn;
+            currentGame.movesThisTurn = response.movesThisTurn;
+            currentGame.lockedSequencePiece = response.lockedSequencePiece;
+            currentGame.heroeTakeCounter = response.heroeTakeCounter;
+            currentGame.colorChosen = response.colorChosen;
+            currentGame.colorsEverChosen = response.colorsEverChosen;
+            currentGame.mageUnlocked = response.mageUnlocked;
+            io.to(gameId).emit('game_update', {
+                pieces: currentGame.pieces, turn: currentGame.turn,
+                colorChosen: currentGame.colorChosen, colorsEverChosen: currentGame.colorsEverChosen,
+                mageUnlocked: currentGame.mageUnlocked, phase: currentGame.phase,
+                setupStep: currentGame.setupStep, turnCounter: currentGame.turnCounter,
+                isNewTurn: currentGame.isNewTurn, movesThisTurn: currentGame.movesThisTurn,
+                lockedSequencePiece: currentGame.lockedSequencePiece || null,
+                heroeTakeCounter: currentGame.heroeTakeCounter,
+                clocks: currentGame.clocks, lastTurnTimestamp: currentGame.lastTurnTimestamp,
+            });
+        }
+    } catch (err) {
+        console.error(`[Bot] Error computing move for game ${gameId}:`, err.message);
+        // Notify the human player that the bot had an error
+        const g = lobby.activeGames.get(gameId);
+        if (g) {
+            const humanSocketId = game.botSide === 'white' ? g.blackSocketId : g.whiteSocketId;
+            if (humanSocketId) {
+                io.to(humanSocketId).emit('bot_error', { message: 'Bot failed to respond. This may be due to a cold start. It will retry on the next move.' });
+            }
+        }
+    } finally {
+        const g = lobby.activeGames.get(gameId);
+        if (g) g.botThinking = false;
+    }
+}
+
 
 // --- BOARD LOADING (Lazy Loading) ---
 const BOARDS_PATH = path.join(__dirname, 'utils', 'boards');
@@ -199,11 +585,59 @@ app.post('/login', async (req, res) => {
     }
 });
 
+// --- HELPERS ---
+function getRandomHash() {
+    return crypto.randomBytes(16).toString('hex');
+}
+
 // --- LOBBY STATE ---
 const lobby = {
-    waitingPlayers: [], // { socketId, userId, rating, role }
-    activeGames: new Map() // gameId -> { players, state }
+    gameRequests: [],        // { requestId, socketId, userId, username, role, timeControl, createdAt }
+    activeGames: new Map(),  // hash -> { ...gameData, hash, timeControl, whiteName, blackName }
+    connectedUsers: new Set(), // set of socket IDs
 };
+
+function buildLobbyStats() {
+    return {
+        onlineUsers: lobby.connectedUsers.size,
+        activeGames: lobby.activeGames.size,
+    };
+}
+
+function buildActiveGamesList() {
+    return Array.from(lobby.activeGames.values()).map(g => ({
+        hash: g.hash,
+        white: g.white,
+        black: g.black,
+        whiteName: g.whiteName || g.white,
+        blackName: g.blackName || g.black,
+        whiteRole: g.whiteRole || 'guest',
+        blackRole: g.blackRole || 'guest',
+        timeControl: g.timeControl,
+        moveCount: g.history ? g.history.length : 0,
+        phase: g.phase,
+    }));
+}
+
+function buildRequestsList() {
+    return lobby.gameRequests.map(r => ({
+        requestId: r.requestId,
+        userId: r.userId,
+        username: r.username,
+        role: r.role,
+        timeControl: r.timeControl,
+        createdAt: r.createdAt,
+    }));
+}
+
+function broadcastLobbyUpdate(io) {
+    io.to('lobby').emit('lobby_update', {
+        gameRequests: buildRequestsList(),
+        activeGames: buildActiveGamesList(),
+        stats: buildLobbyStats(),
+        available_bots: getBotsForLobby(),
+    });
+}
 
 function updateClocks(game, turnEnded) {
     const now = Date.now();
@@ -212,20 +646,69 @@ function updateClocks(game, turnEnded) {
     if (turnEnded) {
         const elapsedTime = now - game.lastTurnTimestamp;
         const activeSide = game.turn;
-        // Apply 100ms grace period per turn
+        const increment = (game.timeControl && game.timeControl.increment) ? game.timeControl.increment * 1000 : 30000;
         const deduction = Math.max(0, elapsedTime - 100);
-        game.clocks[activeSide] = Math.max(0, game.clocks[activeSide] - deduction + (30 * 1000));
+        game.clocks[activeSide] = Math.max(0, game.clocks[activeSide] - deduction + increment);
         game.lastTurnTimestamp = now;
     }
 }
+
+// --- 30-MINUTE GAME REQUEST AUTO-EXPIRY ---
+setInterval(() => {
+    const now = Date.now();
+    const thirtyMin = 30 * 60 * 1000;
+    const before = lobby.gameRequests.length;
+    lobby.gameRequests = lobby.gameRequests.filter(r => (now - r.createdAt) < thirtyMin);
+    if (lobby.gameRequests.length !== before) {
+        broadcastLobbyUpdate(io);
+    }
+}, 60 * 1000); // check every minute
 
 // Global Timeout Check
 setInterval(() => {
     const now = Date.now();
     for (const [gameId, game] of lobby.activeGames) {
-        if (!game.lastTurnTimestamp) continue;
         if (game.phase === 'GameOver') continue;
 
+        // --- DISCONNECTION HANDLING ---
+        // Guest: Remove after 5s
+        // Registered: Forfeit after 30s
+        const checkDiscon = (playerType) => {
+            const disconAt = game[`${playerType}DisconnectedAt`];
+            if (!disconAt) return false;
+            
+            const diff = now - disconAt;
+            const role = game[`${playerType}Role`];
+            const limit = role === 'guest' ? 5000 : 30000;
+
+            if (diff >= limit) {
+                console.log(`Game Over: ${gameId} - ${playerType} abandoned (${role})`);
+                game.phase = 'GameOver';
+                const winnerSide = playerType === 'white' ? 'black' : 'white';
+                const winnerId = winnerSide === 'white' ? game.white : game.black;
+
+                io.to(gameId).emit('game_over', { 
+                    winnerId, 
+                    reason: 'disconnection',
+                    message: `${playerType === 'white' ? 'White' : 'Black'} disconnected for too long.`
+                });
+                
+                saveMatchResult(gameId, game.white, game.black, winnerId, game.pieces, game.history)
+                    .catch(err => console.error(`Failed to save abandoned game ${gameId}:`, err));
+                
+                releaseBotIfNeeded(game);
+                lobby.activeGames.delete(gameId);
+                broadcastLobbyUpdate(io);
+                return true;
+            }
+            return false;
+        };
+
+        if (checkDiscon('white')) continue;
+        if (checkDiscon('black')) continue;
+
+        // --- CLOCK TIMEOUT ---
+        if (!game.lastTurnTimestamp) continue;
         const activeSide = game.turn;
         const elapsedTime = now - game.lastTurnTimestamp;
         const currentClock = game.clocks[activeSide] - Math.max(0, elapsedTime - 100);
@@ -238,144 +721,334 @@ setInterval(() => {
             const winnerId = winnerSide === 'white' ? game.white : game.black;
 
             io.to(gameId).emit('game_over', { winnerId, reason: 'timeout' });
-            saveMatchResult(gameId, game.white, game.black, winnerId, game.pieces, game.history);
+            saveMatchResult(gameId, game.white, game.black, winnerId, game.pieces, game.history)
+                .catch(err => console.error(`Failed to save timed-out game ${gameId}:`, err));
+            
+            releaseBotIfNeeded(game);
+            lobby.activeGames.delete(gameId);
+            broadcastLobbyUpdate(io);
         }
     }
 }, 1000);
 
+// --- helper to build initialState payload ---
+function buildInitialState(gameData) {
+    return {
+        board: gameData.board,
+        pieces: gameData.pieces,
+        turn: gameData.turn,
+        colorChosen: gameData.colorChosen,
+        colorsEverChosen: gameData.colorsEverChosen,
+        mageUnlocked: gameData.mageUnlocked,
+        phase: gameData.phase,
+        setupStep: gameData.setupStep,
+        turnCounter: gameData.turnCounter,
+        isNewTurn: gameData.isNewTurn,
+        movesThisTurn: gameData.movesThisTurn,
+        lockedSequencePiece: gameData.lockedSequencePiece || null,
+        heroeTakeCounter: gameData.heroeTakeCounter,
+        clocks: gameData.clocks,
+        lastTurnTimestamp: gameData.lastTurnTimestamp,
+        whiteRole: gameData.whiteRole,
+        blackRole: gameData.blackRole,
+        whiteName: gameData.whiteName,
+        blackName: gameData.blackName,
+    };
+}
+
+// --- helper to create a game from two players ---
+function createGame(whitePlayer, blackPlayer, timeControl) {
+    const hash = getRandomHash();
+
+    const randomBoardFile = boardPool[Math.floor(Math.random() * boardPool.length)];
+    let boardData;
+    try {
+        const boardPath = path.join(BOARDS_PATH, randomBoardFile);
+        boardData = JSON.parse(fs.readFileSync(boardPath, 'utf8'));
+    } catch (err) {
+        console.error(`Failed to lazy-load board ${randomBoardFile}:`, err);
+        boardData = { allPolygons: {}, allEdges: {}, pieces: {} };
+    }
+
+    let initPieces = [];
+    try {
+        const response = initGameStateNapi({
+            boardJson: JSON.stringify(boardData),
+            randomSetup: false
+        });
+        initPieces = JSON.parse(response.piecesJson);
+    } catch (e) {
+        console.error('Error initializing game via NAPI:', e);
+        initPieces = [];
+    }
+
+    const clockMs = (timeControl.minutes || 15) * 60 * 1000;
+
+    const gameData = {
+        hash,
+        white: whitePlayer.userId,
+        black: blackPlayer.userId,
+        whiteName: whitePlayer.username || whitePlayer.userId,
+        blackName: blackPlayer.username || blackPlayer.userId,
+        timeControl,
+        board: boardData,
+        pieces: initPieces,
+        turn: 'white',
+        phase: 'Setup',
+        setupStep: 0,
+        colorChosen: {},
+        colorsEverChosen: [],
+        mageUnlocked: false,
+        turnCounter: 0,
+        isNewTurn: true,
+        movesThisTurn: 0,
+        lockedSequencePiece: null,
+        heroeTakeCounter: 0,
+        clocks: { white: clockMs, black: clockMs },
+        lastTurnTimestamp: Date.now(),
+        history: [],
+        // track which socket IDs are the players
+        whiteSocketId: whitePlayer.socketId,
+        blackSocketId: blackPlayer.socketId,
+        whiteRole: whitePlayer.role,
+        blackRole: blackPlayer.role,
+        whiteDisconnectedAt: null,
+        blackDisconnectedAt: null,
+    };
+
+    lobby.activeGames.set(hash, gameData);
+    return { hash, gameData };
+}
+
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
+    lobby.connectedUsers.add(socket.id);
+    broadcastLobbyUpdate(io);
 
-    // Initial onboarding (Identify as Guest if no token provided)
-    socket.on('join_lobby', ({ userId, role }) => {
+    // Legacy join_lobby (kept for backward compat with registered login flow)
+    socket.on('join_lobby', ({ userId, role } = {}) => {
         const id = userId || generateGuestId();
         const userRole = role || 'guest';
-        
+        socket.userId = id;
+        socket.userRole = userRole;
         socket.emit('assigned_id', { id, role: userRole });
         console.log(`User ${id} (${userRole}) joined the lobby`);
     });
 
-    // Matchmaking Request
-    socket.on('request_match', ({ userId, rating }) => {
-        // Simple ranked matchmaking (match closest ratings)
-        const player = { socketId: socket.id, userId, rating: rating || 1200 };
-        
-        const opponent = lobby.waitingPlayers.find(p => Math.abs(p.rating - player.rating) < 200);
-        
-        if (opponent) {
-            // Remove opponent from queue
-            lobby.waitingPlayers = lobby.waitingPlayers.filter(p => p.socketId !== opponent.socketId);
-            
-            // 1. Randomize Board Selection
-            // 1. Randomize Board Selection (On-demand load)
-            const randomBoardFile = boardPool[Math.floor(Math.random() * boardPool.length)];
-            let boardData;
-            try {
-                const boardPath = path.join(BOARDS_PATH, randomBoardFile);
-                boardData = JSON.parse(fs.readFileSync(boardPath, 'utf8'));
-            } catch (err) {
-                console.error(`Failed to lazy-load board ${randomBoardFile}:`, err);
-                // Fallback to minimal board structure if somehow the file is missing/invalid
-                boardData = { allPolygons: {}, allEdges: {}, pieces: {} }; 
-            }
+    // --- ENTER LOBBY: join room + send full state ---
+    socket.on('enter_lobby', () => {
+        socket.join('lobby');
+        socket.emit('lobby_state', {
+            gameRequests: buildRequestsList(),
+            activeGames: buildActiveGamesList(),
+            stats: buildLobbyStats(),
+            available_bots: getBotsForLobby(),
+        });
+    });
 
-            // 2. Randomize Sides
-            const isPlayerWhite = Math.random() > 0.5;
-            const whitePlayer = isPlayerWhite ? player : opponent;
-            const blackPlayer = isPlayerWhite ? opponent : player;
-            
-            let initPieces = [];
-            let piecesJsonString = "";
-            try {
-                const response = initGameStateNapi({
-                    boardJson: JSON.stringify(boardData),
-                    randomSetup: false
-                });
-                initPieces = JSON.parse(response.piecesJson);
-            } catch (e) {
-                console.error("Error initializing game via NAPI:", e);
-                // The authoritative Rust setup failed.
-                initPieces = [];
-            }
-
-            const gameId = `game_${Date.now()}`;
-            
-            const gameData = {
-                white: whitePlayer.userId,
-                black: blackPlayer.userId,
-                board: boardData,
-                pieces: initPieces,
-                turn: 'white',
-                phase: 'Setup',
-                setupStep: 0,
-                colorChosen: {},
-                colorsEverChosen: [],
-                mageUnlocked: false,
-                turnCounter: 0,
-                isNewTurn: true,
-                movesThisTurn: 0,
-                lockedSequencePiece: null,
-                heroeTakeCounter: 0,
-                clocks: {
-                    white: 15 * 60 * 1000,
-                    black: 15 * 60 * 1000
-                },
-                lastTurnTimestamp: Date.now(),
-                history: []
-            };
-            
-            lobby.activeGames.set(gameId, gameData);
-            
-            io.to(whitePlayer.socketId).emit('match_found', { 
-                gameId, 
-                side: 'white', 
-                opponent: blackPlayer.userId,
-                initialState: {
-                    board: gameData.board,
-                    pieces: gameData.pieces,
-                    turn: gameData.turn,
-                    colorChosen: gameData.colorChosen,
-                    colorsEverChosen: gameData.colorsEverChosen,
-                    mageUnlocked: gameData.mageUnlocked,
-                    phase: gameData.phase,
-                    setupStep: gameData.setupStep,
-                    turnCounter: gameData.turnCounter,
-                    isNewTurn: gameData.isNewTurn,
-                    movesThisTurn: gameData.movesThisTurn,
-                    lockedSequencePiece: gameData.lockedSequencePiece || null,
-                    heroeTakeCounter: gameData.heroeTakeCounter,
-                    clocks: gameData.clocks,
-                    lastTurnTimestamp: gameData.lastTurnTimestamp
-                }
-            });
-            io.to(blackPlayer.socketId).emit('match_found', { 
-                gameId, 
-                side: 'black', 
-                opponent: whitePlayer.userId,
-                initialState: {
-                    board: gameData.board,
-                    pieces: gameData.pieces,
-                    turn: gameData.turn,
-                    colorChosen: gameData.colorChosen,
-                    colorsEverChosen: gameData.colorsEverChosen,
-                    mageUnlocked: gameData.mageUnlocked,
-                    phase: gameData.phase,
-                    setupStep: gameData.setupStep,
-                    turnCounter: gameData.turnCounter,
-                    isNewTurn: gameData.isNewTurn,
-                    movesThisTurn: gameData.movesThisTurn,
-                    lockedSequencePiece: gameData.lockedSequencePiece || null,
-                    heroeTakeCounter: gameData.heroeTakeCounter,
-                    clocks: gameData.clocks,
-                    lastTurnTimestamp: gameData.lastTurnTimestamp
-                }
-            });
-            
-            console.log(`Match found: ${gameId} between ${player.userId} and ${opponent.userId}`);
-        } else {
-            lobby.waitingPlayers.push(player);
-            socket.emit('waiting_for_opponent');
+    // --- CREATE GAME REQUEST ---
+    socket.on('create_game_request', ({ timeControl, userId, username, role }) => {
+        // Validate no duplicate request from same socket
+        const existing = lobby.gameRequests.find(r => r.socketId === socket.id);
+        if (existing) {
+            socket.emit('request_error', { message: 'You already have an open request.' });
+            return;
         }
+
+        const requestId = uuidv4();
+        const effectiveUserId = userId || socket.userId || generateGuestId();
+        const effectiveRole = role || socket.userRole || 'guest';
+
+        lobby.gameRequests.push({
+            requestId,
+            socketId: socket.id,
+            userId: effectiveUserId,
+            username: username || effectiveUserId,
+            role: effectiveRole,
+            timeControl: timeControl || { minutes: 15, increment: 10 },
+            createdAt: Date.now(),
+        });
+
+        socket.emit('request_created', { requestId });
+        broadcastLobbyUpdate(io);
+        console.log(`Game request ${requestId} created by ${effectiveUserId} (${effectiveRole})`);
+    });
+
+    // --- CANCEL GAME REQUEST ---
+    socket.on('cancel_game_request', ({ requestId }) => {
+        lobby.gameRequests = lobby.gameRequests.filter(
+            r => !(r.requestId === requestId && r.socketId === socket.id)
+        );
+        broadcastLobbyUpdate(io);
+    });
+
+    // --- ACCEPT GAME REQUEST ---
+    socket.on('accept_game_request', ({ requestId, userId, username, role }) => {
+        const reqIndex = lobby.gameRequests.findIndex(r => r.requestId === requestId);
+        if (reqIndex === -1) {
+            socket.emit('request_error', { message: 'Request no longer available.' });
+            return;
+        }
+        const req = lobby.gameRequests[reqIndex];
+
+        // Don't let the same socket accept its own request
+        if (req.socketId === socket.id) {
+            socket.emit('request_error', { message: "You can't accept your own request." });
+            return;
+        }
+
+        // Guest-only rule: guests can only play guests, registered users can play anyone
+        const acceptorRole = role || socket.userRole || 'guest';
+        if (req.role === 'guest' && acceptorRole !== 'guest') {
+            socket.emit('request_error', { message: 'Registered users cannot join guest-only requests.' });
+            return;
+        }
+
+        // Remove the request
+        lobby.gameRequests.splice(reqIndex, 1);
+
+        const effectiveUserId = userId || socket.userId || generateGuestId();
+        const effectiveUsername = username || effectiveUserId;
+
+        // Randomize sides
+        const isRequesterWhite = Math.random() > 0.5;
+        const requesterPlayer = { socketId: req.socketId, userId: req.userId, username: req.username };
+        const acceptorPlayer  = { socketId: socket.id, userId: effectiveUserId, username: effectiveUsername };
+
+        const whitePlayer = isRequesterWhite ? requesterPlayer : acceptorPlayer;
+        const blackPlayer = isRequesterWhite ? acceptorPlayer  : requesterPlayer;
+
+        const { hash, gameData } = createGame(whitePlayer, blackPlayer, req.timeControl);
+        
+        // Place both players in the game room
+        const requesterSocket = io.sockets.sockets.get(req.socketId);
+        if (requesterSocket) requesterSocket.join(hash);
+        socket.join(hash);
+
+        // Also remove any pending request from acceptor
+        lobby.gameRequests = lobby.gameRequests.filter(r => r.socketId !== socket.id);
+
+        // Notify both players
+        io.to(whitePlayer.socketId).emit('game_created', {
+            hash,
+            side: 'white',
+            opponent: blackPlayer.username || blackPlayer.userId,
+            initialState: buildInitialState(gameData),
+        });
+        io.to(blackPlayer.socketId).emit('game_created', {
+            hash,
+            side: 'black',
+            opponent: whitePlayer.username || whitePlayer.userId,
+            initialState: buildInitialState(gameData),
+        });
+
+        broadcastLobbyUpdate(io);
+        console.log(`Game created: /games/${hash} — ${whitePlayer.userId} (W) vs ${blackPlayer.userId} (B)`);
+    });
+
+    // --- CREATE BOT GAME ---
+    socket.on('create_bot_game', ({ userId, username, role, timeControl, botConfig }) => {
+        const effectiveUserId = userId || socket.userId || generateGuestId();
+        const effectiveUsername = username || effectiveUserId;
+        const effectiveRole = role || socket.userRole || 'guest';
+
+        const agentType = botConfig?.type || 'greedy_jack';
+        const modelName = botConfig?.modelName || 'rank_002_yYtlgZLn13';
+        const botKey = getBotKey(agentType, modelName);
+
+        // Check if this bot is already in a game
+        if (busyBots.has(botKey)) {
+            socket.emit('bot_error', { message: `${agentType} (${modelName}) is already in a game. Please wait.` });
+            return;
+        }
+
+        const botId = `bot_${agentType}_${modelName}`;
+        const botName = `🤖 ${agentType === 'mcts' ? 'MCTS' : 'GreedyJack'} (${modelName})`;
+        const isPlayerWhite = Math.random() > 0.5;
+
+        const humanPlayer = { socketId: socket.id, userId: effectiveUserId, username: effectiveUsername, role: effectiveRole };
+        const botPlayer   = { socketId: null, userId: botId, username: botName, role: 'bot' };
+
+        const whitePlayer = isPlayerWhite ? humanPlayer : botPlayer;
+        const blackPlayer = isPlayerWhite ? botPlayer   : humanPlayer;
+
+        const { hash, gameData } = createGame(whitePlayer, blackPlayer, timeControl || { minutes: 15, increment: 10 });
+
+        // Mark game as a bot game
+        gameData.botSide   = isPlayerWhite ? 'black' : 'white';
+        gameData.botConfig = botConfig || { type: 'greedy_jack', modelName: 'rank_002_yYtlgZLn13' };
+        gameData.botThinking = false;
+        gameData.botKey = botKey;  // For releasing busy state later
+        // Bot never disconnects
+        if (gameData.botSide === 'white') gameData.whiteDisconnectedAt = null;
+        else gameData.blackDisconnectedAt = null;
+
+        // Mark bot as busy
+        busyBots.set(botKey, hash);
+
+        socket.join(hash);
+
+        const playerSide = isPlayerWhite ? 'white' : 'black';
+        socket.emit('game_created', {
+            hash,
+            side: playerSide,
+            opponent: botName,
+            initialState: buildInitialState(gameData),
+        });
+
+        broadcastLobbyUpdate(io);
+        console.log(`Bot game created: /games/${hash} — ${effectiveUserId} (${playerSide}) vs ${botName}`);
+
+        // If bot is white, trigger its first move (setup phase)
+        if (gameData.botSide === 'white') {
+            setImmediate(() => triggerBotMoveIfNeeded(hash));
+        }
+    });
+
+
+    socket.on('join_game_by_hash', ({ hash, spectator, userId }) => {
+        const game = lobby.activeGames.get(hash);
+        if (!game) {
+            socket.emit('game_joined', { error: 'Game not found or has ended.' });
+            return;
+        }
+
+        socket.join(hash);
+
+        // Determine if this socket is a player
+        let side = 'spectator';
+        if (!spectator) {
+            if (userId && userId === game.white) {
+                side = 'white';
+                game.whiteSocketId = socket.id;
+                game.whiteDisconnectedAt = null;
+            }
+            else if (userId && userId === game.black) {
+                side = 'black';
+                game.blackSocketId = socket.id;
+                game.blackDisconnectedAt = null;
+            }
+            else if (socket.id === game.whiteSocketId) {
+                side = 'white';
+                game.whiteDisconnectedAt = null;
+            }
+            else if (socket.id === game.blackSocketId) {
+                side = 'black';
+                game.blackDisconnectedAt = null;
+            }
+        }
+
+        socket.emit('game_joined', {
+            hash,
+            side,
+            spectator: side === 'spectator',
+            opponent: side === 'white' ? (game.blackName || game.black)
+                    : side === 'black' ? (game.whiteName || game.white)
+                    : null,
+            whiteRole: game.whiteRole,
+            blackRole: game.blackRole,
+            initialState: buildInitialState(game),
+        });
     });
 
     // --- GAME ACTIONS ---
@@ -445,7 +1118,8 @@ io.on('connection', (socket) => {
             return;
         }
 
-        console.log(`randomize_setup called: gameId=${gameId}, side=${side}, current turn=${game.turn}, step=${game.setupStep}`);
+        const oldTurn = game.turn;
+        console.log(`[randomize_setup] gameId=${gameId}, side=${side}, turn=${game.turn}, step=${game.setupStep}`);
 
         try {
             const response = randomizeSetupNapi({
@@ -464,6 +1138,12 @@ io.on('connection', (socket) => {
                 side: side
             });
             game.pieces = JSON.parse(response.piecesJson);
+
+            // Update clocks before overwriting game.turn
+            if (oldTurn !== response.turn) {
+                updateClocks(game, true);
+            }
+
             game.turn = response.turn;
             game.phase = response.phase;
             game.setupStep = response.setupStep;
@@ -489,7 +1169,13 @@ io.on('connection', (socket) => {
                 clocks: game.clocks,
                 lastTurnTimestamp: game.lastTurnTimestamp
             });
-            console.log(`randomize_setup result: turn=${game.turn}, phase=${game.phase}, step=${game.setupStep}`);
+            console.log(`[randomize_setup] result: turn=${game.turn}, phase=${game.phase}, step=${game.setupStep}, botSide=${game.botSide || 'none'}`);
+
+            // If it's now the bot's turn, trigger it
+            if (game.botSide && game.turn === game.botSide) {
+                console.log(`[randomize_setup] Triggering bot for game ${gameId}`);
+                setImmediate(() => triggerBotMoveIfNeeded(gameId));
+            }
         } catch (e) {
             console.error('Error in randomize_setup:', e);
         }
@@ -543,6 +1229,9 @@ io.on('connection', (socket) => {
                     lastTurnTimestamp: game.lastTurnTimestamp
                 });
                 console.log(`Setup turn ended in ${gameId}: Now ${game.turn}'s turn`);
+
+                // If it's now the bot's turn, trigger it
+                if (game.botSide) setImmediate(() => triggerBotMoveIfNeeded(gameId));
             } catch (e) {
                 console.error('Error in end_turn_setup:', e);
             }
@@ -601,6 +1290,9 @@ io.on('connection', (socket) => {
                     lastTurnTimestamp: game.lastTurnTimestamp
                 });
                 console.log(`Playing turn passed in ${gameId}: Now ${game.turn}'s turn`);
+
+                // If it's now the bot's turn, trigger it
+                if (game.botSide) setImmediate(() => triggerBotMoveIfNeeded(gameId));
             } catch (e) {
                 console.error('Error in pass_turn_playing:', e);
             }
@@ -747,8 +1439,19 @@ io.on('connection', (socket) => {
                     const winnerId = winnerSide === 'white' ? game.white : game.black;
                     game.phase = 'GameOver';
                     
-                    io.to(gameId).emit('game_over', { winnerId });
-                    saveMatchResult(gameId, game.white, game.black, winnerId, game.pieces, game.history);
+                    io.to(gameId).emit('game_over', { 
+                        winnerId, 
+                        winnerSide: response.winner,
+                        reason: response.reason 
+                    });
+                    saveMatchResult(gameId, game.white, game.black, winnerId, game.pieces, game.history)
+                        .catch(err => console.error(`Failed to save match result for game "${gameId}":`, err));
+                    releaseBotIfNeeded(game);
+                    lobby.activeGames.delete(gameId);
+                    broadcastLobbyUpdate(io);
+                } else if (game.botSide) {
+                    // If it's now the bot's turn, trigger its response
+                    setImmediate(() => triggerBotMoveIfNeeded(gameId));
                 }
 
                 console.log(`Move applied in ${gameId}: ${pieceId} to ${targetPoly}`);
@@ -758,6 +1461,7 @@ io.on('connection', (socket) => {
         }
     });
 
+    // join_game_room: legacy + hash-based lookup
     socket.on('join_game_room', ({ gameId }) => {
         socket.join(gameId);
         const game = lobby.activeGames.get(gameId);
@@ -782,7 +1486,26 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        lobby.waitingPlayers = lobby.waitingPlayers.filter(p => p.socketId !== socket.id);
+        lobby.connectedUsers.delete(socket.id);
+        
+        // Mark players as disconnected in active games
+        for (const game of lobby.activeGames.values()) {
+            if (game.whiteSocketId === socket.id) {
+                game.whiteDisconnectedAt = Date.now();
+            } else if (game.blackSocketId === socket.id) {
+                game.blackDisconnectedAt = Date.now();
+            }
+        }
+
+        // Remove any open game request from this socket
+        const before = lobby.gameRequests.length;
+        lobby.gameRequests = lobby.gameRequests.filter(r => r.socketId !== socket.id);
+        if (lobby.gameRequests.length !== before) {
+            broadcastLobbyUpdate(io);
+        } else {
+            // Still broadcast updated user count
+            broadcastLobbyUpdate(io);
+        }
         console.log('User disconnected:', socket.id);
     });
 });

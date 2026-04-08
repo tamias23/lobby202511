@@ -25,6 +25,7 @@ pub struct GameState {
     pub visited_polygons: HashSet<String>,
     pub phase: GamePhase,
     pub winner: Option<Side>,
+    pub reason: Option<String>,
     pub setup_step: u8, // 0=goddess, 1=heroe, 2=golem, 3=witch, 4=ghoul_siren
     pub setup_placements_this_turn: u32,
 }
@@ -147,6 +148,7 @@ impl GameState {
             visited_polygons: HashSet::new(),
             phase: GamePhase::Setup,
             winner: None,
+            reason: None,
             setup_step: 0,
             setup_placements_this_turn: 0,
         }
@@ -1187,14 +1189,13 @@ pub fn apply_move_turnover(state: &mut GameState, chosen_piece: &str, chosen_tar
         }
     }
 
+    let current_side = state.turn;
+    
     if goddess_captured {
         state.phase = GamePhase::GameOver;
-        state.winner = Some(current_turn);
-        // Do NOT swap turns or increment turn_counter. Game stops here.
-        state.is_new_turn = false;
-        state.locked_sequence_piece = None;
-        state.heroe_take_counter = 0;
-        state.visited_polygons.clear();
+        state.winner = Some(current_side);
+        state.reason = Some("goddess_captured".to_string());
+        return goddess_captured;
     } else if turn_ends {
         state.turn_counter += 1;
         state.turn = state.get_enemy_side();

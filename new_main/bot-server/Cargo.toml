@@ -1,0 +1,25 @@
+[package]
+name = "bot-server"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "bot-server"
+path = "src/main.rs"
+
+[dependencies]
+# Shared game engine + agents (path to the full rust crate with agents/)
+rust = { path = "../../rust" }
+
+# HTTP framework
+axum = "0.7"
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

@@ -448,6 +448,7 @@ pub struct ApplyMoveResponse {
     #[napi(js_name = "heroeTakeCounter")]
     pub heroe_take_counter: u32,
     pub winner: Option<String>,
+    pub reason: Option<String>,
 }
 
 #[napi(object)]
@@ -597,6 +598,7 @@ pub fn end_turn_setup_napi(req: EndTurnSetupRequest) -> napi::Result<ApplyMoveRe
         locked_sequence_piece: state.locked_sequence_piece.clone(),
         heroe_take_counter: state.heroe_take_counter,
         winner: state.winner.map(|s| format!("{:?}", s).to_lowercase()),
+        reason: state.reason.clone(),
     })
 }
 
@@ -703,6 +705,7 @@ pub fn apply_move_napi(req: ApplyMoveRequest) -> napi::Result<ApplyMoveResponse>
         locked_sequence_piece: state.locked_sequence_piece.clone(),
         heroe_take_counter: state.heroe_take_counter,
         winner: state.winner.map(|s| format!("{:?}", s).to_lowercase()),
+        reason: state.reason.clone(),
     })
 }
 
@@ -786,6 +789,7 @@ pub fn pass_turn_playing_napi(req: ApplyMoveRequest) -> napi::Result<ApplyMoveRe
         locked_sequence_piece: state.locked_sequence_piece.clone(),
         heroe_take_counter: state.heroe_take_counter,
         winner: state.winner.map(|s| format!("{:?}", s).to_lowercase()),
+        reason: state.reason.clone(),
     })
 }
 
@@ -861,5 +865,6 @@ pub fn select_color_napi(req: SelectColorRequest) -> napi::Result<ApplyMoveRespo
         locked_sequence_piece: state.locked_sequence_piece.clone(),
         heroe_take_counter: state.heroe_take_counter,
         winner: state.winner.map(|s| format!("{:?}", s).to_lowercase()),
+        reason: state.reason.clone(),
     })
 }

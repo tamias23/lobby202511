@@ -1,0 +1,10 @@
+**/target/
+**/node_modules/
+.venv/
+.git/
+.vscode/
+*.onnx
+*.pth
+*.json
+!new_main/bot-server/models/**/*.json
+!rust/model.onnx

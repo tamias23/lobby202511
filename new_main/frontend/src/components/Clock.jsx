@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const Clock = ({ clocks, lastTurnTimestamp, turn, side }) => {
+const Clock = ({ clocks, lastTurnTimestamp, turn, side, phase }) => {
   const [localClocks, setLocalClocks] = useState(clocks);
 
   useEffect(() => {
@@ -8,16 +8,12 @@ const Clock = ({ clocks, lastTurnTimestamp, turn, side }) => {
   }, [clocks]);
 
   useEffect(() => {
-    if (!lastTurnTimestamp || !turn) return;
+    // Stop the clock when the game is over
+    if (!lastTurnTimestamp || !turn || phase === 'GameOver') return;
 
     const interval = setInterval(() => {
       const now = Date.now();
       const elapsed = now - lastTurnTimestamp;
-      
-      // Fischer clock display: deduction = Math.max(0, elapsed - 100)
-      // but usually for live display, we just show deduction = elapsed
-      // to avoid weird jumps at the very end of the turn.
-      // However, the server will forgive 100ms.
       const deduction = Math.max(0, elapsed - 100);
 
       setLocalClocks(prev => ({
@@ -27,7 +23,7 @@ const Clock = ({ clocks, lastTurnTimestamp, turn, side }) => {
     }, 100);
 
     return () => clearInterval(interval);
-  }, [clocks, lastTurnTimestamp, turn]);
+  }, [clocks, lastTurnTimestamp, turn, phase]);
 
   const formatTime = (ms) => {
     const totalSeconds = Math.floor(ms / 1000);
@@ -41,13 +37,13 @@ const Clock = ({ clocks, lastTurnTimestamp, turn, side }) => {
   const timerStyle = (isActive) => ({
     padding: '15px 20px',
     borderRadius: '12px',
-    background: isActive ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-    border: `1px solid ${isActive ? 'rgba(99, 102, 241, 0.5)' : 'rgba(255, 255, 255, 0.1)'}`,
+    background: isActive ? 'rgba(70, 176, 212, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+    border: `1px solid ${isActive ? 'rgba(70, 176, 212, 0.5)' : 'rgba(255, 255, 255, 0.1)'}`,
     textAlign: 'center',
     transition: 'all 0.3s ease',
     width: '100%',
     boxSizing: 'border-box',
-    boxShadow: isActive ? '0 0 20px rgba(99, 102, 241, 0.2)' : 'none',
+    boxShadow: isActive ? '0 0 20px rgba(70, 176, 212, 0.2)' : 'none',
   });
 
   const timeValueStyle = (isActive) => ({

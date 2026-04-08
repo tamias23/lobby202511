@@ -122,6 +122,7 @@ export interface ApplyMoveResponse {
   lockedSequencePiece?: string
   heroeTakeCounter: number
   winner?: string
+  reason?: string
 }
 export interface EndTurnSetupRequest {
   boardJson: string

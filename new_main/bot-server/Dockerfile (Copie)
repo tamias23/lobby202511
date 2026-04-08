@@ -1,0 +1,36 @@
+# ─── Stage 1: Build ──────────────────────────────────────────────────────────
+FROM docker.io/library/rust:1.83-slim AS builder
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy workspace members the bot-server depends on
+COPY new_main/rust-core ./new_main/rust-core
+COPY rust ./rust
+COPY new_main/bot-server ./new_main/bot-server
+
+WORKDIR /app/new_main/bot-server
+RUN cargo build --release
+
+# ─── Stage 2: Runtime ────────────────────────────────────────────────────────
+FROM debian:bookworm-slim
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /app/new_main/bot-server/target/release/bot-server ./bot-server
+COPY new_main/bot-server/models ./models
+
+ENV PORT=8080
+ENV MODELS_DIR=/app/models
+ENV RUST_LOG=info
+ENV ORT_LOGGING_LEVEL=3
+
+EXPOSE 8080
+CMD ["./bot-server"]
