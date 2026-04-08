@@ -541,6 +541,7 @@ const GameBoard = ({
   const [showGameOverOverlay, setShowGameOverOverlay] = useState(false);
   const [colorTheme, setColorTheme] = useState('default');
   const [showSettings, setShowSettings] = useState(false);
+  const [boardName] = useState(initialState.boardName || "Template");
 
   // Resolve a logical board color name to the current theme's CSS color
   const getThemeColor = (logicalColor) => {
@@ -1051,6 +1052,11 @@ const GameBoard = ({
           
           {!isDebugFolded && (
             <div style={{ marginTop: "10px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px", borderBottom: "1px solid rgba(255,255,255,0.1)", paddingBottom: "4px" }}>
+                <span style={{ opacity: 0.6 }}>Board:</span>
+                <span style={{ color: "#f39c12", fontWeight: "bold" }}>{boardName}</span>
+              </div>
+
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
                 <span style={{ opacity: 0.6 }}>Phase:</span>
                 <span style={{ color: "#fff" }}>{phase}</span>
