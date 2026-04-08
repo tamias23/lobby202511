@@ -132,12 +132,14 @@ button { font-family: inherit; }
   font-size: 1rem;
 }
 
-/* Main 3-column area */
+/* Main content area */
 .lobby-main-area {
+  flex: 1;
   display: grid;
-  grid-template-columns: 130px 1fr;
+  grid-template-columns: 1fr minmax(min-content, 900px) 1fr;
   gap: 20px;
   align-items: start;
+  width: 100%;
 }
 
 /* ─────────────────── LIVE STATS PANEL ─────────────────── */
@@ -430,6 +432,22 @@ button { font-family: inherit; }
   font-weight: 600;
   color: var(--text-main);
 }
+.lobby-welcome {
+  position: absolute;
+  right: 100%;
+  margin-right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  font-family: 'Inter', sans-serif;
+}
+.lobby-title {
+  position: relative;
+  display: inline-block;
+}
 .grc-tc {
   font-size: 13px;
   font-weight: 700;
@@ -671,7 +689,9 @@ svg polygon:hover {
 /* ─────────────────── RESPONSIVE ─────────────────── */
 @media (max-width: 900px) {
   .lobby-main-area {
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
   }
   .live-stats-panel {
     flex-direction: row;

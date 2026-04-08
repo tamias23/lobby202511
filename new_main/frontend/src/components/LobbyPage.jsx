@@ -209,11 +209,13 @@ const LobbyPage = ({ user }) => {
       <div className="lobby-main-area">
 
         {/* Left — Live Stats */}
-        <aside className="live-stats-panel glass-panel">
-          <div className="stat-line">live games {liveStats.activeGames}</div>
-          <div className="stat-line">online players {liveStats.onlineUsers}</div>
-          <div className="stat-pulse-dot" title="Live" />
-        </aside>
+        <div className="lobby-side-column">
+          <aside className="live-stats-panel glass-panel">
+            <div className="stat-line">live games {liveStats.activeGames}</div>
+            <div className="stat-line">online players {liveStats.onlineUsers}</div>
+            <div className="stat-pulse-dot" title="Live" />
+          </aside>
+        </div>
 
         {/* Center — Time Control Buttons */}
         <main className="lobby-center">
@@ -435,6 +437,8 @@ const LobbyPage = ({ user }) => {
             </div>
           )}
         </div>
+        {/* Right — Space / Filler for centering */}
+        <div className="lobby-side-column" />
       </div>
     </div>
   );
