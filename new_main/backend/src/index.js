@@ -169,6 +169,9 @@ async function triggerBotMoveIfNeeded(gameId) {
                     // Track placements for the NAPI state
                     currentGame.setupPlacementsThisTurn = (currentGame.setupPlacementsThisTurn || 0) + 1;
 
+                    // Refresh clock so the game_update contains live time, preventing frontend "flash"
+                    updateClocks(currentGame, true);
+
                     io.to(gameId).emit('game_update', {
                         pieces: currentGame.pieces,
                         turn: currentGame.turn,
@@ -648,7 +651,8 @@ function updateClocks(game, turnEnded) {
         const activeSide = game.turn;
         const increment = (game.timeControl && game.timeControl.increment) ? game.timeControl.increment * 1000 : 30000;
         const deduction = Math.max(0, elapsedTime - 100);
-        game.clocks[activeSide] = Math.max(0, game.clocks[activeSide] - deduction + increment);
+        const bonus = (game.phase === 'Playing') ? increment : 0;
+        game.clocks[activeSide] = Math.max(0, game.clocks[activeSide] - deduction + bonus);
         game.lastTurnTimestamp = now;
     }
 }
@@ -749,6 +753,7 @@ function buildInitialState(gameData) {
         heroeTakeCounter: gameData.heroeTakeCounter,
         clocks: gameData.clocks,
         lastTurnTimestamp: gameData.lastTurnTimestamp,
+        timeControl: gameData.timeControl,
         passCount: gameData.passCount || { white: 0, black: 0 },
         blackRole: gameData.blackRole,
         whiteName: gameData.whiteName,
@@ -1143,10 +1148,8 @@ io.on('connection', (socket) => {
             });
             game.pieces = JSON.parse(response.piecesJson);
 
-            // Update clocks before overwriting game.turn
-            if (oldTurn !== response.turn) {
-                updateClocks(game, true);
-            }
+            // Refresh clock so the game_update contains live time, preventing frontend "flash"
+            updateClocks(game, true);
 
             game.turn = response.turn;
             game.phase = response.phase;
@@ -1409,6 +1412,9 @@ io.on('connection', (socket) => {
                 if (piece.position !== 'returned') return;
                 
                 game.pieces[pieceIndex] = { ...piece, position: targetPoly };
+
+                // Refresh clock so the game_update contains live time, preventing frontend "flash"
+                updateClocks(game, true);
 
                 io.to(gameId).emit('game_update', {
                     pieces: game.pieces,

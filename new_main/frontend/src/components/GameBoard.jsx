@@ -910,7 +910,7 @@ const GameBoard = ({
     const returnedCounters = { white: 0, black: 0 };
     const boardWidth = board?.width || 410;
 
-    return pieces.map((piece) => {
+    return [...pieces].sort((a,b) => a.id.localeCompare(b.id)).map((piece) => {
       let cx = 0,
         cy = 0;
       const isOffBoard =
@@ -962,7 +962,7 @@ const GameBoard = ({
               : "default",
             opacity: 1.0,
             filter: isGrayed ? "grayscale(100%) brightness(0.7)" : "none",
-            transition: isDragging ? "none" : "opacity 0.2s, filter 0.2s",
+            transition: isDragging ? "none" : undefined,
             // During any drag, disable pointer events on all pieces so they don't block
             // target polygons (especially important for captures)
             pointerEvents: dragPos ? "none" : "all",
@@ -1138,8 +1138,22 @@ const GameBoard = ({
               color: "#f27813",
             }}
           >
-            Live Stats
+            Game Info
           </h3>
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              marginBottom: "8px",
+              fontSize: "13px",
+            }}
+          >
+            <span style={{ opacity: 0.7 }}>Time Control:</span>
+            <span style={{ fontWeight: "bold" }}>
+              {initialState?.timeControl ? `${initialState.timeControl.minutes} + ${initialState.timeControl.increment}` : "None"}
+            </span>
+          </div>
 
           <div
             style={{
