@@ -8,6 +8,7 @@ set -euo pipefail
 
 podman image prune
 
+cd /home/mat/Bureau/lobby202511/rust && cargo build --release --bin rust 2>&1
 cd /home/mat/Bureau/lobby202511/new_main/bot-server && cargo build --release
 cd /home/mat/Bureau/lobby202511/new_main/backend && npm run build:napi
 cd /home/mat/Bureau/lobby202511/new_main/frontend && npm run build:wasm
