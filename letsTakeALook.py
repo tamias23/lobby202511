@@ -11,6 +11,8 @@ import polars as pl
 import pandas as pd
 import duckdb
 
+inputFolder = '/home/mat/Bureau/lobby202511/new_main/backend/db/'
+
 # ========================================================
 
 """
@@ -28,10 +30,6 @@ with pd.ExcelWriter('/home/mat/Bureau/lobby202511/parquet/swiss01.xlsx') as writ
 
 # ========================================================
 
-inputFolder = '/home/mat/Bureau/lobby202511/new_main/backend/db/'
-
-# ========================================================
-
 con = duckdb.connect(inputFolder + 'games.duckdb')
 # con = duckdb.connect('gaming.duckdb', read_only=True)
 
@@ -40,6 +38,8 @@ print(tables)
 
 df = con.execute("SELECT * FROM games LIMIT 5").pl()
 print(df)
+games = con.execute("SELECT * FROM games ").pl()
+games.write_parquet('/home/mat/Bureau/lobby202511/parquet/games.parquet')
 
 # 3. To force the "Merge" (Checkpoint)
 # This moves all data from the .wal to the .duckdb file immediately
@@ -50,7 +50,7 @@ con.close()
 
 # ========================================================
 
-con = duckdb.connect(inputFolder + 'users.duckdb')
+con = duckdb.connect(inputFolder + 'users.duckdb', read_only=True)
 
 tables = con.execute("SHOW TABLES").fetchall()
 print(tables)
@@ -59,6 +59,13 @@ df = con.execute("SELECT * FROM profiles LIMIT 5").pl()
 print(df)
 df = con.execute("SELECT * FROM users LIMIT 5").pl()
 print(df)
+
+# con.execute("""
+#     UPDATE users 
+#     SET username = 'u_' + username
+#     WHERE username like 'guest_%'
+# """)
+# con.commit()
 
 users = con.execute("SELECT * FROM users ").pl()
 
@@ -71,5 +78,5 @@ con.close()
 
 # ========================================================
 
-with pd.ExcelWriter('/home/mat/Bureau/lobby202511/users.xlsx', engine='xlsxwriter') as writer:
+with pd.ExcelWriter('/home/mat/Bureau/lobby202511/users2.xlsx', engine='xlsxwriter') as writer:
     users.to_pandas().to_excel(writer, sheet_name='data', index=False, startrow=0 , startcol=0)
