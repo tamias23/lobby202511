@@ -590,23 +590,11 @@ pub fn setup_pieces(state: &mut GameState) {
 pub fn setup_random_board(state: &mut GameState, side_filter: Option<Side>) {
     if side_filter.is_none() {
         setup_pieces(state);
-    } else {
-        // Clear only the filtered side
-        let side = side_filter.unwrap();
-        let piece_ids: Vec<String> = state.board.pieces.iter()
-            .filter(|(_, p)| p.side == side)
-            .map(|(id, _)| id.clone())
-            .collect();
-        for id in piece_ids {
-            if let Some(p) = state.board.pieces.get_mut(&id) {
-                if p.position != "returned" && p.position != "graveyard" {
-                    state.occupancy.remove(&p.position);
-                }
-                p.position = "returned".to_string();
-            }
-        }
     }
-    
+    // When side_filter is Some, do NOT reset already-placed pieces.
+    // Only pieces still in "returned" state will be randomized below.
+
+
     let mut rng = rand::thread_rng();
 
     // Find Edge polygons
@@ -650,7 +638,8 @@ pub fn setup_random_board(state: &mut GameState, side_filter: Option<Side>) {
         let mut siren_ids = Vec::new();
 
         for (id, p) in &state.board.pieces {
-            if p.side == side {
+            // Only collect pieces that still need placing (position == "returned").
+            if p.side == side && p.position == "returned" {
                 match p.piece_type {
                     PieceType::Goddess => goddess_id = id.clone(),
                     PieceType::Heroe => {
@@ -666,43 +655,97 @@ pub fn setup_random_board(state: &mut GameState, side_filter: Option<Side>) {
             }
         }
 
-        let mut g_poly = String::new();
-        let mut h0_poly = String::new();
-        let mut h1_poly = String::new();
-        
-        // A. Edge Anchors Constraint Loop
-        loop {
-            if edges.is_empty() { break; }
-            let mut p_edges = edges.clone();
-            p_edges.shuffle(&mut rng);
-            if p_edges.len() < 3 { break; }
-            
-            g_poly = p_edges[0].clone();
-            h0_poly = p_edges[1].clone();
-            h1_poly = p_edges[2].clone();
-            
-            let h0_near_6 = get_polys_within_distance_jump(&state.board, &h0_poly, 6);
-            if h0_near_6.contains(&h1_poly) { continue; }
-            
-            let g_near_3 = get_polys_within_distance_jump(&state.board, &g_poly, 3);
-            let g_near_6 = get_polys_within_distance_jump(&state.board, &g_poly, 6);
-            
-            if g_near_3.contains(&h0_poly) || !g_near_6.contains(&h0_poly) { continue; }
-            if g_near_3.contains(&h1_poly) || !g_near_6.contains(&h1_poly) { continue; }
-            
-            break;
-        }
+        // Pre-populate anchor positions from already-placed pieces.
+        // These are needed as reference points for Golem/Witch/Ghoul placement
+        // even when the anchors were placed manually by the player.
+        let mut g_poly: String = state.board.pieces.values()
+            .find(|p| p.side == side && p.piece_type == PieceType::Goddess && p.position != "returned")
+            .map(|p| p.position.clone())
+            .unwrap_or_default();
 
-        if !g_poly.is_empty() && !goddess_id.is_empty() {
-            state.occupancy.insert(g_poly.clone(), goddess_id.clone());
-            state.board.pieces.get_mut(&goddess_id).unwrap().position = g_poly.clone();
-            state.occupancy.insert(h0_poly.clone(), heroe0_id.clone());
-            state.board.pieces.get_mut(&heroe0_id).unwrap().position = h0_poly.clone();
-            state.occupancy.insert(h1_poly.clone(), heroe1_id.clone());
-            state.board.pieces.get_mut(&heroe1_id).unwrap().position = h1_poly.clone();
-        } else {
-            continue; // No valid edges found for safety
+        let pre_hero_polys: Vec<String> = state.board.pieces.values()
+            .filter(|p| p.side == side && p.piece_type == PieceType::Heroe && p.position != "returned")
+            .map(|p| p.position.clone())
+            .collect();
+        let mut h0_poly = pre_hero_polys.first().cloned().unwrap_or_default();
+        let mut h1_poly = pre_hero_polys.get(1).cloned().unwrap_or_default();
+
+        // A. Edge Anchors — only run if the Goddess still needs placing.
+        if !goddess_id.is_empty() {
+            loop {
+                if edges.is_empty() { break; }
+                let mut p_edges = edges.clone();
+                p_edges.shuffle(&mut rng);
+                if p_edges.len() < 3 { break; }
+                
+                g_poly = p_edges[0].clone();
+                h0_poly = p_edges[1].clone();
+                h1_poly = p_edges[2].clone();
+                
+                let h0_near_6 = get_polys_within_distance_jump(&state.board, &h0_poly, 6);
+                if h0_near_6.contains(&h1_poly) { continue; }
+                
+                let g_near_3 = get_polys_within_distance_jump(&state.board, &g_poly, 3);
+                let g_near_6 = get_polys_within_distance_jump(&state.board, &g_poly, 6);
+                
+                if g_near_3.contains(&h0_poly) || !g_near_6.contains(&h0_poly) { continue; }
+                if g_near_3.contains(&h1_poly) || !g_near_6.contains(&h1_poly) { continue; }
+                
+                break;
+            }
+
+            if !g_poly.is_empty() {
+                state.occupancy.insert(g_poly.clone(), goddess_id.clone());
+                state.board.pieces.get_mut(&goddess_id).unwrap().position = g_poly.clone();
+                if !heroe0_id.is_empty() {
+                    state.occupancy.insert(h0_poly.clone(), heroe0_id.clone());
+                    state.board.pieces.get_mut(&heroe0_id).unwrap().position = h0_poly.clone();
+                }
+                if !heroe1_id.is_empty() {
+                    state.occupancy.insert(h1_poly.clone(), heroe1_id.clone());
+                    state.board.pieces.get_mut(&heroe1_id).unwrap().position = h1_poly.clone();
+                }
+            } else {
+                continue; // No valid edges found — skip this side
+            }
+        } else if !heroe0_id.is_empty() && !g_poly.is_empty() {
+            // Goddess already placed; randomize remaining hero(es) around it.
+            let g_near_2 = get_polys_within_distance_jump(&state.board, &g_poly, 2);
+            let g_near_6 = get_polys_within_distance_jump(&state.board, &g_poly, 6);
+            let mut hero_candidates: Vec<String> = edges.iter()
+                .filter(|e| {
+                    !state.is_occupied(e) &&
+                    g_near_6.contains(*e) && !g_near_2.contains(*e) &&
+                    !pre_hero_polys.contains(*e)
+                })
+                .cloned()
+                .collect();
+            hero_candidates.shuffle(&mut rng);
+
+            let heroes_to_place: Vec<&String> = [&heroe0_id, &heroe1_id]
+                .iter().filter(|id| !id.is_empty()).cloned().collect();
+
+            let mut chosen: Vec<String> = Vec::new();
+            'outer: for cand in &hero_candidates {
+                if chosen.len() >= heroes_to_place.len() { break; }
+                let cand_near_6 = get_polys_within_distance_jump(&state.board, cand, 6);
+                // Must be far enough from all already-placed and newly-chosen heroes
+                for prev in pre_hero_polys.iter().chain(chosen.iter()) {
+                    if cand_near_6.contains(prev) { continue 'outer; }
+                }
+                chosen.push(cand.clone());
+            }
+            for (i, hero_id) in heroes_to_place.iter().enumerate() {
+                if let Some(pos) = chosen.get(i) {
+                    state.occupancy.insert(pos.clone(), (*hero_id).clone());
+                    state.board.pieces.get_mut(*hero_id).unwrap().position = pos.clone();
+                    if i == 0 { h0_poly = pos.clone(); } else { h1_poly = pos.clone(); }
+                }
+            }
         }
+        // If both anchors already placed, g_poly / h0_poly / h1_poly are already set above.
+        // Golem, Witch and Ghoul placement below will use them as reference points.
+
 
         // B. Protectors (Golems)
         let mut set1_goddess: Vec<String> = get_polys_within_distance_jump(&state.board, &g_poly, 1).into_iter().collect();

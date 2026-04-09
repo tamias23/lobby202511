@@ -1,0 +1,37 @@
+The setup follows a structured, multi-phase process designed to ensure a balanced and geometrically interesting starting position. It centers around three "anchor" pieces (the Goddess and two Heroes) placed on opposite edges of the board, with other pieces clustered around them in distance-based "rings."
+
+### 1. The Placement Conditions
+
+The setup occurs for each side (White plays first):
+
+#### Phase A: Anchor Placement (Goddess & Heroes)
+*   **Target Area**: Polygons on the "physical edges" (Top for White, Bottom for Black).
+*   **Conditions**: 
+    *   **Hero Separation**: The two Heroes must be far apart (distance > 6 steps).
+    *   **Goddess Guard**: The Goddess must be "guarded" but not "crowded" by her Heroes. Both Heroes must be between 3 and 6 steps away from her.
+
+#### Phase B: Protectors (Golems)
+*   **Target Area**: As close as possible to the Goddess.
+*   **Result**: 2 Golems are placed in these "inner ring" slots to act as immediate bodyguards.
+
+#### Phase C: Witches
+*   **Target Area**: Witches must be spread across different colored polygons and placed as close as possible to the 3 anchors.
+*   **Result**: 4 Witches are placed on 4 polygons, each with a different color.
+
+#### Phase D: Infantry Filling (Ghouls & Sirens)
+*   **Target Area**: The remaining pieces (9 Ghouls and 9 Sirens) are placed as close as possible to the 3 anchors
+
+#### Phase E: The Reserves (Mages & Soldiers)
+*   **Target Area**: Mages (1) and Soldiers (9) are **never placed on the board** during setup. 
+*   They remain in the "returned" (Stock) state, requiring players to deploy them onto the board during their turns (usually via a Mage or on a matching color).
+
+### 2. The Sequence
+
+*   White plays first at each start of any phase (A, B, C, D, E)
+*   players alternate placing their pieces : goddess (phase A), then 2 heroes (phase B), then 2 golems (phase C), then 4 witches (phase D), then all ghouls and sirens (phase E)
+*   when a player has the move :
+    * he/she should play at least one piece 
+    * he/she can place any number of his/her pieces for the phase (A, B, C, D or E), or even all, and at least one
+    * a player can pass the turn to the opponent, if the player has placed at least one piece during this phase
+*   white cannot start the next phase unless both players have place all their pieces for the current phase
+*   when a player has no piece left for the current phase, this player cannot be given the turn : this player must wait for the opponent to complete the current phase

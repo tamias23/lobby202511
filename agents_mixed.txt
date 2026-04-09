@@ -1,8 +1,6 @@
 Name,Type,Data,MctsBudget,MctsThreads
-mcts_50ms,mcts,rust/nets/a/model.onnx,50,6
-mcts_1s,mcts,rust/nets/a/model.onnx,1000,6
-mcts_200ms,mcts,rust/nets/a/model.onnx,200,1
-mcts_100ms,mcts,rust/nets/a/model.onnx,100,1
+mcts_a,mcts,new_main/bot-server/models/mcts/model_a.onnx,30,6
+mcts_c,mcts,new_main/bot-server/models/mcts/model_c.onnx,30,6
 Jack_a,greedy_jack,results/jack_nets/rank_032_LvUtjzmJ02.json,,
 Jack_b,greedy_jack,results/jack_nets/rank_001_uROvaAwh08.json,,
 Jack_c,greedy_jack,results/jack_nets/rank_002_yYtlgZLn13.json,,

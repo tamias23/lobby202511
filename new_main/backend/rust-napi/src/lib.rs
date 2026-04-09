@@ -1,6 +1,6 @@
 use napi_derive::napi;
 use rust_core::{GameState, GamePhase, Side, Piece, BoardMap, PieceType};
-use rust_core::engine::{get_legal_moves, apply_move, setup_pieces, setup_random_board, pass_turn};
+use rust_core::engine::{get_legal_moves, apply_move, apply_move_turnover, setup_pieces, setup_random_board, pass_turn, check_setup_step_complete, apply_setup_placement_turnover};
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
@@ -158,48 +158,29 @@ pub fn randomize_setup_napi(req: RandomizeRequest) -> napi::Result<RandomizeResp
 
     setup_random_board(&mut state, Some(side_to_randomize));
 
-    // Logic: Switch turn, potentially advance setup step, with auto-skipping randomized players
-    let mut iterations = 0;
-    while iterations < 10 { // Safety break
-        if state.turn == Side::White {
-            state.turn = Side::Black;
-        } else {
-            state.turn = Side::White;
-            state.setup_step += 1;
-        }
+    // Correct turn-switching after a randomize:
+    // Randomize places ALL remaining pieces for the current player, so original_done is always true.
+    // The step advances only when BOTH players are done.
+    // A player with no pieces left for the current step cannot be given the turn.
+    let original_side = state.turn;
+    let opponent_side = state.get_enemy_side();
 
+    let original_done = check_setup_step_complete(&state, original_side);
+    let opponent_done  = check_setup_step_complete(&state, opponent_side);
+
+    if original_done && opponent_done {
+        // Both done → advance step; White always starts the next setup phase.
+        state.setup_step += 1;
         if state.setup_step > 4 {
             state.phase = GamePhase::Playing;
             state.is_new_turn = true;
-            break;
         }
-
-        // Check if the NEW current player has any pieces to place for THIS step
-        let (step_type, _) = match state.setup_step {
-            0 => (PieceType::Goddess, 1),
-            1 => (PieceType::Heroe, 2),
-            2 => (PieceType::Golem, 2),
-            3 => (PieceType::Witch, 4),
-            4 => (PieceType::Ghoul, 18),
-            _ => break,
-        };
-
-        let current_side = state.turn;
-        let pieces_to_place = state.board.pieces.values().any(|p| {
-            p.side == current_side && p.position == "returned" && 
-            (if state.setup_step == 4 { 
-                p.piece_type == PieceType::Ghoul || p.piece_type == PieceType::Siren 
-            } else { 
-                p.piece_type == step_type 
-            })
-        });
-
-        if pieces_to_place {
-            break; // This player has work to do
-        }
-        // Else: this player has no pieces to place for this step (already randomized/finished), skip again
-        iterations += 1;
+        state.turn = Side::White;
+    } else if !opponent_done {
+        // Opponent still has pieces → give them the turn.
+        state.turn = opponent_side;
     }
+    // else: opponent is done, current player still has pieces left → turn unchanged.
 
     let updated_pieces: Vec<Piece> = state.board.pieces.into_values().collect();
     let updated_pieces_json = serde_json::to_string(&updated_pieces)
@@ -528,48 +509,59 @@ pub fn end_turn_setup_napi(req: EndTurnSetupRequest) -> napi::Result<ApplyMoveRe
         state.colors_ever_chosen.insert(c.to_lowercase());
     }
 
-    // Logic: Switch turn, potentially advance setup step, with auto-skipping randomized players
-    let mut iterations = 0;
-    while iterations < 10 { // Safety break
-        if state.turn == Side::White {
-            state.turn = Side::Black;
-        } else {
-            state.turn = Side::White;
-            state.setup_step += 1;
-        }
+    // Correct turn-switching for end_turn_setup:
+    // A player can end their turn after placing >= 1 piece for the current step.
+    // The step only advances when BOTH players have placed ALL their pieces.
+    // A player with no pieces left for the current step cannot be given the turn.
+    let original_side = state.turn;
+    let opponent_side = state.get_enemy_side();
 
+    let original_done = check_setup_step_complete(&state, original_side);
+    let opponent_done  = check_setup_step_complete(&state, opponent_side);
+
+    state.setup_placements_this_turn = 0;
+
+    if original_done && opponent_done {
+        // Both done → advance step; White always starts the next setup phase.
+        state.setup_step += 1;
         if state.setup_step > 4 {
             state.phase = GamePhase::Playing;
             state.is_new_turn = true;
-            break;
         }
+        state.turn = Side::White;
 
-        // Check if the NEW current player has any pieces to place for THIS step
-        let (step_type, _) = match state.setup_step {
-            0 => (PieceType::Goddess, 1),
-            1 => (PieceType::Heroe, 2),
-            2 => (PieceType::Golem, 2),
-            3 => (PieceType::Witch, 4),
-            4 => (PieceType::Ghoul, 18),
-            _ => break,
-        };
-
-        let current_side = state.turn;
-        let pieces_to_place = state.board.pieces.values().any(|p| {
-            p.side == current_side && p.position == "returned" && 
-            (if state.setup_step == 4 { 
-                p.piece_type == PieceType::Ghoul || p.piece_type == PieceType::Siren 
-            } else { 
-                p.piece_type == step_type 
-            })
-        });
-
-        if pieces_to_place {
-            break; // This player has work to do
+        // Rule: "when a player has no piece left for the current phase, this player
+        // cannot be given the turn". After advancing, keep skipping until we find
+        // a player who still needs to place pieces for the new phase, or both are
+        // done and we need to advance again.
+        while state.phase == GamePhase::Setup {
+            let white_done = check_setup_step_complete(&state, Side::White);
+            let black_done = check_setup_step_complete(&state, Side::Black);
+            if white_done && black_done {
+                // Both done with this step too — advance again
+                state.setup_step += 1;
+                state.setup_placements_this_turn = 0;
+                if state.setup_step > 4 {
+                    state.phase = GamePhase::Playing;
+                    state.is_new_turn = true;
+                    state.turn = Side::White;
+                    break;
+                }
+                state.turn = Side::White;
+            } else if white_done {
+                // White already done with this step → skip to black
+                state.turn = Side::Black;
+                break;
+            } else {
+                // White still has pieces to place → White goes first (normal)
+                break;
+            }
         }
-        // Else: this player has no pieces to place for this step (already randomized/finished), skip again
-        iterations += 1;
+    } else if !opponent_done {
+        // Opponent still has pieces → give them the turn.
+        state.turn = opponent_side;
     }
+    // else: opponent is already done, current player still has pieces → turn stays with current player.
 
     let mage_unlocked_flag = state.is_mage_unlocked();
     let updated_pieces: Vec<Piece> = state.board.pieces.into_values().collect();
@@ -866,5 +858,129 @@ pub fn select_color_napi(req: SelectColorRequest) -> napi::Result<ApplyMoveRespo
         heroe_take_counter: state.heroe_take_counter,
         winner: state.winner.map(|s| format!("{:?}", s).to_lowercase()),
         reason: state.reason.clone(),
+    })
+}
+
+// ─── Replay to step ───────────────────────────────────────────────
+
+#[napi(object)]
+pub struct ReplayRequest {
+    #[napi(js_name = "boardJson")]
+    pub board_json: String,
+    #[napi(js_name = "movesJson")]
+    pub moves_json: String,
+    pub step: u32,
+}
+
+#[napi(object)]
+pub struct ReplayResponse {
+    pub pieces_json: String,
+    pub turn: String,
+    pub phase: String,
+    #[napi(js_name = "turnCounter")]
+    pub turn_counter: u32,
+    #[napi(js_name = "movesThisTurn")]
+    pub moves_this_turn: u32,
+    #[napi(js_name = "colorChosen")]
+    pub color_chosen: HashMap<String, String>,
+}
+
+#[napi]
+pub fn replay_to_step_napi(req: ReplayRequest) -> napi::Result<ReplayResponse> {
+    let board: BoardMap = serde_json::from_str(&req.board_json)
+        .map_err(|e| napi::Error::from_reason(format!("Board parse error: {}", e)))?;
+
+    #[derive(serde::Deserialize)]
+    struct MoveEvent {
+        #[serde(default)]
+        active_side: String,
+        #[serde(default)]
+        phase: String,
+        #[serde(default)]
+        chosen_color: String,
+        #[serde(default)]
+        piece_id: String,
+        #[serde(default)]
+        target_id: String,
+    }
+
+    let move_events: Vec<MoveEvent> = serde_json::from_str(&req.moves_json)
+        .map_err(|e| napi::Error::from_reason(format!("Moves parse error: {}", e)))?;
+
+    let mut state = GameState::new(board);
+    setup_pieces(&mut state);
+
+    let step = req.step as usize;
+
+    for (i, m) in move_events.iter().enumerate() {
+        if i >= step {
+            break;
+        }
+
+        let active_side = match m.active_side.to_lowercase().as_str() {
+            "white" => Side::White,
+            _ => Side::Black,
+        };
+
+        if m.phase == "setup" {
+            state.turn = active_side;
+            if !m.piece_id.is_empty() {
+                apply_setup_placement_turnover(&mut state, &m.piece_id, &m.target_id);
+            }
+        } else {
+            // Playing phase
+            state.turn = active_side;
+            if !m.chosen_color.is_empty() {
+                state.color_chosen.insert(active_side, m.chosen_color.clone());
+                state.is_new_turn = false;
+            }
+
+            if m.piece_id.is_empty() {
+                continue;
+            }
+
+            let grabbed_position = state.board.pieces
+                .get(&m.piece_id)
+                .map(|p| p.position.clone())
+                .unwrap_or_default();
+
+            let captured = apply_move(&mut state, &m.piece_id, &m.target_id);
+            let goddess_captured = captured.contains(&PieceType::Goddess);
+            apply_move_turnover(
+                &mut state,
+                &m.piece_id,
+                &m.target_id,
+                goddess_captured,
+                captured.is_empty(),
+                grabbed_position == "returned",
+            );
+        }
+    }
+
+    // Serialize the current piece state
+    let pieces: Vec<serde_json::Value> = state.board.pieces.values().map(|p| {
+        serde_json::json!({
+            "id": p.id,
+            "type": p.piece_type,
+            "side": p.side,
+            "position": p.position,
+        })
+    }).collect();
+
+    let color_chosen: HashMap<String, String> = state.color_chosen.iter()
+        .map(|(s, c)| (format!("{:?}", s).to_lowercase(), c.clone()))
+        .collect();
+
+    Ok(ReplayResponse {
+        pieces_json: serde_json::to_string(&pieces).unwrap_or_else(|_| "[]".to_string()),
+        turn: format!("{:?}", state.turn).to_lowercase(),
+        phase: match state.phase {
+            GamePhase::Setup => "Setup".to_string(),
+            GamePhase::Playing => "Playing".to_string(),
+            GamePhase::GameOver => "GameOver".to_string(),
+        },
+        turn_counter: state.turn_counter,
+        moves_this_turn: state.moves_this_turn,
+        color_chosen,
     })
 }

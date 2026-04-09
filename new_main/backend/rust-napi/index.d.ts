@@ -142,3 +142,17 @@ export declare function endTurnSetupNapi(req: EndTurnSetupRequest): ApplyMoveRes
 export declare function applyMoveNapi(req: ApplyMoveRequest): ApplyMoveResponse
 export declare function passTurnPlayingNapi(req: ApplyMoveRequest): ApplyMoveResponse
 export declare function selectColorNapi(req: SelectColorRequest): ApplyMoveResponse
+export interface ReplayRequest {
+  boardJson: string
+  movesJson: string
+  step: number
+}
+export interface ReplayResponse {
+  piecesJson: string
+  turn: string
+  phase: string
+  turnCounter: number
+  movesThisTurn: number
+  colorChosen: Record<string, string>
+}
+export declare function replayToStepNapi(req: ReplayRequest): ReplayResponse

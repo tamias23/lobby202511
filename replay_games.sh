@@ -8,4 +8,4 @@ fi
 PARQUET_FILE=$(realpath "$1")
 cd rust
 
-cargo run --bin replay -- "$PARQUET_FILE"
+./target/release/replay "$PARQUET_FILE"

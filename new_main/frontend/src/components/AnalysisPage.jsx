@@ -1,20 +1,19 @@
 /**
  * AnalysisPage.jsx
- * Full game replay room — built from the same SVG rendering foundation as GameBoard.
+ * Full game replay room — uses the server-side replay engine to reconstruct
+ * board state at any step from the moves array.
  *
- * Record format (v2):
+ * Record format (v3):
  * {
- *   version: 2,
- *   boardName: string,
+ *   version: 3,
+ *   board_id: string,
  *   whiteName: string,
  *   blackName: string,
  *   winner: string,
  *   reason: string,
  *   timeControl: { minutes, increment } | null,
  *   board: BoardMap  (allPolygons, allEdges, …),
- *   initialPieces: Piece[],
- *   snapshots: Array<{ pieces, clocks, colorChosen, turn, phase }>,
- *   history:  Array<{ pieceId, targetPoly, captured }>,
+ *   moves: Array<{ turn_number, active_side, phase, chosen_color, piece_id, target_id, timestamp_ms }>
  * }
  */
 
@@ -168,7 +167,7 @@ const REASON_LABELS = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ColorCircles — similar to GameBoard for showing chosen colors
+// ColorCircles
 // ─────────────────────────────────────────────────────────────────────────────
 const ColorCircles = ({ chosenColor, turn }) => {
   const colors = ["grey", "green", "blue", "orange"];
@@ -223,21 +222,67 @@ const AnalysisPage = () => {
   const [autoPlaying, setAutoPlaying] = useState(false);
   const [dragActive, setDragActive] = useState(false);
 
-  const totalSteps = record ? record.snapshots.length : 0;
-  const snap = record ? record.snapshots[Math.min(stepIdx, totalSteps - 1)] : null;
-  const currentPieces = snap?.pieces || [];
-  const currentClocks = snap?.clocks || null;
-  const currentPhase = snap?.phase || '';
-  const currentTurn = snap?.turn || '';
-  // history[i] is the move that PRODUCED snapshots[i+1]
-  const currentMove = record?.history?.[stepIdx - 1] || null;
+  // Board geometry fetched from server
+  const [boardData, setBoardData] = useState(null);
 
-  // ── Board geometry (same logic as GameBoard) ──
+  // Fetch board when record changes
+  useEffect(() => {
+    if (!record?.board_id) return;
+    setBoardData(null);
+    fetch(`/api/boards/${encodeURIComponent(record.board_id)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setBoardData(data); })
+      .catch(e => console.error('Failed to fetch board:', e));
+  }, [record?.board_id]);
+
+  // Computed state from replay engine
+  const [currentPieces, setCurrentPieces] = useState([]);
+  const [currentTurn, setCurrentTurn] = useState('white');
+  const [currentPhase, setCurrentPhase] = useState('');
+  const [currentColorChosen, setCurrentColorChosen] = useState({});
+  const [replayLoading, setReplayLoading] = useState(false);
+
+  const totalSteps = record ? (record.moves?.length || 0) + 1 : 0; // +1 for start position
+
+  // Fetch state at a given step from the replay engine
+  const fetchReplayState = useCallback(async (step) => {
+    if (!boardData || !record?.moves || !record?.board_id) return;
+    setReplayLoading(true);
+    try {
+      const movesJson = JSON.stringify(record.moves);
+      const res = await fetch('/api/replay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ board_id: record.board_id, movesJson, step }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentPieces(data.pieces || []);
+        setCurrentTurn(data.turn || 'white');
+        setCurrentPhase(data.phase || '');
+        setCurrentColorChosen(data.colorChosen || {});
+      }
+    } catch (e) {
+      console.error('Replay fetch error:', e);
+    } finally {
+      setReplayLoading(false);
+    }
+  }, [record, boardData]);
+
+  // Fetch state when stepIdx or boardData changes
+  useEffect(() => {
+    if (record && boardData) fetchReplayState(stepIdx);
+  }, [stepIdx, record, boardData, fetchReplayState]);
+
+  // The current move (that produced the current state)
+  const currentMove = stepIdx > 0 ? (record?.moves?.[stepIdx - 1] || null) : null;
+
+  // ── Board geometry ──
   const { boardCenter, boardViewBox } = useMemo(() => {
     const fallback = { boardCenter: { x: 205, y: 217 }, boardViewBox: '-100 -10 610 445' };
-    if (!record?.board?.allPolygons) return fallback;
+    if (!boardData?.allPolygons) return fallback;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    Object.values(record.board.allPolygons).forEach(poly => {
+    Object.values(boardData.allPolygons).forEach(poly => {
       (poly.points || poly.vertices || []).forEach(([x, y]) => {
         if (x < minX) minX = x; if (x > maxX) maxX = x;
         if (y < minY) minY = y; if (y > maxY) maxY = y;
@@ -248,7 +293,7 @@ const AnalysisPage = () => {
       boardCenter: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 },
       boardViewBox: `${minX - pad} ${minY - pad} ${maxX - minX + pad * 2} ${maxY - minY + pad * 2}`,
     };
-  }, [record]);
+  }, [boardData]);
 
   // ── Navigation ──
   const goTo = useCallback((idx) => {
@@ -307,8 +352,9 @@ const AnalysisPage = () => {
     reader.onload = (e) => {
       try {
         const data = JSON.parse(e.target.result);
-        if (!data.snapshots || !data.board) { alert('Invalid or unsupported game file.'); return; }
+        if (!data.moves || !data.board_id) { alert('Invalid or unsupported game file. Expected v3 format with moves and board_id.'); return; }
         setRecord(data);
+        setBoardData(null); // will be fetched via useEffect
         setStepIdx(0);
         stopAutoPlay();
       } catch { alert('Could not parse file.'); }
@@ -316,10 +362,10 @@ const AnalysisPage = () => {
     reader.readAsText(file);
   };
 
-  // ── Board rendering (read-only, same as GameBoard) ──
+  // ── Board rendering ──
   const renderEdges = () => {
-    if (!record?.board?.allEdges) return null;
-    return Object.entries(record.board.allEdges).map(([id, edge]) => {
+    if (!boardData?.allEdges) return null;
+    return Object.entries(boardData.allEdges).map(([id, edge]) => {
       if (!edge.sharedPoints || edge.sharedPoints.length !== 2) return null;
       const isRed = edge.color === 'red';
       return (
@@ -335,12 +381,12 @@ const AnalysisPage = () => {
   };
 
   const renderBoard = () => {
-    if (!record?.board?.allPolygons) return null;
+    if (!boardData?.allPolygons) return null;
     const flipTransform = isFlipped ? `rotate(180, ${boardCenter.x}, ${boardCenter.y})` : '';
     return (
       <g transform={flipTransform} style={{ transition: 'transform 0.6s ease-in-out' }}>
         {/* Polygons */}
-        {Object.entries(record.board.allPolygons).map(([id, poly]) => (
+        {Object.entries(boardData.allPolygons).map(([id, poly]) => (
           <polygon key={id}
             points={(poly.points || poly.vertices || []).map(([x, y]) => `${x},${y}`).join(' ')}
             fill={poly.color || '#888'}
@@ -350,8 +396,8 @@ const AnalysisPage = () => {
         ))}
         {renderEdges()}
         {/* Highlight last move */}
-        {currentMove && record.board.allPolygons[currentMove.targetPoly] && (() => {
-          const poly = record.board.allPolygons[currentMove.targetPoly];
+        {currentMove && boardData.allPolygons[currentMove.target_id] && (() => {
+          const poly = boardData.allPolygons[currentMove.target_id];
           const [cx, cy] = poly.center;
           return (
             <circle cx={cx} cy={cy} r="20"
@@ -368,9 +414,9 @@ const AnalysisPage = () => {
   };
 
   const renderPieces = () => {
-    if (!record?.board?.allPolygons || !currentPieces) return null;
+    if (!boardData?.allPolygons || !currentPieces) return null;
     const returnedCounters = { white: 0, black: 0 };
-    const boardWidth = record.board.width || 410;
+    const boardWidth = boardData.width || 410;
 
     return currentPieces.map(piece => {
       const isOffBoard = piece.position === 'returned' || piece.position === 'graveyard';
@@ -388,13 +434,12 @@ const AnalysisPage = () => {
           returnedCounters.black++;
         }
       } else {
-        const poly = record.board.allPolygons[piece.position];
+        const poly = boardData.allPolygons[piece.position];
         if (!poly) return null;
         [cx, cy] = poly.center;
       }
 
-      const isLastMoved = currentMove && piece.id === currentMove.pieceId;
-      const flipPiece = isFlipped ? 'rotate(180)' : '';
+      const isLastMoved = currentMove && piece.id === currentMove.piece_id;
 
       return (
         <g key={piece.id}
@@ -412,11 +457,10 @@ const AnalysisPage = () => {
   };
 
   // ── Player header box ──
-  const PlayerBox = ({ name, side, clocks, isActive }) => (
+  const PlayerBox = ({ name, side, isActive }) => (
     <div className={`al-player-box${isActive ? ' al-player-box--active' : ''}`}>
       <div className="al-player-side-dot" style={{ background: side === 'white' ? '#f8fafc' : '#0f172a', border: '1px solid rgba(255,255,255,0.3)' }} />
       <div className="al-player-name">{name}</div>
-      <div className="al-player-clock">{clocks ? fmtMs(clocks[side]) : '--:--'}</div>
     </div>
   );
 
@@ -430,7 +474,7 @@ const AnalysisPage = () => {
           {record && (
             <span className="al-game-subtitle">
               {record.whiteName} vs {record.blackName}
-              {record.boardName && <span className="al-board-tag">{record.boardName}</span>}
+              {(record.board_id || record.boardName) && <span className="al-board-tag">{record.board_id || record.boardName}</span>}
             </span>
           )}
         </div>
@@ -441,7 +485,7 @@ const AnalysisPage = () => {
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
               a.href = url;
-              a.download = `dedal_${record.boardName || 'game'}_${Date.now()}.json`;
+              a.download = `dedal_${record.board_id || record.boardName || 'game'}_${Date.now()}.json`;
               a.click();
               URL.revokeObjectURL(url);
             }}>⬇ Download</button>
@@ -473,7 +517,6 @@ const AnalysisPage = () => {
             {/* Black player (top when not flipped) */}
             <PlayerBox
               name={record.blackName} side="black"
-              clocks={currentClocks}
               isActive={currentTurn === 'black'}
             />
 
@@ -486,12 +529,20 @@ const AnalysisPage = () => {
               >
                 {renderBoard()}
               </svg>
+              {replayLoading && (
+                <div style={{
+                  position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'rgba(0,0,0,0.2)', borderRadius: '12px',
+                }}>
+                  <span style={{ color: 'white', fontSize: '14px' }}>Loading...</span>
+                </div>
+              )}
             </div>
 
             {/* White player (bottom) */}
             <PlayerBox
               name={record.whiteName} side="white"
-              clocks={currentClocks}
               isActive={currentTurn === 'white'}
             />
 
@@ -544,10 +595,9 @@ const AnalysisPage = () => {
                 <>
                   <div className="al-moveline">
                     <span className="al-move-num">#{stepIdx}</span>
-                    <span className="al-move-piece">{currentMove.pieceId}</span>
+                    <span className="al-move-piece">{currentMove.piece_id}</span>
                     <span className="al-move-arrow">→</span>
-                    <span className="al-move-target">{currentMove.targetPoly}</span>
-                    {currentMove.captured && <span className="al-move-cap">× {currentMove.captured}</span>}
+                    <span className="al-move-target">{currentMove.target_id}</span>
                   </div>
                 </>
               ) : (
@@ -556,7 +606,7 @@ const AnalysisPage = () => {
             </div>
 
             {/* Color selection indicators */}
-            <ColorCircles chosenColor={snap?.colorChosen?.[currentTurn]} turn={currentTurn} />
+            <ColorCircles chosenColor={currentColorChosen?.[currentTurn]} turn={currentTurn} />
 
             {/* Move list */}
             <div className="al-move-list-header">Move List</div>
@@ -568,9 +618,8 @@ const AnalysisPage = () => {
                 <span className="al-mn">0</span>
                 <span className="al-md">Start</span>
               </div>
-              {(record.history || []).map((move, i) => {
+              {(record.moves || []).map((move, i) => {
                 const si = i + 1;
-                const meta = record.snapshots?.[si] || {};
                 return (
                   <div key={i}
                     className={`al-move-item${stepIdx === si ? ' al-move-item--active' : ''}`}
@@ -578,11 +627,13 @@ const AnalysisPage = () => {
                   >
                     <span className="al-mn">{si}</span>
                     <span className="al-side-dot" style={{
-                      background: meta.turn === 'white' ? '#f8fafc' : '#0f172a',
+                      background: move.active_side === 'white' ? '#f8fafc' : '#0f172a',
                       border: '1px solid rgba(255,255,255,0.25)',
                     }} />
-                    <span className="al-md">{move.pieceId} → {move.targetPoly}</span>
-                    {move.captured && <span className="al-cap">×</span>}
+                    <span className={`al-phase-badge al-phase-${move.phase}`} style={{ fontSize: '9px', padding: '1px 4px' }}>
+                      {move.phase}
+                    </span>
+                    <span className="al-md">{move.piece_id} → {move.target_id}</span>
                   </div>
                 );
               })}

@@ -553,8 +553,8 @@ const GameBoard = ({
     return theme[logicalColor] || logicalColor;
   };
 
-  // Add local state for history, defaulting to empty until backend passes it explicitly in all events
-  const [moveHistory, setMoveHistory] = useState(initialState.history || []);
+  // Track game moves in the unified format (setup and playing moves)
+  const [gameMoves, setGameMoves] = useState([]);
 
   // Calculate board bounding box for dynamic viewBox and center for flipping
   const { boardCenter, boardViewBox } = useMemo(() => {
@@ -593,15 +593,7 @@ const GameBoard = ({
   };
   const navigate = useNavigate();
   const [gameOverInfo, setGameOverInfo] = useState({ winnerId: null, reason: null });
-  // Track piece-state snapshot after every update, for post-game replay
-  const snapshotsRef = useRef([{
-    pieces: initialState.pieces || [],
-    clocks: initialState.clocks || null,
-    colorChosen: initialState.colorChosen || {},
-    turn: initialState.turn || 'white',
-    phase: initialState.phase || 'Setup',
-  }]);
-  const snapshotMetaRef = useRef([]); // parallel array: { turn, phase }
+
   
   useEffect(() => {
     if (phase === "GameOver") {
@@ -669,7 +661,6 @@ const GameBoard = ({
         setLockedSequencePiece(data.lockedSequencePiece);
       if (data.heroeTakeCounter !== undefined)
         setHeroeTakeCounter(data.heroeTakeCounter);
-      if (data.history !== undefined) setMoveHistory(data.history);
       if (data.clocks) setClocks(data.clocks);
       if (data.lastTurnTimestamp) setLastTurnTimestamp(data.lastTurnTimestamp);
       if (data.colorsEverChosen !== undefined) setColorsEverChosen(data.colorsEverChosen);
@@ -680,16 +671,9 @@ const GameBoard = ({
         if (data.passCount[side] === 0) setPassWarningShown(false);
       }
 
-      // Capture snapshot for post-game replay
-      if (data.pieces) {
-        snapshotsRef.current.push({
-          pieces: JSON.parse(JSON.stringify(data.pieces)),
-          clocks: data.clocks ? { ...data.clocks } : null,
-          colorChosen: data.colorChosen ? { ...data.colorChosen } : {},
-          turn: data.turn,
-          phase: data.phase,
-        });
-        snapshotMetaRef.current.push({ turn: data.turn, phase: data.phase });
+      // Use the authoritative moves array from the server (covers setup, randomize, bot placements, etc.)
+      if (data.moves !== undefined) {
+        setGameMoves(data.moves);
       }
 
       setSelectedPiece(null);
@@ -1165,7 +1149,7 @@ const GameBoard = ({
           >
             <span style={{ opacity: 0.7 }}>Turn:</span>
             <span style={{ fontWeight: "bold" }}>
-              {turnCounter || Math.floor((moveHistory?.length || 0) / 2) + 1}
+              {turnCounter || Math.floor((gameMoves?.length || 0) / 2) + 1}
             </span>
           </div>
 
@@ -1181,7 +1165,7 @@ const GameBoard = ({
           >
             <span style={{ opacity: 0.7 }}>Move:</span>
             <span style={{ fontWeight: "bold" }}>
-              {moveHistory?.length || 0}
+              {gameMoves?.length || 0}
             </span>
           </div>
 
@@ -1692,17 +1676,15 @@ const GameBoard = ({
               <button
                 onClick={() => {
                   const record = {
-                    version: 2,
-                    boardName,
+                    version: 3,
+                    board_id: boardName,
                     whiteName: whiteName || 'White',
                     blackName: blackName || 'Black',
                     winner: gameOverInfo.winnerId,
                     reason: gameOverInfo.reason,
                     timeControl: initialState.timeControl || null,
                     board,
-                    initialPieces: initialState.pieces || [],
-                    snapshots: snapshotsRef.current,
-                    history: moveHistory,
+                    moves: gameMoves,
                   };
                   navigate('/analysis', { state: { record } });
                 }}
@@ -1726,17 +1708,14 @@ const GameBoard = ({
               <button
                 onClick={() => {
                   const record = {
-                    version: 2,
-                    boardName,
+                    version: 3,
+                    board_id: boardName,
                     whiteName: whiteName || 'White',
                     blackName: blackName || 'Black',
                     winner: gameOverInfo.winnerId,
                     reason: gameOverInfo.reason,
                     timeControl: initialState.timeControl || null,
-                    board,
-                    initialPieces: initialState.pieces || [],
-                    snapshots: snapshotsRef.current,
-                    history: moveHistory,
+                    moves: gameMoves,
                   };
                   const blob = new Blob([JSON.stringify(record, null, 2)], { type: 'application/json' });
                   const url = URL.createObjectURL(blob);

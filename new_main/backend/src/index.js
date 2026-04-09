@@ -5,12 +5,12 @@ const { Server } = require('socket.io');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
-const { initDb, getDb } = require('./db');
+const { initDb, getUsersDb } = require('./db');
 const { generateGuestId } = require('./utils/auth');
 const fs = require('fs');
 const path = require('path');
 const { sendVerificationEmail } = require('./utils/email');
-let getLegalMovesNapi, applyMoveNapi, initGameStateNapi, randomizeSetupNapi, endTurnSetupNapi, passTurnPlayingNapi, selectColorNapi;
+let getLegalMovesNapi, applyMoveNapi, initGameStateNapi, randomizeSetupNapi, endTurnSetupNapi, passTurnPlayingNapi, selectColorNapi, replayToStepNapi;
 
 try {
     const napi = require('../rust-napi');
@@ -21,6 +21,7 @@ try {
     endTurnSetupNapi = napi.endTurnSetupNapi;
     passTurnPlayingNapi = napi.passTurnPlayingNapi;
     selectColorNapi = napi.selectColorNapi;
+    replayToStepNapi = napi.replayToStepNapi;
 } catch (err) {
     console.error("CRITICAL: Failed to load Rust NAPI module from '../rust-napi'");
     console.error("Current __dirname:", __dirname);
@@ -131,6 +132,16 @@ async function requestBotMove(game) {
 }
 
 /**
+ * Emit a game_update event, always including the authoritative moves array.
+ */
+function emitGameUpdate(gameId, game, extra = {}) {
+    io.to(gameId).emit('game_update', {
+        ...extra,
+        moves: game.moves || [],
+    });
+}
+
+/**
  * If it's the bot's turn in this game, request a bot move and apply it.
  * Called after every game state change.
  */
@@ -168,6 +179,10 @@ async function triggerBotMoveIfNeeded(gameId) {
                     currentGame.pieces[pieceIndex] = { ...currentGame.pieces[pieceIndex], position: botMove.target };
                     // Track placements for the NAPI state
                     currentGame.setupPlacementsThisTurn = (currentGame.setupPlacementsThisTurn || 0) + 1;
+                    // Mark turn as mid-flight so the next bot call knows it's continuing, not starting a new turn
+                    currentGame.isNewTurn = false;
+                    // Record the setup move
+                    currentGame.moves.push({ turn_number: 0, active_side: currentGame.turn, phase: 'setup', chosen_color: '', piece_id: botMove.piece, target_id: botMove.target, timestamp_ms: Date.now() });
 
                     // Refresh clock so the game_update contains live time, preventing frontend "flash"
                     updateClocks(currentGame, true);
@@ -185,6 +200,7 @@ async function triggerBotMoveIfNeeded(gameId) {
                         heroeTakeCounter: currentGame.heroeTakeCounter,
                         clocks: currentGame.clocks,
                         lastTurnTimestamp: currentGame.lastTurnTimestamp,
+                        moves: currentGame.moves || [],
                     });
 
                     console.log(`[Bot] Setup placement: ${botMove.piece} → ${botMove.target}`);
@@ -238,6 +254,7 @@ async function triggerBotMoveIfNeeded(gameId) {
                     heroeTakeCounter: currentGame.heroeTakeCounter,
                     clocks: currentGame.clocks,
                     lastTurnTimestamp: currentGame.lastTurnTimestamp,
+                        moves: currentGame.moves || [],
                 });
 
                 console.log(`[Bot] Setup turn ended: phase=${currentGame.phase}, setupStep=${currentGame.setupStep}, turn=${currentGame.turn}`);
@@ -304,6 +321,7 @@ async function triggerBotMoveIfNeeded(gameId) {
                 lockedSequencePiece: currentGame.lockedSequencePiece || null,
                 heroeTakeCounter: currentGame.heroeTakeCounter,
                 clocks: currentGame.clocks, lastTurnTimestamp: currentGame.lastTurnTimestamp,
+                        moves: currentGame.moves || [],
             });
             // Bot may need to make more moves in same turn
             setImmediate(() => triggerBotMoveIfNeeded(gameId));
@@ -340,7 +358,7 @@ async function triggerBotMoveIfNeeded(gameId) {
             currentGame.movesThisTurn = response.movesThisTurn;
             currentGame.lockedSequencePiece = response.lockedSequencePiece;
             currentGame.heroeTakeCounter = response.heroeTakeCounter;
-            currentGame.history.push({ pieceId: botMove.piece, targetPoly: botMove.target, captured: response.captured });
+            currentGame.moves.push({ turn_number: currentGame.turnCounter, active_side: oldTurn, phase: 'playing', chosen_color: currentGame.colorChosen?.[oldTurn] || '', piece_id: botMove.piece, target_id: botMove.target, timestamp_ms: Date.now() });
 
             io.to(gameId).emit('game_update', {
                 pieces: currentGame.pieces, turn: currentGame.turn,
@@ -351,6 +369,7 @@ async function triggerBotMoveIfNeeded(gameId) {
                 lockedSequencePiece: currentGame.lockedSequencePiece || null,
                 heroeTakeCounter: currentGame.heroeTakeCounter,
                 clocks: currentGame.clocks, lastTurnTimestamp: currentGame.lastTurnTimestamp,
+                        moves: currentGame.moves || [],
                 lastMove: { pieceId: botMove.piece, targetPoly: botMove.target, captured: response.captured },
             });
 
@@ -363,7 +382,7 @@ async function triggerBotMoveIfNeeded(gameId) {
                     winnerSide: response.winner,
                     reason: response.reason 
                 });
-                saveMatchResult(gameId, currentGame.white, currentGame.black, winnerId, currentGame.pieces, currentGame.history)
+                saveMatchResult(gameId, currentGame.gameStartTimestamp, currentGame.whiteName, currentGame.blackName, currentGame.white, currentGame.black, currentGame.boardName, winnerSide, currentGame.moves)
                     .catch(err => console.error(`Bot game save error ${gameId}:`, err));
                 releaseBotIfNeeded(currentGame);
                 lobby.activeGames.delete(gameId);
@@ -410,6 +429,7 @@ async function triggerBotMoveIfNeeded(gameId) {
                 lockedSequencePiece: currentGame.lockedSequencePiece || null,
                 heroeTakeCounter: currentGame.heroeTakeCounter,
                 clocks: currentGame.clocks, lastTurnTimestamp: currentGame.lastTurnTimestamp,
+                        moves: currentGame.moves || [],
             });
         }
     } catch (err) {
@@ -474,6 +494,50 @@ initDb().then(() => {
 
 // --- API ROUTES ---
 
+// Replay endpoint: compute game state at any step from board_id + moves
+app.post('/api/replay', (req, res) => {
+    try {
+        const { board_id, movesJson, step } = req.body;
+        if (!board_id || !movesJson || step === undefined) {
+            return res.status(400).json({ error: 'Missing board_id, movesJson, or step' });
+        }
+        // Load board from disk — no need to send it over the wire
+        const boardFile = boardPool.find(f => f === `${board_id}.json` || f.replace('.json', '') === board_id);
+        if (!boardFile) {
+            return res.status(404).json({ error: `Board not found: ${board_id}` });
+        }
+        const boardJson = fs.readFileSync(path.join(BOARDS_PATH, boardFile), 'utf8');
+        const result = replayToStepNapi({ boardJson, movesJson, step });
+        res.json({
+            pieces: JSON.parse(result.piecesJson),
+            turn: result.turn,
+            phase: result.phase,
+            turnCounter: result.turnCounter,
+            movesThisTurn: result.movesThisTurn,
+            colorChosen: result.colorChosen,
+        });
+    } catch (e) {
+        console.error('Replay error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Board geometry endpoint — returns full board JSON for a given board_id
+app.get('/api/boards/:boardId', (req, res) => {
+    const { boardId } = req.params;
+    const boardFile = boardPool.find(f => f === `${boardId}.json` || f.replace('.json', '') === boardId);
+    if (!boardFile) {
+        return res.status(404).json({ error: `Board not found: ${boardId}` });
+    }
+    try {
+        const boardPath = path.join(BOARDS_PATH, boardFile);
+        const boardData = JSON.parse(fs.readFileSync(boardPath, 'utf8'));
+        res.json(boardData);
+    } catch (e) {
+        res.status(500).json({ error: `Failed to load board: ${e.message}` });
+    }
+});
+
 app.post('/register', async (req, res) => {
     const { username, email, password } = req.body;
     
@@ -487,7 +551,7 @@ app.post('/register', async (req, res) => {
         const verificationToken = uuidv4();
         const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-        const con = await getDb().connect();
+        const con = await getUsersDb().connect();
         
         try {
             await con.run(`
@@ -520,7 +584,7 @@ app.get('/verify-email', async (req, res) => {
     const { token } = req.query;
 
     try {
-        const con = await getDb().connect();
+        const con = await getUsersDb().connect();
         const reader = await con.runAndReadAll(`
             SELECT id FROM users 
             WHERE verification_token = ? AND CAST(token_expires_at AS TIMESTAMP) > CURRENT_TIMESTAMP
@@ -553,9 +617,9 @@ app.post('/login', async (req, res) => {
     }
 
     try {
-        const con = await getDb().connect();
+        const con = await getUsersDb().connect();
         const reader = await con.runAndReadAll(`
-            SELECT id, username, password_hash, role, is_verified, rating 
+            SELECT id, username, password_hash, role, is_verified, rating, rating_deviation, rating_volatility
             FROM users WHERE email = ? OR username = ?
         `, [identifier, identifier]);
         
@@ -565,7 +629,7 @@ app.post('/login', async (req, res) => {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
 
-        const [userId, username, passwordHash, role, isVerified, rating] = rows[0];
+        const [userId, username, passwordHash, role, isVerified, rating, ratingDeviation, ratingVolatility] = rows[0];
 
         if (!isVerified) {
             return res.status(401).json({ error: 'Please verify your email before logging in.' });
@@ -580,7 +644,9 @@ app.post('/login', async (req, res) => {
             id: userId,
             username,
             role,
-            rating
+            rating: Math.round(rating || 1500),
+            ratingDeviation: Math.round(ratingDeviation || 350),
+            ratingVolatility: ratingVolatility || 0.06,
         });
     } catch (err) {
         console.error('Login error:', err);
@@ -617,7 +683,7 @@ function buildActiveGamesList() {
         whiteRole: g.whiteRole || 'guest',
         blackRole: g.blackRole || 'guest',
         timeControl: g.timeControl,
-        moveCount: g.history ? g.history.length : 0,
+        moveCount: g.moves ? g.moves.length : 0,
         phase: g.phase,
     }));
 }
@@ -697,7 +763,7 @@ setInterval(() => {
                     message: `${playerType === 'white' ? 'White' : 'Black'} disconnected for too long.`
                 });
                 
-                saveMatchResult(gameId, game.white, game.black, winnerId, game.pieces, game.history)
+                saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, winnerSide, game.moves)
                     .catch(err => console.error(`Failed to save abandoned game ${gameId}:`, err));
                 
                 releaseBotIfNeeded(game);
@@ -725,7 +791,7 @@ setInterval(() => {
             const winnerId = winnerSide === 'white' ? game.white : game.black;
 
             io.to(gameId).emit('game_over', { winnerId, reason: 'timeout' });
-            saveMatchResult(gameId, game.white, game.black, winnerId, game.pieces, game.history)
+            saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, winnerSide, game.moves)
                 .catch(err => console.error(`Failed to save timed-out game ${gameId}:`, err));
             
             releaseBotIfNeeded(game);
@@ -815,7 +881,8 @@ function createGame(whitePlayer, blackPlayer, timeControl) {
         clocks: { white: clockMs, black: clockMs },
         lastTurnTimestamp: Date.now(),
         passCount: { white: 0, black: 0 },
-        history: [],
+        moves: [],
+        gameStartTimestamp: Date.now(),
         // track which socket IDs are the players
         whiteSocketId: whitePlayer.socketId,
         blackSocketId: blackPlayer.socketId,
@@ -1111,7 +1178,9 @@ io.on('connection', (socket) => {
                 lockedSequencePiece: game.lockedSequencePiece || null,
                 heroeTakeCounter: game.heroeTakeCounter,
                 clocks: game.clocks,
-                lastTurnTimestamp: game.lastTurnTimestamp
+                lastTurnTimestamp: game.lastTurnTimestamp,
+                moves: game.moves || [],
+                moves: game.moves || [],
             });
             console.log(`[Backend] Authoritative color ${color} set for ${game.turn} by ${side} in game ${gameId}. isNewTurn=${game.isNewTurn}`);
         } catch (error) {
@@ -1146,7 +1215,16 @@ io.on('connection', (socket) => {
                 heroeTakeCounter: game.heroeTakeCounter || 0,
                 side: side
             });
+            const oldPieces = game.pieces;
             game.pieces = JSON.parse(response.piecesJson);
+            // Record randomized placements as setup moves with same timestamp
+            const randTs = Date.now();
+            for (const p of game.pieces) {
+                const old = oldPieces.find(op => op.id === p.id);
+                if (old && old.position === 'returned' && p.position !== 'returned') {
+                    game.moves.push({ turn_number: 0, active_side: game.turn, phase: 'setup', chosen_color: '', piece_id: p.id, target_id: p.position, timestamp_ms: randTs });
+                }
+            }
 
             // Refresh clock so the game_update contains live time, preventing frontend "flash"
             updateClocks(game, true);
@@ -1174,7 +1252,9 @@ io.on('connection', (socket) => {
                 lockedSequencePiece: game.lockedSequencePiece || null,
                 heroeTakeCounter: game.heroeTakeCounter,
                 clocks: game.clocks,
-                lastTurnTimestamp: game.lastTurnTimestamp
+                lastTurnTimestamp: game.lastTurnTimestamp,
+                moves: game.moves || [],
+                moves: game.moves || [],
             });
             console.log(`[randomize_setup] result: turn=${game.turn}, phase=${game.phase}, step=${game.setupStep}, botSide=${game.botSide || 'none'}`);
 
@@ -1215,7 +1295,10 @@ io.on('connection', (socket) => {
                 game.setupStep = response.setupStep;
                 game.turnCounter = response.turnCounter;
                 game.isNewTurn = response.isNewTurn;
-                game.movesThisTurn = response.movesThisTurn;
+                // Explicitly reset to 0 — the NAPI passthrough returns whatever was sent in,
+                // NOT the new player's count. The new player starts with no placements.
+                game.movesThisTurn = 0;
+                game.setupPlacementsThisTurn = 0;
                 game.lockedSequencePiece = response.lockedSequencePiece;
                 game.heroeTakeCounter = response.heroeTakeCounter;
 
@@ -1233,7 +1316,9 @@ io.on('connection', (socket) => {
                     lockedSequencePiece: game.lockedSequencePiece || null,
                     heroeTakeCounter: game.heroeTakeCounter,
                     clocks: game.clocks,
-                    lastTurnTimestamp: game.lastTurnTimestamp
+                    lastTurnTimestamp: game.lastTurnTimestamp,
+                    moves: game.moves || [],
+                moves: game.moves || [],
                 });
                 console.log(`Setup turn ended in ${gameId}: Now ${game.turn}'s turn`);
 
@@ -1291,7 +1376,7 @@ io.on('connection', (socket) => {
                     const winnerSide = passingSide === 'white' ? 'black' : 'white';
                     console.log(`Game Over: ${gameId} - ${passingSide} passed 3 times`);
                     io.to(gameId).emit('game_over', { winnerId, winnerSide, reason: 'pass_limit' });
-                    saveMatchResult(gameId, game.white, game.black, winnerId, game.pieces, game.history)
+                    saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, winnerSide, game.moves)
                         .catch(err => console.error(`Failed to save pass-limit game ${gameId}:`, err));
                     releaseBotIfNeeded(game);
                     lobby.activeGames.delete(gameId);
@@ -1314,6 +1399,7 @@ io.on('connection', (socket) => {
                     heroeTakeCounter: game.heroeTakeCounter,
                     clocks: game.clocks,
                     lastTurnTimestamp: game.lastTurnTimestamp,
+                    moves: game.moves || [],
                     passCount: game.passCount
                 });
                 console.log(`Playing turn passed in ${gameId}: Now ${game.turn}'s turn (${passingSide} passCount: ${game.passCount[passingSide]})`);
@@ -1343,7 +1429,7 @@ io.on('connection', (socket) => {
         console.log(`Game Over: ${gameId} - ${resigningSide} resigned`);
         io.to(gameId).emit('game_over', { winnerId, winnerSide, reason: 'resign' });
 
-        saveMatchResult(gameId, game.white, game.black, winnerId, game.pieces, game.history)
+        saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, winnerSide, game.moves)
             .catch(err => console.error(`Failed to save resigned game ${gameId}:`, err));
 
         releaseBotIfNeeded(game);
@@ -1398,6 +1484,23 @@ io.on('connection', (socket) => {
         }
     });
 
+    // ---------------------------------------------------------------------------
+    // Helper: returns true if the player (side) still has unplaced pieces for
+    // the current setup step. Used to auto-pass when a player places their last
+    // piece and no manual "End Turn" click should be required.
+    // NOTE: Rust serializes piece_type as "type" (lowercase) and Side as lowercase.
+    // ---------------------------------------------------------------------------
+    function hasRemainingSetupPieces(pieces, side, setupStep) {
+        return pieces.some(p => {
+            if ((p.side || '').toLowerCase() !== side.toLowerCase()) return false;
+            if (p.position !== 'returned') return false;
+            // step 4 = Ghouls + Sirens
+            if (setupStep === 4) return p.type === 'ghoul' || p.type === 'siren';
+            const typeMap = { 0: 'goddess', 1: 'heroe', 2: 'golem', 3: 'witch' };
+            return p.type === typeMap[setupStep];
+        });
+    }
+
     // Redundant select_color removed (frontend uses color_selected)
 
     socket.on('apply_move', ({ gameId, pieceId, targetPoly }) => {
@@ -1412,9 +1515,47 @@ io.on('connection', (socket) => {
                 if (piece.position !== 'returned') return;
                 
                 game.pieces[pieceIndex] = { ...piece, position: targetPoly };
+                // Record setup placement move
+                game.moves.push({ turn_number: 0, active_side: game.turn, phase: 'setup', chosen_color: '', piece_id: pieceId, target_id: targetPoly, timestamp_ms: Date.now() });
 
-                // Refresh clock so the game_update contains live time, preventing frontend "flash"
+                // Track how many pieces have been placed this turn so the
+                // "End Turn" guard (movesThisTurn === 0) works for human players.
+                game.movesThisTurn = (game.movesThisTurn || 0) + 1;
+                game.setupPlacementsThisTurn = (game.setupPlacementsThisTurn || 0) + 1;
+
                 updateClocks(game, true);
+
+                // Auto-pass: if the current player has no more pieces for this
+                // step, advance the turn immediately — no "End Turn" click needed.
+                const stillHasPieces = hasRemainingSetupPieces(game.pieces, game.turn, game.setupStep);
+                if (!stillHasPieces) {
+                    const response = endTurnSetupNapi({
+                        boardJson: JSON.stringify(game.board),
+                        piecesJson: JSON.stringify(game.pieces),
+                        turn: game.turn,
+                        phase: game.phase,
+                        setupStep: game.setupStep,
+                        colorChosen: game.colorChosen || {},
+                        colorsEverChosen: game.colorsEverChosen || [],
+                        turnCounter: game.turnCounter || 0,
+                        isNewTurn: game.isNewTurn !== undefined ? game.isNewTurn : true,
+                        movesThisTurn: game.movesThisTurn || 0,
+                        lockedSequencePiece: game.lockedSequencePiece || undefined,
+                        heroeTakeCounter: game.heroeTakeCounter || 0
+                    });
+                    game.turn = response.turn;
+                    game.phase = response.phase;
+                    game.setupStep = response.setupStep;
+                    game.turnCounter = response.turnCounter;
+                    game.isNewTurn = response.isNewTurn;
+                    game.movesThisTurn = 0;
+                    game.setupPlacementsThisTurn = 0;
+                    game.lockedSequencePiece = response.lockedSequencePiece;
+                    game.heroeTakeCounter = response.heroeTakeCounter;
+                    console.log(`[Setup] Auto end turn after last piece: ${pieceId} → ${targetPoly} | now turn=${game.turn}, step=${game.setupStep}, phase=${game.phase}`);
+                } else {
+                    console.log(`Setup placement in ${gameId}: ${pieceId} to ${targetPoly} (movesThisTurn=${game.movesThisTurn})`);
+                }
 
                 io.to(gameId).emit('game_update', {
                     pieces: game.pieces,
@@ -1428,9 +1569,16 @@ io.on('connection', (socket) => {
                     lockedSequencePiece: game.lockedSequencePiece || null,
                     heroeTakeCounter: game.heroeTakeCounter,
                     clocks: game.clocks,
-                    lastTurnTimestamp: game.lastTurnTimestamp
+                    lastTurnTimestamp: game.lastTurnTimestamp,
+                    moves: game.moves || [],
+                moves: game.moves || [],
                 });
-                console.log(`Setup placement in ${gameId}: ${pieceId} to ${targetPoly}`);
+
+                // If it is now the bot's turn, trigger it
+                if (game.botSide && game.turn === game.botSide && game.phase === 'Setup') {
+                    setImmediate(() => triggerBotMoveIfNeeded(gameId));
+                }
+
             } else {
                 const response = applyMoveNapi({
                     boardJson: JSON.stringify(game.board),
@@ -1472,7 +1620,7 @@ io.on('connection', (socket) => {
                 game.lockedSequencePiece = response.lockedSequencePiece;
                 game.heroeTakeCounter = response.heroeTakeCounter;
                 
-                game.history.push({ pieceId, targetPoly, captured: response.captured });
+                game.moves.push({ turn_number: game.turnCounter, active_side: oldTurn, phase: 'playing', chosen_color: game.colorChosen?.[oldTurn] || '', piece_id: pieceId, target_id: targetPoly, timestamp_ms: Date.now() });
 
                 io.to(gameId).emit('game_update', {
                     pieces: game.pieces,
@@ -1489,6 +1637,7 @@ io.on('connection', (socket) => {
                     heroeTakeCounter: game.heroeTakeCounter,
                     clocks: game.clocks,
                     lastTurnTimestamp: game.lastTurnTimestamp,
+                    moves: game.moves || [],
                     lastMove: { pieceId, targetPoly, captured: response.captured },
                     passCount: game.passCount
                 });
@@ -1503,7 +1652,7 @@ io.on('connection', (socket) => {
                         winnerSide: response.winner,
                         reason: response.reason 
                     });
-                    saveMatchResult(gameId, game.white, game.black, winnerId, game.pieces, game.history)
+                    saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, winnerSide, game.moves)
                         .catch(err => console.error(`Failed to save match result for game "${gameId}":`, err));
                     releaseBotIfNeeded(game);
                     lobby.activeGames.delete(gameId);
@@ -1539,7 +1688,9 @@ io.on('connection', (socket) => {
                 lockedSequencePiece: game.lockedSequencePiece || null,
                 heroeTakeCounter: game.heroeTakeCounter,
                 clocks: game.clocks,
-                lastTurnTimestamp: game.lastTurnTimestamp
+                lastTurnTimestamp: game.lastTurnTimestamp,
+                moves: game.moves || [],
+                moves: game.moves || [],
             });
         }
     });

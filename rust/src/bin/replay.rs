@@ -38,27 +38,25 @@ fn load_parquet(file_path: &str) -> Vec<GameRecord> {
 
     let mut records = Vec::new();
     let game_ids = df.column("game_id").unwrap().str().unwrap();
-    let board_ids = df.column("board_id").unwrap().str().unwrap();
     let timestamps = df.column("timestamp").unwrap().i64().unwrap();
-    let game_dates = df.column("game_date").unwrap().str().unwrap();
     let white_names = df.column("white_name").and_then(|c| c.str()).ok();
     let black_names = df.column("black_name").and_then(|c| c.str()).ok();
+    let white_player_ids = df.column("white_player_id").and_then(|c| c.str()).ok();
+    let black_player_ids = df.column("black_player_id").and_then(|c| c.str()).ok();
+    let board_ids = df.column("board_id").unwrap().str().unwrap();
     let winners = df.column("winner").unwrap().str().unwrap();
-    let total_turns = df.column("total_turns").unwrap().u32().unwrap();
-    let initial_states = df.column("initial_state").unwrap().str().unwrap();
     let moves = df.column("moves").unwrap().str().unwrap();
 
     for i in 0..df.height() {
         records.push(GameRecord {
             game_id: game_ids.get(i).unwrap().to_string(),
-            board_id: board_ids.get(i).unwrap().to_string(),
             timestamp: timestamps.get(i).unwrap_or(0),
-            game_date: game_dates.get(i).unwrap().to_string(),
             white_name: white_names.and_then(|c| c.get(i)).unwrap_or("White").to_string(),
             black_name: black_names.and_then(|c| c.get(i)).unwrap_or("Black").to_string(),
+            white_player_id: white_player_ids.and_then(|c| c.get(i)).unwrap_or("").to_string(),
+            black_player_id: black_player_ids.and_then(|c| c.get(i)).unwrap_or("").to_string(),
+            board_id: board_ids.get(i).unwrap().to_string(),
             winner: winners.get(i).unwrap().to_string(),
-            total_turns: total_turns.get(i).unwrap_or(0),
-            initial_state: initial_states.get(i).unwrap_or("{}").to_string(),
             moves: moves.get(i).unwrap().to_string(),
         });
     }
@@ -130,18 +128,8 @@ async fn get_turn(
 
     let mut gs = GameState::new(board.clone());
     rust::engine::setup_pieces(&mut gs);
-    
-    gs.occupancy.clear();
-    let init_map: std::collections::HashMap<String, String> = serde_json::from_str(&game.initial_state).unwrap_or_default();
-    for (pid, pos) in init_map {
-        if let Some(piece) = gs.board.pieces.get_mut(&pid) {
-            piece.position = pos.clone();
-            if pos != "returned" && pos != "graveyard" {
-                gs.occupancy.insert(pos, pid);
-            }
-        }
-    }
 
+    // All pieces start in "returned". Setup moves place them on the board.
     let move_events: Vec<MoveEvent> = serde_json::from_str(&game.moves).unwrap_or_default();
     let mut last_turn_side = gs.turn.clone();
     let mut last_chosen_color = gs.color_chosen.get(&gs.turn).cloned();
@@ -160,13 +148,13 @@ async fn get_turn(
 
         // Sync turn and color from event
         gs.turn = active_side;
-        if m.chosen_color != "setup" && !m.chosen_color.is_empty() {
+        if m.phase != "setup" && !m.chosen_color.is_empty() {
              gs.color_chosen.insert(active_side, m.chosen_color.clone());
              gs.is_new_turn = false;
         }
 
         last_turn_side = gs.turn;
-        last_chosen_color = if m.chosen_color == "setup" { None } else { Some(m.chosen_color.clone()) };
+        last_chosen_color = if m.phase == "setup" { None } else { Some(m.chosen_color.clone()) };
 
         if m.piece_id.is_empty() {
             continue;
@@ -177,22 +165,19 @@ async fn get_turn(
             continue;
         }
 
-        if gs.phase == rust::engine::GamePhase::Setup {
-            // Setup phase: use ONLY the setup-specific function.
-            // apply_move() must NOT be called here — it is for game-phase only and
-            // would corrupt setup_placements_this_turn, causing advance_setup_step()
-            // to fire prematurely and reshuffle pieces back to the sidebar.
-            rust::engine::apply_setup_placement_turnover(&mut gs, &m.piece_id, &m.target_pos);
+        if m.phase == "setup" {
+            // Setup phase: use the setup-specific function.
+            rust::engine::apply_setup_placement_turnover(&mut gs, &m.piece_id, &m.target_id);
             moves_run = gs.setup_placements_this_turn;
         } else {
             // Game phase: standard move + turnover path.
             let grabbed_position = piece_opt.unwrap().position.clone();
-            let captured = apply_move(&mut gs, &m.piece_id, &m.target_pos);
+            let captured = apply_move(&mut gs, &m.piece_id, &m.target_id);
             let goddess_captured = captured.contains(&rust::models::PieceType::Goddess);
             apply_move_turnover(
                 &mut gs,
                 &m.piece_id,
-                &m.target_pos,
+                &m.target_id,
                 goddess_captured,
                 captured.is_empty(),
                 grabbed_position == "returned",
@@ -200,9 +185,6 @@ async fn get_turn(
             moves_run = gs.moves_this_turn;
         }
     }
-    
-    // Explicitly sync the `moves_this_turn` counter
-    // The counter logic is native to turnover sequence. We just set it strictly for display.
 
     let payload = SocketPayload {
         board: gs.board,

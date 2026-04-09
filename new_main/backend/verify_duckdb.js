@@ -1,16 +1,19 @@
-const { initDb, getDb } = require('./src/db');
+const { initDb, getUsersDb, getGamesDb } = require('./src/db');
 
 async function test() {
-    console.log("Starting DuckDB Neo Verification...");
+    console.log("Starting Dual DuckDB Neo Verification...");
     try {
         await initDb();
-        console.log("✓ DuckDB Neo initialized correctly.");
+        console.log("✓ DuckDB instances initialized correctly.");
         
-        const con = await getDb().connect();
-        const reader = await con.runAndReadAll("SELECT * FROM users");
-        const rows = reader.getRows();
+        const userCon = await getUsersDb().connect();
+        const userReader = await userCon.runAndReadAll("SELECT COUNT(*) FROM users");
+        console.log("✓ Success! Users found:", userReader.getRows()[0][0]);
         
-        console.log("✓ Success! Users found:", rows.length);
+        const gameCon = await getGamesDb().connect();
+        const gameReader = await gameCon.runAndReadAll("SELECT COUNT(*) FROM games");
+        console.log("✓ Success! Games found:", gameReader.getRows()[0][0]);
+
         process.exit(0);
     } catch (e) {
         console.error("✗ Error during DuckDB Neo initialization:", e);

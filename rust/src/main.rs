@@ -215,7 +215,7 @@ fn run_batch(
     use crate::engine::{GameState, GamePhase, perform_turn, perform_setup_turn, setup_pieces};
     use crate::models::Side;
     use uuid::Uuid;
-    use crate::recorder::{Recorder, GameRecord, MoveEvent, current_timestamp_ms, current_date_string};
+    use crate::recorder::{Recorder, GameRecord, MoveEvent, current_timestamp_ms};
 
     if verbosity >= 1 {
         println!(
@@ -247,14 +247,7 @@ fn run_batch(
         let mut gs = GameState::new(board.clone());
         setup_pieces(&mut gs);
 
-        // Capture state before any setup moves are made
-        let mut init_map = std::collections::HashMap::new();
-        for (pid, p) in &gs.board.pieces {
-            init_map.insert(pid.clone(), p.position.clone());
-        }
-        let initial_state = serde_json::to_string(&init_map).unwrap_or_else(|_| "{}".to_string());
         let game_id = Uuid::new_v4().to_string();
-        let game_date = current_date_string();
         let game_start_ms = current_timestamp_ms();
 
         let mut game_moves = Vec::new();
@@ -271,11 +264,12 @@ fn run_batch(
             if recorder.is_some() {
                 if let Some((piece, target)) = move_made {
                     game_moves.push(MoveEvent {
-                        turn_number: 0, // Setup is turn 0
-                        active_side: format!("{:?}", active_side),
-                        chosen_color: "setup".to_string(),
+                        turn_number: 0,
+                        active_side: format!("{:?}", active_side).to_lowercase(),
+                        phase: "setup".to_string(),
+                        chosen_color: String::new(),
                         piece_id: piece,
-                        target_pos: target,
+                        target_id: target,
                         timestamp_ms: current_timestamp_ms(),
                     });
                 }
@@ -304,10 +298,11 @@ fn run_batch(
                 if let Some((piece, target, chosen_color)) = move_made {
                     game_moves.push(MoveEvent {
                         turn_number: current_turn_number,
-                        active_side: format!("{:?}", active_side),
+                        active_side: format!("{:?}", active_side).to_lowercase(),
+                        phase: "playing".to_string(),
                         chosen_color,
                         piece_id: piece,
-                        target_pos: target,
+                        target_id: target,
                         timestamp_ms: current_timestamp_ms(),
                     });
                 }
@@ -325,23 +320,22 @@ fn run_batch(
 
         total_turns += gs.turn_counter as u64;
         let final_winner = match winner {
-            Some(Side::White) => { white_wins += 1; "White" }
-            Some(Side::Black) => { black_wins += 1; "Black" }
-            _ => { draws += 1; "Draw" }
+            Some(Side::White) => { white_wins += 1; "white" }
+            Some(Side::Black) => { black_wins += 1; "black" }
+            _ => { draws += 1; "draw" }
         };
         
         if let Some(mut rec) = recorder.as_mut() {
             let moves_json = serde_json::to_string(&game_moves).unwrap_or_else(|_| "[]".to_string());
             rec.add_game(GameRecord {
                 game_id: game_id.clone(),
-                board_id: board_id.clone(),
                 timestamp: game_start_ms,
-                game_date,
                 white_name: white_name.to_string(),
                 black_name: black_name.to_string(),
+                white_player_id: String::new(),
+                black_player_id: String::new(),
+                board_id: board_id.clone(),
                 winner: final_winner.to_string(),
-                total_turns: gs.turn_counter,
-                initial_state,
                 moves: moves_json,
             });
         }
