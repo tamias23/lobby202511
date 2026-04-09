@@ -45,12 +45,27 @@ console.log(`[DB] games.duckdb → ${gamesDbPath}`);
 //   await con.runAndReadAll(sql, params);        // still works
 //
 class LazyDbConnection {
-    constructor(instance, name, idleMs = 30_000) {
-        this._instance = instance;
-        this._name     = name;
-        this._idleMs   = idleMs;
-        this._conn     = null;   // raw DuckDB connection
-        this._timer    = null;
+    constructor(instance, name, idleMs = 30_000, checkpointMs = 10 * 60_000) {
+        this._instance     = instance;
+        this._name         = name;
+        this._idleMs       = idleMs;
+        this._conn         = null;   // raw DuckDB connection
+        this._timer        = null;   // idle-close timer
+
+        // Periodic CHECKPOINT: flush WAL → main file, but only if connection is alive.
+        // Never reopens a closed connection just to checkpoint.
+        this._checkpointInterval = setInterval(async () => {
+            if (!this._conn) return;  // connection is idle-closed — nothing to flush
+            try {
+                await this._conn.run('CHECKPOINT');
+                console.log(`[DB:${this._name}] CHECKPOINT done.`);
+            } catch (e) {
+                console.warn(`[DB:${this._name}] CHECKPOINT failed:`, e.message);
+            }
+        }, checkpointMs);
+
+        // Don't prevent process exit if this is the only pending handle
+        if (this._checkpointInterval.unref) this._checkpointInterval.unref();
     }
 
     // Ensure a raw connection exists and reset the idle timer.
@@ -94,6 +109,7 @@ class LazyDbConnection {
     // Explicit close (e.g. on process shutdown).
     async close() {
         if (this._timer) { clearTimeout(this._timer); this._timer = null; }
+        if (this._checkpointInterval) { clearInterval(this._checkpointInterval); this._checkpointInterval = null; }
         try { if (this._conn?.close) await this._conn.close(); } catch (_) {}
         this._conn = null;
     }
