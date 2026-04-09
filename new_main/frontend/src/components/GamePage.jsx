@@ -23,6 +23,8 @@ const GamePage = ({ user }) => {
         opponent: stateFromNav.opponent,
         initialState: stateFromNav.initialState,
         spectator: false,
+        whiteRating: stateFromNav.initialState?.whiteRating,
+        blackRating: stateFromNav.initialState?.blackRating,
       });
       setLoading(false);
     } else if (stateFromNav && stateFromNav.spectator) {
@@ -48,6 +50,8 @@ const GamePage = ({ user }) => {
         blackRole: data.blackRole || data.initialState?.blackRole,
         whiteName: data.initialState?.whiteName,
         blackName: data.initialState?.blackName,
+        whiteRating: data.initialState?.whiteRating,
+        blackRating: data.initialState?.blackRating,
       });
       setLoading(false);
     };
@@ -101,6 +105,8 @@ const GamePage = ({ user }) => {
         blackRole={gameInfo.blackRole}
         whiteName={gameInfo.whiteName}
         blackName={gameInfo.blackName}
+        whiteRating={gameInfo.whiteRating}
+        blackRating={gameInfo.blackRating}
       />
     </div>
   );

@@ -504,7 +504,9 @@ const GameBoard = ({
   whiteRole, 
   blackRole, 
   whiteName, 
-  blackName 
+  blackName,
+  whiteRating: initialWhiteRating,
+  blackRating: initialBlackRating,
 }) => {
   const [wasmReady, setWasmReady] = useState(false);
   const [pieces, setPieces] = useState(initialState.pieces);
@@ -593,6 +595,18 @@ const GameBoard = ({
   };
   const navigate = useNavigate();
   const [gameOverInfo, setGameOverInfo] = useState({ winnerId: null, reason: null });
+  const [whiteRating, setWhiteRating] = useState(initialWhiteRating || null);
+  const [blackRating, setBlackRating] = useState(initialBlackRating || null);
+
+  // Listen for live rating updates after a match ends
+  useEffect(() => {
+    const onRatingUpdated = (data) => {
+      if (data.whiteRating != null) setWhiteRating(data.whiteRating);
+      if (data.blackRating != null) setBlackRating(data.blackRating);
+    };
+    socket.on('rating_updated', onRatingUpdated);
+    return () => socket.off('rating_updated', onRatingUpdated);
+  }, []);
 
   
   useEffect(() => {
@@ -1197,7 +1211,7 @@ const GameBoard = ({
               <div
                 style={{ fontSize: "12px", color: "#2ecc71", marginTop: "4px" }}
               >
-                Elo: 1200
+                Rating: {side === 'white' ? (whiteRating || '—') : (blackRating || '—')}
               </div>
             </div>
 
@@ -1226,7 +1240,7 @@ const GameBoard = ({
               <div
                 style={{ fontSize: "12px", color: "#2ecc71", marginTop: "4px" }}
               >
-                Elo: 1200
+                Rating: {side === 'white' ? (blackRating || '—') : (whiteRating || '—')}
               </div>
             </div>
           </div>

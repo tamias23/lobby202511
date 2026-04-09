@@ -38,6 +38,24 @@ function App() {
     return () => {};
   }, []);
 
+  // Keep user rating in sync after matches
+  useEffect(() => {
+    const onRatingUpdated = (data) => {
+      setUser(prev => {
+        if (!prev) return prev;
+        // Match the logged-in user's ID to determine their new rating
+        if (prev.id === data.whitePlayerId) {
+          return { ...prev, rating: data.whiteRating };
+        } else if (prev.id === data.blackPlayerId) {
+          return { ...prev, rating: data.blackRating };
+        }
+        return prev;
+      });
+    };
+    socket.on('rating_updated', onRatingUpdated);
+    return () => socket.off('rating_updated', onRatingUpdated);
+  }, []);
+
   const handleLoginSuccess = (userData) => {
     setUser(userData);
     // Re-emit join_lobby so backend knows this socket's identity

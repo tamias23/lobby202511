@@ -123,7 +123,7 @@ function glicko2Update(r, rd, sigma, rJ, rdJ, score) {
  */
 const saveMatchResult = async (
     gameId, timestamp, whiteName, blackName,
-    whitePlayerId, blackPlayerId, boardId, winner, moves
+    whitePlayerId, blackPlayerId, boardId, winner, moves, io
 ) => {
     try {
         // ── 1. Persist game record (direct, no queue needed) ──
@@ -180,6 +180,18 @@ const saveMatchResult = async (
                 `black ${black.r.toFixed(0)}→${newBlack.r.toFixed(0)} ` +
                 `(RD ${black.rd.toFixed(0)}→${newBlack.rd.toFixed(0)})`
             );
+
+            // Emit rating update to all sockets in the game room
+            if (io) {
+                io.to(gameId).emit('rating_updated', {
+                    whitePlayerId,
+                    blackPlayerId,
+                    whiteRating: Math.round(newWhite.r),
+                    blackRating: Math.round(newBlack.r),
+                    whiteRatingOld: Math.round(white.r),
+                    blackRatingOld: Math.round(black.r),
+                });
+            }
         }).catch(err => console.error('Rating update failed:', err));
 
     } catch (err) {

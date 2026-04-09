@@ -45,11 +45,12 @@ console.log(`[DB] games.duckdb → ${gamesDbPath}`);
 //   await con.runAndReadAll(sql, params);        // still works
 //
 class LazyDbConnection {
-    constructor(instance, name, idleMs = 30_000, checkpointMs = 10 * 60_000) {
-        this._instance     = instance;
+    constructor(dbPath, name, idleMs = 30_000, checkpointMs = 15 * 60_000) {
+        this._dbPath       = dbPath;
         this._name         = name;
         this._idleMs       = idleMs;
-        this._conn         = null;   // raw DuckDB connection
+        this._instance     = null;   // DuckDBInstance
+        this._conn         = null;   // DuckDBConnection
         this._timer        = null;   // idle-close timer
 
         // Periodic CHECKPOINT: flush WAL → main file, but only if connection is alive.
@@ -68,9 +69,13 @@ class LazyDbConnection {
         if (this._checkpointInterval.unref) this._checkpointInterval.unref();
     }
 
-    // Ensure a raw connection exists and reset the idle timer.
+    // Ensure a raw instance and connection exist and reset the idle timer.
     async _ensure() {
         this._resetTimer();
+        if (!this._instance) {
+            console.log(`[DB:${this._name}] Creating instance (acquiring lock).`);
+            this._instance = await DuckDBInstance.create(this._dbPath);
+        }
         if (!this._conn) {
             console.log(`[DB:${this._name}] Opening connection.`);
             this._conn = await this._instance.connect();
@@ -81,9 +86,20 @@ class LazyDbConnection {
     _resetTimer() {
         if (this._timer) clearTimeout(this._timer);
         this._timer = setTimeout(async () => {
-            console.log(`[DB:${this._name}] Idle timeout — closing connection.`);
-            try { if (this._conn?.close) await this._conn.close(); } catch (_) {}
+            console.log(`[DB:${this._name}] Idle timeout — flushing WAL and releasing lock.`);
+            try {
+                if (this._conn) {
+                    await this._conn.run('CHECKPOINT');
+                    console.log(`[DB:${this._name}] Final CHECKPOINT done.`);
+                    if (this._conn.closeSync) this._conn.closeSync();
+                }
+            } catch (e) {
+                console.warn(`[DB:${this._name}] Final CHECKPOINT failed:`, e.message);
+                try { if (this._conn?.closeSync) this._conn.closeSync(); } catch (_) {}
+            }
+            try { if (this._instance?.closeSync) this._instance.closeSync(); } catch (_) {}
             this._conn  = null;
+            this._instance = null;
             this._timer = null;
         }, this._idleMs);
     }
@@ -110,26 +126,26 @@ class LazyDbConnection {
     async close() {
         if (this._timer) { clearTimeout(this._timer); this._timer = null; }
         if (this._checkpointInterval) { clearInterval(this._checkpointInterval); this._checkpointInterval = null; }
-        try { if (this._conn?.close) await this._conn.close(); } catch (_) {}
+        try { if (this._conn?.closeSync) this._conn.closeSync(); } catch (_) {}
+        try { if (this._instance?.closeSync) this._instance.closeSync(); } catch (_) {}
         this._conn = null;
+        this._instance = null;
     }
 }
 
 // ─── Instances & Lazy Wrappers ───────────────────────────────────────────────
 
-let usersInstance;
-let gamesInstance;
 let usersLazy;    // LazyDbConnection for users.duckdb
 let gamesLazy;    // LazyDbConnection for games.duckdb
 
 const initDb = async () => {
     try {
         // ── Users Database ──
-        usersInstance = await DuckDBInstance.create(usersDbPath);
-        usersLazy = new LazyDbConnection(usersInstance, 'users');
+        const initialUsersInstance = await DuckDBInstance.create(usersDbPath);
+        usersLazy = new LazyDbConnection(usersDbPath, 'users');
 
         // Bootstrap schema (uses a one-off connection during init — that's fine)
-        const userCon = await usersInstance.connect();
+        const userCon = await initialUsersInstance.connect();
         await userCon.run(`
             CREATE TABLE IF NOT EXISTS users (
                 id VARCHAR PRIMARY KEY,
@@ -161,11 +177,14 @@ const initDb = async () => {
             await userCon.run(`UPDATE users SET rating = 1500.0 WHERE rating = 1200`);
         } catch (_) { /* columns already exist */ }
 
-        // ── Games Database ──
-        gamesInstance = await DuckDBInstance.create(gamesDbPath);
-        gamesLazy = new LazyDbConnection(gamesInstance, 'games');
+        try { if (userCon.closeSync) userCon.closeSync(); } catch (_) {}
+        try { if (initialUsersInstance.closeSync) initialUsersInstance.closeSync(); } catch (_) {}
 
-        const gameCon = await gamesInstance.connect();
+        // ── Games Database ──
+        const initialGamesInstance = await DuckDBInstance.create(gamesDbPath);
+        gamesLazy = new LazyDbConnection(gamesDbPath, 'games');
+
+        const gameCon = await initialGamesInstance.connect();
         await gameCon.run(`
             CREATE TABLE IF NOT EXISTS games (
                 game_id VARCHAR PRIMARY KEY,
@@ -180,7 +199,10 @@ const initDb = async () => {
             );
         `);
 
-        console.log("DuckDB instances (users & games) initialized.");
+        try { if (gameCon.closeSync) gameCon.closeSync(); } catch (_) {}
+        try { if (initialGamesInstance.closeSync) initialGamesInstance.closeSync(); } catch (_) {}
+
+        console.log("DuckDB instances (users & games) initialized. Locks released for lazy loading.");
     } catch (err) {
         console.error("DuckDB initialization error:", err);
         throw err;

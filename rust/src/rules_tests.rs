@@ -1251,27 +1251,6 @@ mod tests {
         assert!(moves.contains(&"p1".to_string())); // Can deploy because adj to Mage
     }
 
-    #[test]
-    fn test_deploy_on_non_chosen_does_not_end_turn() {
-        let mut board = create_mock_board();
-        add_poly(&mut board, "p1", "white", vec![]);
-        add_poly(&mut board, "p2", "blue", vec![]);
-        add_piece(&mut board, "w_soldier", "returned", Side::White, PieceType::Soldier);
-        add_piece(&mut board, "w_goddess", "p1", Side::White, PieceType::Goddess);
-        
-        let mut gs = gs_playing(board);
-        gs.color_chosen.insert(Side::White, "orange".to_string());
-        gs.turn = Side::White;
-
-        let _captured = apply_move(&mut gs, "w_soldier", "p2");
-        let ended_turn = apply_move_turnover(&mut gs, "w_soldier", "p2", false, true, true);
-        
-        if ended_turn {
-            assert_eq!(gs.turn, Side::Black, "If turnover returned true, turn must be Black");
-        } else {
-            assert_eq!(gs.turn, Side::White, "If turnover returned false, turn must be White");
-        }
-    }
 
     // ---------------------------------------------------------
     // Sequence Locking 

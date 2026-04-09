@@ -42,6 +42,22 @@ try {
 
 const { saveMatchResult } = require('./utils/gameStorage');
 
+// Helper to fetch a player's rating from the database
+async function fetchUserRating(userId) {
+    if (!userId || userId.startsWith('guest_')) return null;
+    try {
+        const usersDb = getUsersDb();
+        const res = await usersDb.runAndReadAll(
+            `SELECT rating FROM users WHERE id = ?`, [userId]
+        );
+        const rows = res.getRows();
+        if (!rows || rows.length === 0) return null;
+        return Math.round(Number(rows[0][0]) || 1500);
+    } catch (_) {
+        return null;
+    }
+}
+
 // --- BOT SERVER INTEGRATION ---
 const BOT_SERVER_URL = process.env.BOT_SERVER_URL || 'http://localhost:5001';
 
@@ -382,7 +398,7 @@ async function triggerBotMoveIfNeeded(gameId) {
                     winnerSide: response.winner,
                     reason: response.reason 
                 });
-                saveMatchResult(gameId, currentGame.gameStartTimestamp, currentGame.whiteName, currentGame.blackName, currentGame.white, currentGame.black, currentGame.boardName, winnerSide, currentGame.moves)
+                saveMatchResult(gameId, currentGame.gameStartTimestamp, currentGame.whiteName, currentGame.blackName, currentGame.white, currentGame.black, currentGame.boardName, winnerSide, currentGame.moves, io)
                     .catch(err => console.error(`Bot game save error ${gameId}:`, err));
                 releaseBotIfNeeded(currentGame);
                 lobby.activeGames.delete(gameId);
@@ -543,6 +559,10 @@ app.post('/register', async (req, res) => {
     
     if (!username || !email || !password) {
         return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    if (username.toLowerCase().startsWith('guest_')) {
+        return res.status(400).json({ error: 'Username cannot start with "guest_"' });
     }
 
     try {
@@ -763,7 +783,7 @@ setInterval(() => {
                     message: `${playerType === 'white' ? 'White' : 'Black'} disconnected for too long.`
                 });
                 
-                saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, winnerSide, game.moves)
+                saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, winnerSide, game.moves, io)
                     .catch(err => console.error(`Failed to save abandoned game ${gameId}:`, err));
                 
                 releaseBotIfNeeded(game);
@@ -791,7 +811,7 @@ setInterval(() => {
             const winnerId = winnerSide === 'white' ? game.white : game.black;
 
             io.to(gameId).emit('game_over', { winnerId, reason: 'timeout' });
-            saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, winnerSide, game.moves)
+            saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, winnerSide, game.moves, io)
                 .catch(err => console.error(`Failed to save timed-out game ${gameId}:`, err));
             
             releaseBotIfNeeded(game);
@@ -825,11 +845,13 @@ function buildInitialState(gameData) {
         whiteName: gameData.whiteName,
         blackName: gameData.blackName,
         boardName: gameData.boardName,
+        whiteRating: gameData.whiteRating || null,
+        blackRating: gameData.blackRating || null,
     };
 }
 
 // --- helper to create a game from two players ---
-function createGame(whitePlayer, blackPlayer, timeControl) {
+async function createGame(whitePlayer, blackPlayer, timeControl) {
     const hash = getRandomHash();
 
     const randomBoardFile = boardPool[Math.floor(Math.random() * boardPool.length)];
@@ -888,9 +910,19 @@ function createGame(whitePlayer, blackPlayer, timeControl) {
         blackSocketId: blackPlayer.socketId,
         whiteRole: whitePlayer.role,
         blackRole: blackPlayer.role,
+        whiteRating: null,
+        blackRating: null,
         whiteDisconnectedAt: null,
         blackDisconnectedAt: null,
     };
+
+    // Fetch ratings from DB (non-blocking for guests)
+    const [wRating, bRating] = await Promise.all([
+        fetchUserRating(whitePlayer.userId),
+        fetchUserRating(blackPlayer.userId),
+    ]);
+    gameData.whiteRating = wRating;
+    gameData.blackRating = bRating;
 
     lobby.activeGames.set(hash, gameData);
     return { hash, gameData };
@@ -959,7 +991,7 @@ io.on('connection', (socket) => {
     });
 
     // --- ACCEPT GAME REQUEST ---
-    socket.on('accept_game_request', ({ requestId, userId, username, role }) => {
+    socket.on('accept_game_request', async ({ requestId, userId, username, role }) => {
         const reqIndex = lobby.gameRequests.findIndex(r => r.requestId === requestId);
         if (reqIndex === -1) {
             socket.emit('request_error', { message: 'Request no longer available.' });
@@ -994,7 +1026,7 @@ io.on('connection', (socket) => {
         const whitePlayer = isRequesterWhite ? requesterPlayer : acceptorPlayer;
         const blackPlayer = isRequesterWhite ? acceptorPlayer  : requesterPlayer;
 
-        const { hash, gameData } = createGame(whitePlayer, blackPlayer, req.timeControl);
+        const { hash, gameData } = await createGame(whitePlayer, blackPlayer, req.timeControl);
         
         // Place both players in the game room
         const requesterSocket = io.sockets.sockets.get(req.socketId);
@@ -1023,7 +1055,7 @@ io.on('connection', (socket) => {
     });
 
     // --- CREATE BOT GAME ---
-    socket.on('create_bot_game', ({ userId, username, role, timeControl, botConfig }) => {
+    socket.on('create_bot_game', async ({ userId, username, role, timeControl, botConfig }) => {
         const effectiveUserId = userId || socket.userId || generateGuestId();
         const effectiveUsername = username || effectiveUserId;
         const effectiveRole = role || socket.userRole || 'guest';
@@ -1048,7 +1080,7 @@ io.on('connection', (socket) => {
         const whitePlayer = isPlayerWhite ? humanPlayer : botPlayer;
         const blackPlayer = isPlayerWhite ? botPlayer   : humanPlayer;
 
-        const { hash, gameData } = createGame(whitePlayer, blackPlayer, timeControl || { minutes: 15, increment: 10 });
+        const { hash, gameData } = await createGame(whitePlayer, blackPlayer, timeControl || { minutes: 15, increment: 10 });
 
         // Mark game as a bot game
         gameData.botSide   = isPlayerWhite ? 'black' : 'white';
@@ -1376,7 +1408,7 @@ io.on('connection', (socket) => {
                     const winnerSide = passingSide === 'white' ? 'black' : 'white';
                     console.log(`Game Over: ${gameId} - ${passingSide} passed 3 times`);
                     io.to(gameId).emit('game_over', { winnerId, winnerSide, reason: 'pass_limit' });
-                    saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, winnerSide, game.moves)
+                    saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, winnerSide, game.moves, io)
                         .catch(err => console.error(`Failed to save pass-limit game ${gameId}:`, err));
                     releaseBotIfNeeded(game);
                     lobby.activeGames.delete(gameId);
@@ -1429,7 +1461,7 @@ io.on('connection', (socket) => {
         console.log(`Game Over: ${gameId} - ${resigningSide} resigned`);
         io.to(gameId).emit('game_over', { winnerId, winnerSide, reason: 'resign' });
 
-        saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, winnerSide, game.moves)
+        saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, winnerSide, game.moves, io)
             .catch(err => console.error(`Failed to save resigned game ${gameId}:`, err));
 
         releaseBotIfNeeded(game);
@@ -1652,7 +1684,7 @@ io.on('connection', (socket) => {
                         winnerSide: response.winner,
                         reason: response.reason 
                     });
-                    saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, winnerSide, game.moves)
+                    saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, winnerSide, game.moves, io)
                         .catch(err => console.error(`Failed to save match result for game "${gameId}":`, err));
                     releaseBotIfNeeded(game);
                     lobby.activeGames.delete(gameId);
