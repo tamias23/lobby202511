@@ -53,6 +53,7 @@ import os
 import random
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -197,16 +198,40 @@ def run_training(epochs: int, batch_size: int) -> tuple[float, float]:
     Returns (value_loss, policy_loss) of the last epoch, or (-1, -1) on failure.
     """
     python_bin = ".venv/bin/python" if os.path.exists(".venv") else "python3"
-    result = subprocess.run(
+
+    # Set up environment to ensure unbuffered output for real-time streaming
+    env = os.environ.copy()
+    env["PYTHONUNBUFFERED"] = "1"
+
+    process = subprocess.Popen(
         [python_bin, "train_mcts.py", "--epochs", str(epochs), "--batch-size", str(batch_size)],
-        capture_output=True, text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,  # Merge stderr (tqdm) into stdout
+        text=True,
+        env=env,
+        bufsize=1,
     )
-    if result.returncode != 0:
-        raise subprocess.CalledProcessError(result.returncode, "train_mcts.py", result.stderr)
+
+    captured_lines = []
+    # Read output line-by-line in real-time
+    while True:
+        # readline() works better with tqdm's \r than iter(property.stdout.readline, "") 
+        # in some environments, as it avoids some buffering issues.
+        line = process.stdout.readline()
+        if not line and process.poll() is not None:
+            break
+        if line:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+            captured_lines.append(line)
+
+    process.wait()
+    if process.returncode != 0:
+        raise subprocess.CalledProcessError(process.returncode, "train_mcts.py")
 
     # Parse last "Epoch N/N | Loss: X.XXXX (V: X.XXXX, P: X.XXXX)" line
     v_loss, p_loss = -1.0, -1.0
-    for line in result.stdout.splitlines():
+    for line in captured_lines:
         if "Loss:" in line and "(V:" in line and "P:" in line:
             try:
                 after_v = line.split("V:")[1].split(",")[0].strip()

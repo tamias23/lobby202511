@@ -24,11 +24,11 @@ logger = logging.getLogger(__name__)
 
 # Parse CLI arguments
 parser = argparse.ArgumentParser(description="AlphaZero-style Self-Play Training Loop for MCTS")
-parser.add_argument("--duration", type=int, default=65000, help="Total duration to run the loop in seconds (default: 30mn)")
+parser.add_argument("--duration", type=int, default=125000, help="Total duration to run the loop in seconds (default: 30mn)")
 parser.add_argument("--games_per_batch", type=int, default=240, help="Total number of games to play per training step")
 parser.add_argument("--max_concurrency", type=int, default=6, help="Maximum number of parallel games at once")
 parser.add_argument("--turns_per_game", type=int, default=300, help="Maximum turns per self-play game")
-parser.add_argument("--mcts_budget", type=int, default=30, help="MCTS time budget in ms per move")
+parser.add_argument("--mcts_budget", type=int, default=50, help="MCTS time budget in ms per move")
 parser.add_argument("--train_epochs", type=int, default=3, help="Number of training epochs per batch")
 parser.add_argument("--train_batch_size", type=int, default=32, help="Batch size for training the GAT model")
 parser.add_argument("--max_data_files", type=int, default=720, help="Maximum number of game JSON files to keep in mcts_temp")
