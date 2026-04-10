@@ -123,14 +123,14 @@ pub fn perform_setup_turn(state: &mut GameState, agent: &dyn Agent, verbosity: u
             }
             state.turn = state.get_enemy_side();
             state.setup_placements_this_turn = 0;
-            (false, None)
+            (true, None)
         }
         AgentMove::Move { piece, target } => {
             apply_setup_placement_turnover(state, &piece, &target);
             if verbosity >= 1 {
                 println!("[Engine] Setup Placement: {} -> {}", piece, target);
             }
-            (false, Some((piece, target)))
+            (true, Some((piece, target)))
         }
     }
 }

@@ -490,7 +490,7 @@ pub fn apply_move(state: &mut GameState, piece_id: &str, target_poly: &str) -> V
     let old_pos = state.board.pieces[piece_id].position.clone();
     
     // Register chain movement sequence memory
-    if state.moves_this_turn == 0 && old_pos != "returned" {
+    if old_pos != "returned" {
         state.visited_polygons.insert(old_pos.clone());
     }
     state.visited_polygons.insert(target_poly.to_string());

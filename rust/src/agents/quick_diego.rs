@@ -482,6 +482,7 @@ impl Agent for QuickDiegoAgent {
         }
 
         // ── Step 2-c: Deploy pieces next to mage (hard priority, must not end turn) ──
+        // Priority: Heroe > Soldier > others
         // Find friendly mages on the board
         let mut mage_positions = Vec::new();
         for p in state.board.pieces.values() {
@@ -493,24 +494,35 @@ impl Agent for QuickDiegoAgent {
         }
 
         if !mage_positions.is_empty() {
-            // Find pieces in "returned" that can deploy adjacent to a mage
+            // Collect all valid (piece, target) deployments adjacent to a mage
+            let mut mage_adj_deploys: Vec<(String, String, u8)> = Vec::new();
             for (p_id, targets) in all_moves {
                 let piece = &state.board.pieces[p_id];
                 if piece.position != "returned" {
                     continue;
                 }
+                // Assign priority: 0 = Heroe (best), 1 = Soldier, 2 = others
+                let priority = match piece.piece_type {
+                    PieceType::Heroe => 0,
+                    PieceType::Soldier => 1,
+                    _ => 2,
+                };
                 for target in targets {
-                    // Check if target is adjacent to any mage
                     let is_adj_mage = mage_positions.iter().any(|mage_pos| {
                         state.get_slide_neighbors(mage_pos).contains(target)
                     });
                     if is_adj_mage && !Self::would_end_turn(state, p_id, target) {
-                        return AgentMove::Move {
-                            piece: p_id.clone(),
-                            target: target.clone(),
-                        };
+                        mage_adj_deploys.push((p_id.clone(), target.clone(), priority));
                     }
                 }
+            }
+            // Sort by priority (lowest = best)
+            mage_adj_deploys.sort_by_key(|(_p, _t, prio)| *prio);
+            if let Some((piece, target, _)) = mage_adj_deploys.first() {
+                return AgentMove::Move {
+                    piece: piece.clone(),
+                    target: target.clone(),
+                };
             }
         }
 
@@ -575,7 +587,19 @@ impl Agent for QuickDiegoAgent {
             }
         }
 
-        // All moves end the turn — pick the best overall
+        // All moves end the turn. 
+        // LOBBY PRIORITY: If we must end the turn, prefer deploying the Mage if possible.
+        for (piece, target, _score, _ends) in &scored_moves {
+            let p = &state.board.pieces[piece];
+            if p.piece_type == PieceType::Mage && p.position == "returned" {
+                return AgentMove::Move {
+                    piece: piece.clone(),
+                    target: target.clone(),
+                };
+            }
+        }
+
+        // Otherwise, pick the best overall ending move
         if let Some((piece, target, _score, _ends)) = scored_moves.first() {
             return AgentMove::Move {
                 piece: piece.clone(),
@@ -679,5 +703,51 @@ mod tests {
 
         // Goddess moving to p3 (Blue = chosen) SHOULD end turn
         assert!(QuickDiegoAgent::would_end_turn(&gs, "w_goddess", "p3"));
+    }
+
+    #[test]
+    fn test_quick_diego_prioritizes_mage_deployment_on_forced_end() {
+        let mut gs = setup_test_board();
+        gs.phase = GamePhase::Playing;
+        gs.color_chosen.insert(Side::White, "blue".to_string());
+        gs.is_new_turn = false;
+
+        // Add a white Hero on board (p1)
+        gs.board.pieces.insert("w_heroe".to_string(), crate::models::Piece {
+            id: "w_heroe".to_string(),
+            piece_type: PieceType::Heroe,
+            side: Side::White,
+            position: "p1".to_string(),
+        });
+        gs.occupancy.insert("p1".to_string(), "w_heroe".to_string());
+
+        // Add a white Mage in returned state
+        gs.board.pieces.insert("w_mage".to_string(), crate::models::Piece {
+            id: "w_mage".to_string(),
+            piece_type: PieceType::Mage,
+            side: Side::White,
+            position: "returned".to_string(),
+        });
+
+        // Moves:
+        // 1. Hero moves from p1 (Blue) to p3 (Blue) -> Ends turn. (High score)
+        // 2. Mage deploys to p1 (Blue) -> Ends turn. (Low score)
+        let mut all_moves = HashMap::new();
+        all_moves.insert("w_heroe".to_string(), vec!["p3".to_string()]);
+        all_moves.insert("w_mage".to_string(), vec!["p1".to_string()]);
+
+        // Use weights that favor distance (so Hero move gets higher score)
+        let mut weights = [0.0; NUM_PARAMS];
+        weights[22] = 100.0; // Distance heuristic
+        let agent = QuickDiegoAgent::new(weights, 50);
+
+        let m = agent.choose_move(&gs, &all_moves, false);
+        match m {
+            AgentMove::Move { piece, target } => {
+                assert_eq!(piece, "w_mage", "Should prioritize Mage deployment even if Hero move exists");
+                assert_eq!(target, "p1");
+            }
+            AgentMove::Pass => panic!("Expected a move, got pass"),
+        }
     }
 }

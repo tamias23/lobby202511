@@ -227,6 +227,8 @@ fn run_batch(
     use crate::engine::{GameState, GamePhase, perform_turn, perform_setup_turn, setup_pieces};
     use crate::models::Side;
     use uuid::Uuid;
+    use std::fs::OpenOptions;
+    use std::io::Write as IoWrite;
     use crate::recorder::{Recorder, GameRecord, MoveEvent, current_timestamp_ms};
 
     if verbosity >= 1 {
@@ -265,14 +267,25 @@ fn run_batch(
         let mut game_moves = Vec::new();
 
         // 1. Setup Phase
-        while gs.phase == GamePhase::Setup {
+        let mut setup_attempts = 0;
+        while gs.phase == GamePhase::Setup && setup_attempts < 1000 {
+            setup_attempts += 1;
             let active_side = gs.turn;
             let agent: &dyn agents::Agent = match active_side {
                 Side::White => white_agent,
                 Side::Black => black_agent,
             };
-            let (_, move_made) = perform_setup_turn(&mut gs, agent, verbosity);
+            let (success, move_made) = perform_setup_turn(&mut gs, agent, verbosity);
             
+            if !success {
+                eprintln!("[Engine] SETUP DEADLOCK detected for board: {}. Recording in problem.log.", board_id);
+                if let Ok(mut file) = OpenOptions::new().create(true).append(true).open("problem.log") {
+                    let _ = writeln!(file, "[{}] Setup Deadlock | Board: {} | GameID: {}", current_timestamp_ms(), board_id, game_id);
+                }
+                gs.phase = GamePhase::GameOver; // Force exit setup
+                break;
+            }
+
             if recorder.is_some() {
                 if let Some((piece, target)) = move_made {
                     game_moves.push(MoveEvent {
@@ -289,8 +302,27 @@ fn run_batch(
         }
 
         let mut winner: Option<Side> = None;
-        while gs.turn_counter < max_turns {
+        let mut last_turn_count = gs.turn_counter;
+        let mut same_turn_steps = 0;
+
+        while gs.turn_counter < max_turns && gs.phase == GamePhase::Playing {
             let active_side = gs.turn.clone();
+            
+            if gs.turn_counter == last_turn_count {
+                same_turn_steps += 1;
+            } else {
+                last_turn_count = gs.turn_counter;
+                same_turn_steps = 0;
+            }
+
+            if same_turn_steps > 1000 {
+                eprintln!("[Engine] PLAYING STUCK detected for board: {}. Recording in problem.log.", board_id);
+                if let Ok(mut file) = OpenOptions::new().create(true).append(true).open("problem.log") {
+                    let _ = writeln!(file, "[{}] Playing Stuck | Board: {} | GameID: {} | Turn: {}", current_timestamp_ms(), board_id, game_id, gs.turn_counter);
+                }
+                break;
+            }
+
             let current_turn_number = gs.turn_counter;
             
             let agent: &dyn agents::Agent = match active_side {
