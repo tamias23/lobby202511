@@ -1,8 +1,9 @@
 use crate::agents::{Agent, AgentMove};
 use crate::agents::mcts::build_graph_data;
-use crate::engine::{GameState, apply_move, apply_move_turnover};
+use crate::engine::{GameState, GamePhase, apply_move, apply_move_turnover, get_setup_legal_placements};
 use crate::models::PieceType;
 use ndarray::{Array1, Array2, Axis};
+use rand::seq::IteratorRandom;
 
 /// Total number of learnable parameters in the TinyGNN.
 pub const NUM_PARAMS: usize = 5025;
@@ -216,6 +217,20 @@ impl Agent for GreedyJackAgent {
     ) -> AgentMove {
         let perspective = state.turn;
 
+        // During setup, always use the engine-filtered placements (random selection).
+        // The GNN scoring doesn't understand setup constraints (e.g., Goddess positions
+        // that leave no valid Hero pair), so we bypass scoring for the setup phase.
+        if state.phase == GamePhase::Setup {
+            let placements = get_setup_legal_placements(state);
+            let safe_moves = if !placements.is_empty() { placements } else { all_moves.clone() };
+            if safe_moves.is_empty() {
+                return AgentMove::Pass;
+            }
+            let mut rng = rand::rng();
+            let p_id = safe_moves.keys().choose(&mut rng).unwrap().clone();
+            let target = safe_moves[&p_id].iter().choose(&mut rng).unwrap().clone();
+            return AgentMove::Move { piece: p_id, target };
+        }
         let mut best_piece = String::new();
         let mut best_target = String::new();
         let mut best_score = std::f64::NEG_INFINITY;

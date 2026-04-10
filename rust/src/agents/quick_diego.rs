@@ -551,11 +551,35 @@ impl Agent for QuickDiegoAgent {
         all_moves: &HashMap<String, Vec<String>>,
         pass_allowed: bool,
     ) -> AgentMove {
-        // ── Step 0: Setup phase → random placement ──
+        // ── Step 0: Setup phase → placement ──
         if state.phase == GamePhase::Setup {
+            use crate::engine::get_setup_legal_placements;
+            let placements = get_setup_legal_placements(state);
+
+            // Use the engine-computed placements as the authoritative source.
+            // For the Goddess step (setup_step == 0), the engine already guarantees
+            // via can_place_heroes_from_goddess that any returned target allows at
+            // least one valid Hero configuration afterwards. We still pick randomly
+            // (no positional heuristic during setup), but we use the engine's
+            // filtered set rather than the raw `all_moves` passed by the caller,
+            // which is belt-and-suspenders insurance against stale data.
+            let safe_moves: std::collections::HashMap<String, Vec<String>> = if !placements.is_empty() {
+                placements
+            } else {
+                all_moves.clone()
+            };
+
+            if safe_moves.is_empty() {
+                if pass_allowed {
+                    return AgentMove::Pass;
+                }
+                // Nothing we can do — fall through to pass
+                return AgentMove::Pass;
+            }
+
             let mut rng = rand::rng();
-            let p_id = all_moves.keys().choose(&mut rng).unwrap().clone();
-            let target = all_moves[&p_id].iter().choose(&mut rng).unwrap().clone();
+            let p_id = safe_moves.keys().choose(&mut rng).unwrap().clone();
+            let target = safe_moves[&p_id].iter().choose(&mut rng).unwrap().clone();
             return AgentMove::Move { piece: p_id, target };
         }
 

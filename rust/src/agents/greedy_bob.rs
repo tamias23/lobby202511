@@ -1,7 +1,8 @@
 use crate::agents::Agent;
-use crate::engine::{get_legal_moves, GameState, apply_move, apply_move_turnover};
+use crate::engine::{get_legal_moves, GameState, GamePhase, apply_move, apply_move_turnover, get_setup_legal_placements};
 use crate::models::{Side, PieceType};
 use rand::seq::SliceRandom;
+use rand::seq::IteratorRandom;
 
 pub struct GreedyBobAgent {
     pub weights: [f64; 26],
@@ -188,7 +189,22 @@ impl Agent for GreedyBobAgent {
         pass_allowed: bool,
     ) -> crate::agents::AgentMove {
         let perspective = state.turn.clone();
-        
+
+        // During setup, always use the engine-filtered placements (random selection).
+        // This prevents picking a Goddess spot that leaves no valid Hero placement,
+        // and also avoids calling apply_move_turnover (wrong turnover for setup phase).
+        if state.phase == GamePhase::Setup {
+            use crate::engine::get_setup_legal_placements;
+            let placements = get_setup_legal_placements(state);
+            let safe_moves = if !placements.is_empty() { placements } else { all_moves.clone() };
+            if safe_moves.is_empty() {
+                return crate::agents::AgentMove::Pass;
+            }
+            let mut rng = rand::rng();
+            let p_id = safe_moves.keys().choose(&mut rng).unwrap().clone();
+            let target = safe_moves[&p_id].iter().choose(&mut rng).unwrap().clone();
+            return crate::agents::AgentMove::Move { piece: p_id, target };
+        }
         let mut best_piece = String::new();
         let mut best_target = String::new();
         let mut best_score = std::f64::NEG_INFINITY;
