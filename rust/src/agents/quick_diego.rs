@@ -197,6 +197,104 @@ impl QuickDiegoAgent {
         max_d
     }
 
+    /// Compute a safety score for the goddess at `poly`: sum of distances
+    /// to the 5 closest enemy pieces currently on the board.
+    /// Higher = safer (goddess is farther from enemies).
+    fn goddess_safety_score(state: &GameState, poly: &str) -> f64 {
+        let enemy = if state.turn == Side::White { Side::Black } else { Side::White };
+        let mut distances: Vec<f64> = Vec::new();
+        for p in state.board.pieces.values() {
+            if p.side == enemy
+                && p.position != "returned"
+                && p.position != "graveyard"
+            {
+                distances.push(Self::poly_distance(state, poly, &p.position));
+            }
+        }
+        distances.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        // Sum of the 5 closest (or fewer if less than 5 enemies on board)
+        distances.iter().take(5).sum()
+    }
+
+    /// Goddess failsafe: given a candidate AgentMove, if it moves the goddess,
+    /// re-evaluate to pick the goddess target that maximises the safety score
+    /// (must be >= current safety). If no such target exists, fall back to
+    /// the best non-goddess move from `scored_moves`, or pass.
+    fn goddess_failsafe(
+        state: &GameState,
+        candidate: AgentMove,
+        all_moves: &HashMap<String, Vec<String>>,
+        scored_moves: &[(String, String, f64, bool)],
+        pass_allowed: bool,
+    ) -> AgentMove {
+        let goddess_piece_id = match &candidate {
+            AgentMove::Move { piece, .. } => {
+                let p = &state.board.pieces[piece];
+                if p.piece_type == PieceType::Goddess {
+                    Some(piece.clone())
+                } else {
+                    None
+                }
+            }
+            AgentMove::Pass => None,
+        };
+
+        // Not a goddess move → return as-is
+        let goddess_id = match goddess_piece_id {
+            Some(id) => id,
+            None => return candidate,
+        };
+
+        // Compute current goddess safety (from her current position)
+        let goddess = &state.board.pieces[&goddess_id];
+        let current_safety = if goddess.position != "returned" && goddess.position != "graveyard" {
+            Self::goddess_safety_score(state, &goddess.position)
+        } else {
+            0.0 // deploying from returned: any position is acceptable
+        };
+
+        // Find the goddess target that maximises safety score
+        if let Some(targets) = all_moves.get(&goddess_id) {
+            let mut best_target: Option<&String> = None;
+            let mut best_safety = f64::NEG_INFINITY;
+            for t in targets {
+                let safety = Self::goddess_safety_score(state, t);
+                if safety > best_safety {
+                    best_safety = safety;
+                    best_target = Some(t);
+                }
+            }
+
+            // Accept only if the best target keeps or improves safety
+            if best_safety >= current_safety {
+                if let Some(t) = best_target {
+                    return AgentMove::Move {
+                        piece: goddess_id,
+                        target: t.clone(),
+                    };
+                }
+            }
+        }
+
+        // Goddess move is unsafe → pick the best non-goddess move
+        for (piece, target, _score, _ends) in scored_moves {
+            let p = &state.board.pieces[piece];
+            if p.piece_type != PieceType::Goddess {
+                return AgentMove::Move {
+                    piece: piece.clone(),
+                    target: target.clone(),
+                };
+            }
+        }
+
+        // No non-goddess move available
+        if pass_allowed {
+            AgentMove::Pass
+        } else {
+            candidate // last resort: use the original move
+        }
+    }
+
     // ────────────────────────────────────────────────────────────────────────
     //  Step 1-a: Lightweight random rollout for color look-ahead
     // ────────────────────────────────────────────────────────────────────────
@@ -580,10 +678,11 @@ impl Agent for QuickDiegoAgent {
         // Pick best move that does NOT end the turn
         for (piece, target, _score, ends) in &scored_moves {
             if !ends {
-                return AgentMove::Move {
+                let candidate = AgentMove::Move {
                     piece: piece.clone(),
                     target: target.clone(),
                 };
+                return Self::goddess_failsafe(state, candidate, all_moves, &scored_moves, pass_allowed);
             }
         }
 
@@ -599,12 +698,13 @@ impl Agent for QuickDiegoAgent {
             }
         }
 
-        // Otherwise, pick the best overall ending move
+        // Otherwise, pick the best overall ending move (with goddess failsafe)
         if let Some((piece, target, _score, _ends)) = scored_moves.first() {
-            return AgentMove::Move {
+            let candidate = AgentMove::Move {
                 piece: piece.clone(),
                 target: target.clone(),
             };
+            return Self::goddess_failsafe(state, candidate, all_moves, &scored_moves, pass_allowed);
         }
 
         // Fallback: pass if allowed, otherwise pick any move
