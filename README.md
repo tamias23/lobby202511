@@ -1,44 +1,57 @@
 # Lobby202511
 
-This project consists of two primary workstreams exploring game simulation and logic through different technologies: **Rust** and **JavaScript**.
+A sophisticated game evaluation and simulation platform designed to bridge high-performance Rust logic with a modern React/Node.js web ecosystem. The project enables the development, training, and real-time play of heuristic-based AI agents within a competitive multiplayer environment.
 
-## Workstreams
+## Core Architecture
 
-### 1. Rust (`/rust`)
-The Rust workstream is focused on high-performance execution, headless batch simulations, and the core game logic engine.
-- Contains the primary logic for running rapid simulations, evaluating heuristic-based agents (like `greedy_bob`), and exporting match data to Parquet files for analysis.
-- Includes specific binaries for running large simulation batches (`cargo run --bin rust`) and parsing/replaying game data (`cargo run --bin replay`).
+The platform centers around a shared game engine logic, ensuring perfect parity across different execution environments:
 
-### 2. JavaScript (`/javascript`)
-The JavaScript workstream is focused on the frontend, visualization, and Node-based server infrastructure. 
-- Contains the web frontend components (`index2.html`) and Node.js servers (e.g., `serverD.js`).
-- Utilized for visually inspecting game board states, manually verifying game rules, testing with Jest, and providing an interactive environment.
+- **Shared Rust Core (`/new_main/rust-core`)**: The authoritative source of truth for game rules, available as:
+    - **WebAssembly (Wasm)**: Enabling high-performance client-side simulations in the browser.
+    - **Rust NAPI Bindings**: Providing the backend with direct access to the engine's speed and reliability.
+- **Backend (`/new_main/backend`)**: A Node.js (Socket.io/Express) server orchestration layer.
+- **Frontend (`/new_main/frontend`)**: A modern React application built with Vite, focused on responsive design and visual polish.
 
-### 3. Unified Game Platform (`/new_main`)
-A modern monorepo that integrates the full game lifecycle from user onboarding and ranked matchmaking to real-time gameplay.
+## Key Workstreams
 
-- **Architecture**:
-    - **Frontend (`/new_main/frontend`)**: A React-based web application built with **Vite**. It uses the shared game engine compiled to **WebAssembly (Wasm)** for high-performance client-side simulation.
-    - **Backend (`/new_main/backend`)**: A **Node.js** server using **Express** and **Socket.io**. It provides authoritative game state management by leveraging the same game logic through **Rust NAPI** bindings.
-    - **Database**: Employs **DuckDB** (via `@duckdb/node-api`) for high-speed user data and match history management.
-- **Key Features**:
-    - **Secure Onboarding**: Complete user registration with email verification and session-based login.
-    - **Lobby & Matchmaking**: Real-time ranked matchmaking system that pairs players by skill rating.
-    - **Gameplay HUD**: A sophisticated, multi-column responsive interface featuring live game statistics (turn/move counts), action buttons (Flip Board, Random Setup), and customizable themes (Light, Dark, and a special **Rain** mode).
-    - **Engine Consistency**: By sharing common code in `/new_main/rust-core`, the platform ensures perfect rule parity across the client and server.
+### 1. Advanced Gaming Platform (`/new_main`)
+A full-stack implementation featuring user onboarding, real-time ranked matchmaking, and live gameplay.
 
-## Utility Scripts
+- **UI & Visualization**:
+    - **Lobby 2.0**: A responsive, grid-based dashboard for game selection and player tracking.
+    - **Analysis Room**: Dedicated interface for post-game review with board scaling and light grey UI panels for enhanced readability.
+    - **Visual Polish**: Smooth CSS-based piece animations, dynamic board layouts, and multi-mode theme support (Light, Dark, Rain).
+- **User Management & Database**:
+    - **DuckDB**: Robust, high-speed storage for user profiles and match history using lazy connection handling and WAL-to-main check-pointing.
+    - **Real-time Glicko-2 Ratings**: A dynamic matchmaking system using Glicko-2 (rating, deviation, volatility) that updates live after every competitive match.
+- **Engine Safety**:
+    - Integrated **Deadlock & Stuck Detection** ensures simulations and games exit gracefully if infinite loops are detected in complex game states.
 
-The root directory contains bash scripts to quickly orchestrate Rust simulations:
+### 2. AI & Bot Development (`/rust/src/agents`)
+Developing and evolving agents that can handle the strategic depth of the game.
 
-- **`run_batch.sh`**: Runs a headless batch simulation from anywhere in the project. It targets the Rust binary to execute a specified number of games using `greedy_bob` AI agents with specific weights. Results are exported to the `parquet/` directory.
-  - *Usage*: `./run_batch.sh [board_file] [n_games] [max_turns]`
+- **Quick Diego**: Our current flagship heuristic agent. It features:
+    - **Priority Sorting**: Intelligent move selection based on piece importance.
+    - **Strategic Deployment**: Prioritizes Mage-adjacent placements and Mage returns.
+    - **Goddess Safety Failsafe**: A geometric evaluate-before-move check that prevents the Goddess from entering high-danger zones based on enemy proximity.
+- **MCTS & Heuristics**: Integration of Monte Carlo Tree Search for advanced color-selection look-ahead and greedy heuristics for tactical optimization.
 
-- **`replay_games.sh`**: A helper script to replay a saved game sequence from a Parquet file. It navigates to the Rust directory and executes the `replay` binary to parse and process the specific match records.
-  - *Usage*: `./replay_games.sh <path_to_parquet_file>`
+### 3. Training & Evaluation Pipeline
+Orchestrating bot evolution through large-scale simulation.
 
-## Python Scripts
+- **Genetic Swiss Tournament**: Python-based scripts (`genetic_swiss_diego.py`) that evolve agents by pairing them in Swiss tournaments, ensuring robust performance evaluation across generations.
+- **Data Analysis**: Headless batch simulations (`run_batch.sh`) export high-fidelity match data to Parquet files for deep-dive analysis using Polars and Pandas.
 
-- **`genetic_bob.py`**: A program for evaluating and evolving custom AI agents (`greedy_bob`) through a genetic algorithm, pairing them randomly in parallel matches. It iteratively culls underperformers and generates new generations to discover optimal agent parameters.
-- **`genetic_swiss_bob.py`**: An advanced version of the genetic algorithm that pairs agents using a Swiss tournament system with Buchholz tie-breaks, providing a more robust measure of agent performance during the evolutionary process.
-- **`letsTakeALook.py`**: A helper data science script that reads generated Parquet match logs using Polars and exports data samples into an Excel spreadsheet with Pandas for manual review.
+## Setup & Execution
+
+### Rust Engine Simulations
+```bash
+# Run a batch of simulation games
+./run_batch.sh [board_file] [n_games] [max_turns]
+
+# Replay a specific game sequence from Parquet
+./replay_games.sh <path_to_parquet_file>
+```
+
+### Full-Stack Platform
+Refer to the READMEs in `/new_main/frontend` and `/new_main/backend` for specific development server instructions.
