@@ -36,3 +36,4 @@ pub mod random;
 pub mod greedy_bob;
 pub mod greedy_jack;
 pub mod mcts;
+pub mod quick_diego;

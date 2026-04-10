@@ -221,8 +221,8 @@ async function triggerBotMoveIfNeeded(gameId) {
 
                     console.log(`[Bot] Setup placement: ${botMove.piece} → ${botMove.target}`);
                 }
-                // Continue placing pieces
-                setImmediate(() => triggerBotMoveIfNeeded(gameId));
+                // Continue placing pieces (small delay so the human sees each one)
+                setTimeout(() => triggerBotMoveIfNeeded(gameId), 600);
                 return;
 
             } else if (botMove.action === 'setup_done') {
@@ -340,7 +340,7 @@ async function triggerBotMoveIfNeeded(gameId) {
                         moves: currentGame.moves || [],
             });
             // Bot may need to make more moves in same turn
-            setImmediate(() => triggerBotMoveIfNeeded(gameId));
+            setTimeout(() => triggerBotMoveIfNeeded(gameId), 600);
 
         } else if (botMove.action === 'move' && botMove.piece && botMove.target) {
             // Bot made a move
@@ -405,7 +405,7 @@ async function triggerBotMoveIfNeeded(gameId) {
                 broadcastLobbyUpdate(io);
             } else {
                 // Bot might need to continue its turn (chaining)
-                setImmediate(() => triggerBotMoveIfNeeded(gameId));
+                setTimeout(() => triggerBotMoveIfNeeded(gameId), 600);
             }
 
         } else if (botMove.action === 'pass') {

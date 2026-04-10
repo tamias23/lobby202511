@@ -18,7 +18,7 @@ fn parse_flag_str<'a>(args: &'a [String], flag: &str, default: &'a str) -> &'a s
         .unwrap_or(default)
 }
 
-fn make_agent(name: &str, weights_str: Option<&String>, mcts_budget: u64, mcts_data_dir: String, model_path: Option<String>, mcts_record: bool, verbosity: u8, num_threads: usize) -> Arc<dyn agents::Agent> {
+fn make_agent(name: &str, weights_str: Option<&String>, mcts_budget: u64, mcts_data_dir: String, model_path: Option<String>, mcts_record: bool, verbosity: u8, num_threads: usize, diego_mcts_budget: u64) -> Arc<dyn agents::Agent> {
     match name {
         "random" => Arc::new(agents::random::RandomAgent),
         "mcts" => {
@@ -34,6 +34,17 @@ fn make_agent(name: &str, weights_str: Option<&String>, mcts_budget: u64, mcts_d
                 }
             }
             Arc::new(agents::greedy_bob::GreedyBobAgent::new(weights))
+        }
+        "quick_diego" => {
+            let num = agents::quick_diego::NUM_PARAMS;
+            let mut weights = [1.0_f64; 33];
+            if let Some(w_str) = weights_str {
+                let parsed: Vec<f64> = w_str.split(',').filter_map(|s| s.parse().ok()).collect();
+                for (i, val) in parsed.into_iter().enumerate().take(num) {
+                    weights[i] = val;
+                }
+            }
+            Arc::new(agents::quick_diego::QuickDiegoAgent::new(weights, diego_mcts_budget))
         }
         "greedy_jack" => {
             let num = agents::greedy_jack::NUM_PARAMS;
@@ -68,7 +79,7 @@ fn make_agent(name: &str, weights_str: Option<&String>, mcts_budget: u64, mcts_d
             Arc::new(agents::greedy_jack::GreedyJackAgent::new(weights))
         }
         other => {
-            eprintln!("Unknown agent '{}'. Available: random, greedy_bob, greedy_jack, mcts", other);
+            eprintln!("Unknown agent '{}'. Available: random, greedy_bob, greedy_jack, quick_diego, mcts", other);
             std::process::exit(1);
         }
     }
@@ -116,7 +127,7 @@ async fn main() {
         println!("      --greedy-weights-white \"1.0,1.0,-2.0,...\"");
         println!("      --greedy-weights-black \"1.0,1.0,-2.0,...\"");
         println!();
-        println!("  Agents: random, greedy_bob, greedy_jack, mcts");
+        println!("  Agents: random, greedy_bob, greedy_jack, quick_diego, mcts");
         println!("  Flags:");
         println!("      --mcts-no-record  Disable search data collection for MCTS");
         std::process::exit(1);
@@ -161,6 +172,7 @@ async fn main() {
     let display_black_name = parse_flag_str(&args, "--black-name", &black_agent_name).to_string();
     let parquet_dir = args.iter().position(|a| a == "--store-parquet").and_then(|i| args.get(i + 1)).cloned();
     let verbosity = parse_flag_value(&args, "--verbose", 0) as u8;
+    let diego_mcts_budget = parse_flag_value(&args, "--diego-mcts-budget", 100) as u64;
     
     let white_weights = args.iter().position(|a| a == "--greedy-weights-white").and_then(|i| args.get(i + 1));
     let black_weights = args.iter().position(|a| a == "--greedy-weights-black").and_then(|i| args.get(i + 1));
@@ -170,8 +182,8 @@ async fn main() {
     
     let mcts_record = !args.contains(&"--mcts-no-record".to_string());
 
-    let white_agent = make_agent(&white_agent_name, white_weights, mcts_budget_white, mcts_data_dir.clone(), white_model_path, mcts_record, verbosity, mcts_threads_white);
-    let black_agent = make_agent(&black_agent_name, black_weights, mcts_budget_black, mcts_data_dir, black_model_path, mcts_record, verbosity, mcts_threads_black);
+    let white_agent = make_agent(&white_agent_name, white_weights, mcts_budget_white, mcts_data_dir.clone(), white_model_path, mcts_record, verbosity, mcts_threads_white, diego_mcts_budget);
+    let black_agent = make_agent(&black_agent_name, black_weights, mcts_budget_black, mcts_data_dir, black_model_path, mcts_record, verbosity, mcts_threads_black, diego_mcts_budget);
 
     if let Some(batch_pos) = args.iter().position(|a| a == "--batch") {
         let n_games: u32 = args.get(batch_pos + 1)

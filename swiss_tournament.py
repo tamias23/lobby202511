@@ -54,13 +54,14 @@ if not RUST_BIN.exists():
 # Agent class
 # ---------------------------------------------------------------------------
 class Agent:
-    def __init__(self, name, agent_type, data, mcts_budget=None, mcts_threads=None):
+    def __init__(self, name, agent_type, data, mcts_budget=None, mcts_threads=None, diego_mcts_budget=None):
         self.name = name
         self.type = agent_type       # greedy_bob | greedy_jack | mcts
         self.data = data             # list[float] for greedy_bob, str path for others
         # Per-agent MCTS tuning — None means "fall back to global default"
         self.mcts_budget  = int(mcts_budget)  if mcts_budget  else None
         self.mcts_threads = int(mcts_threads) if mcts_threads else None
+        self.diego_mcts_budget = int(diego_mcts_budget) if diego_mcts_budget else 100
         # Tournament state
         self.score     = 0
         self.buchholz  = 0
@@ -89,6 +90,11 @@ class Agent:
 # For greedy_bob agents:
 #   - Data       = quoted comma-separated weight string, e.g. "1.0,-2.5,3.1,..."
 #   - MctsBudget/MctsThreads are ignored (leave empty)
+#
+# For quick_diego agents:
+#   - Data       = quoted comma-separated weight string (33 params)
+#   - MctsBudget = MCTS color look-ahead budget in ms (default: 100)
+#   - MctsThreads is ignored (leave empty)
 
 def load_agents(filepath):
     agents = []
@@ -115,15 +121,21 @@ def load_agents(filepath):
                 mcts_budget  = line[3].strip() if len(line) > 3 else ""
                 mcts_threads = line[4].strip() if len(line) > 4 else ""
 
-                if agent_type == "greedy_bob":
+                diego_mcts_budget_val = None
+                if agent_type == "greedy_bob" or agent_type == "quick_diego":
                     # Data column is a quoted comma-separated weight string
                     data = [float(x) for x in raw_data.split(',') if x.strip()]
+                    if agent_type == "quick_diego":
+                        # MctsBudget column is reused as diego MCTS color look-ahead budget
+                        diego_mcts_budget_val = mcts_budget or None
+                        mcts_budget = ""  # not used for MCTS search
                 else:
                     data = raw_data
 
                 agents.append(Agent(name, agent_type, data,
                                     mcts_budget  or None,
-                                    mcts_threads or None))
+                                    mcts_threads or None,
+                                    diego_mcts_budget_val))
             except (ValueError, IndexError) as e:
                 print(f"Skipping line due to parse error: {line} -> {e}")
 
@@ -156,9 +168,15 @@ async def run_match(sem, agent1, agent2, board_path, temp_dir):
 
         # Agent-specific arguments (weights / model path / MCTS tuning)
         has_mcts = False
+        has_diego = False
+        diego_budget = 100
         for side, agent in [("white", white), ("black", black)]:
             if agent.type == "greedy_bob":
                 cmd.extend([f"--greedy-weights-{side}", weights_to_str(agent.data)])
+            elif agent.type == "quick_diego":
+                has_diego = True
+                cmd.extend([f"--greedy-weights-{side}", weights_to_str(agent.data)])
+                diego_budget = agent.diego_mcts_budget
             elif agent.type == "greedy_jack":
                 cmd.extend([f"--{side}-model-path", agent.data])
             elif agent.type == "mcts":
@@ -170,6 +188,10 @@ async def run_match(sem, agent1, agent2, board_path, temp_dir):
         # Suppress MCTS training data recording for tournament matches
         if has_mcts:
             cmd.append("--mcts-no-record")
+
+        # QuickDiego MCTS color look-ahead budget
+        if has_diego:
+            cmd.extend(["--diego-mcts-budget", str(diego_budget)])
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,
