@@ -215,14 +215,21 @@ def run_training(epochs: int, batch_size: int) -> tuple[float, float]:
     captured_lines = []
     # Read output line-by-line in real-time
     while True:
-        # readline() works better with tqdm's \r than iter(property.stdout.readline, "") 
-        # in some environments, as it avoids some buffering issues.
+        # readline() treats carriage returns (\r) from tqdm as newlines when piped,
+        # which can lead to excessive output. We filter these intermediate lines.
         line = process.stdout.readline()
         if not line and process.poll() is not None:
             break
         if line:
-            sys.stdout.write(line)
-            sys.stdout.flush()
+            # Detect noise (tqdm progress bars usually contain '%|')
+            is_noise = "%|" in line
+            # Keep summary lines (containing 'Loss:') and important status messages
+            is_important = any(x in line for x in ["Loss:", "Training Device:", "Loading data", "Exporting", "successfully"])
+
+            if not is_noise or is_important:
+                sys.stdout.write(line)
+                sys.stdout.flush()
+
             captured_lines.append(line)
 
     process.wait()
