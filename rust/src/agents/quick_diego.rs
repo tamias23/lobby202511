@@ -1,9 +1,11 @@
 use crate::agents::{Agent, AgentMove};
-use crate::engine::{get_legal_moves, GameState, GamePhase, apply_move, apply_move_turnover, get_legal_colors};
+use crate::agents::mcts::build_graph_data;
+use crate::engine::{get_legal_moves, GameState, GamePhase, apply_move, apply_move_turnover, get_legal_colors, get_setup_legal_placements};
 use crate::models::{Side, PieceType};
 use rand::seq::SliceRandom;
 use rand::seq::IteratorRandom;
 use std::collections::HashMap;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 /// Total number of learnable parameters for QuickDiego.
@@ -39,11 +41,156 @@ pub struct QuickDiegoAgent {
     pub weights: [f64; NUM_PARAMS],
     /// Budget in ms for the MCTS color look-ahead (step 1-a).
     pub mcts_color_budget_ms: u64,
+    /// Buffered per-decision JSON records; flushed in `record_winner`.
+    game_buffer: Mutex<Vec<serde_json::Value>>,
+    /// Directory to write imitation JSON files. Empty string = do not record.
+    pub data_dir: String,
+    pub record_data: bool,
 }
 
 impl QuickDiegoAgent {
+    /// Standard constructor — no data recording.
     pub fn new(weights: [f64; NUM_PARAMS], mcts_color_budget_ms: u64) -> Self {
-        Self { weights, mcts_color_budget_ms }
+        Self::with_recording(weights, mcts_color_budget_ms, String::new(), false)
+    }
+
+    /// Constructor with imitation-data recording enabled.
+    pub fn with_recording(
+        weights: [f64; NUM_PARAMS],
+        mcts_color_budget_ms: u64,
+        data_dir: String,
+        record_data: bool,
+    ) -> Self {
+        Self { weights, mcts_color_budget_ms, game_buffer: Mutex::new(Vec::new()), data_dir, record_data }
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    //  Imitation-data recording
+    // ────────────────────────────────────────────────────────────────────────
+
+    /// Record the current graph state and the chosen move as a one-hot `pi`.
+    /// `chosen_key` must be a valid element of `move_keys` ("piece:target",
+    /// "COLOR:<c>", or "PASS").
+    fn record_decision(&self, gs: &GameState, chosen_key: &str) {
+        if !self.record_data || self.data_dir.is_empty() {
+            return;
+        }
+
+        let (x, edge_index, node_to_idx) = build_graph_data(gs);
+
+        // Build legal-move list (graph edges only — same as MCTS recording)
+        let mut move_keys: Vec<String> = Vec::new();
+        let mut moves_flat: Vec<i64> = Vec::new();
+
+        if gs.phase == GamePhase::Setup {
+            let placements = get_setup_legal_placements(gs);
+            for (p_id, targets) in placements {
+                let p = &gs.board.pieces[&p_id];
+                let stock_id = format!("STOCK_{:?}_{:?}", p.side, p.piece_type);
+                if let Some(&u) = node_to_idx.get(&stock_id) {
+                    for target in targets {
+                        if let Some(&v) = node_to_idx.get(&target) {
+                            move_keys.push(format!("{}:{}", p_id, target));
+                            moves_flat.push(u as i64);
+                            moves_flat.push(v as i64);
+                        }
+                    }
+                }
+            }
+        } else {
+            // Color-choice phase: enumerate graph-encodable moves for context
+            // (the color decision itself is not a graph edge, but we still want
+            // value-head training data from this state)
+            if !gs.is_new_turn {
+                let eligible = gs.get_eligible_piece_ids();
+                for p_id in eligible {
+                    let targets = get_legal_moves(gs, &p_id);
+                    for target in targets {
+                        let p = &gs.board.pieces[&p_id];
+                        let src_idx = if p.position == "returned" {
+                            let stock_id = format!("STOCK_{:?}_{:?}", p.side, p.piece_type);
+                            node_to_idx.get(&stock_id).copied()
+                        } else {
+                            node_to_idx.get(&p.position).copied()
+                        };
+                        if let Some(u) = src_idx {
+                            if let Some(&v) = node_to_idx.get(&target) {
+                                move_keys.push(format!("{}:{}", p_id, target));
+                                moves_flat.push(u as i64);
+                                moves_flat.push(v as i64);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Skip states with no graph-encodable moves (e.g. pure colour turns)
+        if move_keys.is_empty() {
+            return;
+        }
+
+        let legal_moves_flat: Vec<i64> = moves_flat;
+
+        // One-hot pi: 1.0 on chosen move, 0.0 elsewhere
+        let mut pi: std::collections::HashMap<String, f64> = move_keys.iter()
+            .map(|k| (k.clone(), 0.0))
+            .collect();
+        if pi.contains_key(chosen_key) {
+            pi.insert(chosen_key.to_string(), 1.0);
+        }
+        // If chosen_key not in graph moves (e.g. it was a COLOR/PASS action),
+        // the pi stays all-zero — the policy head gets no gradient for this
+        // step, but the value head still trains from z.
+
+        let data = serde_json::json!({
+            "x": x.into_raw_vec_and_offset().0,
+            "edge_index": edge_index.into_raw_vec_and_offset().0,
+            "legal_moves": legal_moves_flat,
+            "move_keys": move_keys,
+            "pi": pi,
+            "turn_side": format!("{:?}", gs.turn),
+        });
+
+        self.game_buffer.lock().unwrap().push(data);
+    }
+
+    /// Flush `game_buffer` to disk, annotating every record with `z`.
+    fn flush_buffer(&self, winner: Option<Side>) {
+        let mut buffer = self.game_buffer.lock().unwrap();
+        if buffer.is_empty() {
+            return;
+        }
+
+        let winner_str = match winner {
+            Some(Side::White) => "White",
+            Some(Side::Black) => "Black",
+            None => "draw",
+        };
+
+        let mut records: Vec<serde_json::Value> = Vec::new();
+        for mut entry in buffer.drain(..) {
+            let state_side = entry.get("turn_side")
+                .and_then(|v| v.as_str())
+                .unwrap_or("White");
+            let z = if winner_str == "draw" {
+                0.0
+            } else if winner_str == state_side {
+                1.0
+            } else {
+                -1.0
+            };
+            if let Some(obj) = entry.as_object_mut() {
+                obj.insert("z".to_string(), serde_json::json!(z));
+            }
+            records.push(entry);
+        }
+
+        let _ = std::fs::create_dir_all(&self.data_dir);
+        let filename = format!("{}/diego_{}.json", self.data_dir, uuid::Uuid::new_v4());
+        if let Ok(json_str) = serde_json::to_string(&records) {
+            let _ = std::fs::write(filename, json_str);
+        }
     }
 
     // ────────────────────────────────────────────────────────────────────────
@@ -515,6 +662,19 @@ impl QuickDiegoAgent {
     }
 }
 
+impl Drop for QuickDiegoAgent {
+    fn drop(&mut self) {
+        // Flush any remaining data if the game ended without calling record_winner
+        if self.record_data && !self.data_dir.is_empty() {
+            let buffer = self.game_buffer.lock().unwrap();
+            if !buffer.is_empty() {
+                drop(buffer); // release lock before flush
+                self.flush_buffer(None);
+            }
+        }
+    }
+}
+
 impl Agent for QuickDiegoAgent {
     fn name(&self) -> &str {
         "QuickDiego"
@@ -522,12 +682,16 @@ impl Agent for QuickDiegoAgent {
 
     fn choose_color<'a>(&self, state: &GameState, valid_colors: &'a [String]) -> &'a String {
         if valid_colors.len() == 1 {
+            // Still record for the value head (pi will be all-zero since there's
+            // no choice to encode, but z will be useful for training)
+            self.record_decision(state, &format!("COLOR:{}", valid_colors[0]));
             return &valid_colors[0];
         }
 
         // Step 1-a: check if any color leads to a direct goddess capture
         for color in valid_colors {
             if self.color_leads_to_win(state, color) {
+                self.record_decision(state, &format!("COLOR:{}", color));
                 return color;
             }
         }
@@ -542,7 +706,14 @@ impl Agent for QuickDiegoAgent {
                 best_idx = idx;
             }
         }
+        self.record_decision(state, &format!("COLOR:{}", valid_colors[best_idx]));
         &valid_colors[best_idx]
+    }
+
+    fn record_winner(&self, winner: Option<crate::models::Side>) {
+        if self.record_data && !self.data_dir.is_empty() {
+            self.flush_buffer(winner);
+        }
     }
 
     fn choose_move(
@@ -553,16 +724,8 @@ impl Agent for QuickDiegoAgent {
     ) -> AgentMove {
         // ── Step 0: Setup phase → placement ──
         if state.phase == GamePhase::Setup {
-            use crate::engine::get_setup_legal_placements;
             let placements = get_setup_legal_placements(state);
 
-            // Use the engine-computed placements as the authoritative source.
-            // For the Goddess step (setup_step == 0), the engine already guarantees
-            // via can_place_heroes_from_goddess that any returned target allows at
-            // least one valid Hero configuration afterwards. We still pick randomly
-            // (no positional heuristic during setup), but we use the engine's
-            // filtered set rather than the raw `all_moves` passed by the caller,
-            // which is belt-and-suspenders insurance against stale data.
             let safe_moves: std::collections::HashMap<String, Vec<String>> = if !placements.is_empty() {
                 placements
             } else {
@@ -571,15 +734,17 @@ impl Agent for QuickDiegoAgent {
 
             if safe_moves.is_empty() {
                 if pass_allowed {
+                    self.record_decision(state, "PASS");
                     return AgentMove::Pass;
                 }
-                // Nothing we can do — fall through to pass
                 return AgentMove::Pass;
             }
 
             let mut rng = rand::rng();
             let p_id = safe_moves.keys().choose(&mut rng).unwrap().clone();
             let target = safe_moves[&p_id].iter().choose(&mut rng).unwrap().clone();
+            let key = format!("{}:{}", p_id, target);
+            self.record_decision(state, &key);
             return AgentMove::Move { piece: p_id, target };
         }
 
@@ -595,6 +760,8 @@ impl Agent for QuickDiegoAgent {
             for target in targets {
                 let captures = Self::simulate_captures(state, p_id, target);
                 if captures.contains(&PieceType::Goddess) {
+                    let key = format!("{}:{}", p_id, target);
+                    self.record_decision(state, &key);
                     return AgentMove::Move {
                         piece: p_id.clone(),
                         target: target.clone(),
@@ -641,6 +808,8 @@ impl Agent for QuickDiegoAgent {
             // Sort by priority (lowest = best)
             mage_adj_deploys.sort_by_key(|(_p, _t, prio)| *prio);
             if let Some((piece, target, _)) = mage_adj_deploys.first() {
+                let key = format!("{}:{}", piece, target);
+                self.record_decision(state, &key);
                 return AgentMove::Move {
                     piece: piece.clone(),
                     target: target.clone(),
@@ -678,6 +847,8 @@ impl Agent for QuickDiegoAgent {
             }
 
             if !best_chain_piece.is_empty() {
+                let key = format!("{}:{}", best_chain_piece, best_chain_target);
+                self.record_decision(state, &key);
                 return AgentMove::Move {
                     piece: best_chain_piece,
                     target: best_chain_target,
@@ -706,15 +877,23 @@ impl Agent for QuickDiegoAgent {
                     piece: piece.clone(),
                     target: target.clone(),
                 };
-                return Self::goddess_failsafe(state, candidate, all_moves, &scored_moves, pass_allowed);
+                let result = Self::goddess_failsafe(state, candidate, all_moves, &scored_moves, pass_allowed);
+                let key = match &result {
+                    AgentMove::Move { piece, target } => format!("{}:{}", piece, target),
+                    AgentMove::Pass => "PASS".to_string(),
+                };
+                self.record_decision(state, &key);
+                return result;
             }
         }
 
-        // All moves end the turn. 
+        // All moves end the turn.
         // LOBBY PRIORITY: If we must end the turn, prefer deploying the Mage if possible.
         for (piece, target, _score, _ends) in &scored_moves {
             let p = &state.board.pieces[piece];
             if p.piece_type == PieceType::Mage && p.position == "returned" {
+                let key = format!("{}:{}", piece, target);
+                self.record_decision(state, &key);
                 return AgentMove::Move {
                     piece: piece.clone(),
                     target: target.clone(),
@@ -728,16 +907,24 @@ impl Agent for QuickDiegoAgent {
                 piece: piece.clone(),
                 target: target.clone(),
             };
-            return Self::goddess_failsafe(state, candidate, all_moves, &scored_moves, pass_allowed);
+            let result = Self::goddess_failsafe(state, candidate, all_moves, &scored_moves, pass_allowed);
+            let key = match &result {
+                AgentMove::Move { piece, target } => format!("{}:{}", piece, target),
+                AgentMove::Pass => "PASS".to_string(),
+            };
+            self.record_decision(state, &key);
+            return result;
         }
 
         // Fallback: pass if allowed, otherwise pick any move
         if pass_allowed {
+            self.record_decision(state, "PASS");
             AgentMove::Pass
         } else {
-            // Should not reach here if all_moves is non-empty
             let p_id = all_moves.keys().next().unwrap().clone();
             let target = all_moves[&p_id][0].clone();
+            let key = format!("{}:{}", p_id, target);
+            self.record_decision(state, &key);
             AgentMove::Move { piece: p_id, target }
         }
     }

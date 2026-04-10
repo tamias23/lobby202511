@@ -44,7 +44,12 @@ fn make_agent(name: &str, weights_str: Option<&String>, mcts_budget: u64, mcts_d
                     weights[i] = val;
                 }
             }
-            Arc::new(agents::quick_diego::QuickDiegoAgent::new(weights, diego_mcts_budget))
+            Arc::new(agents::quick_diego::QuickDiegoAgent::with_recording(
+                weights,
+                diego_mcts_budget,
+                mcts_data_dir,   // reuse the dir field; set by --diego-imitate-dir in main
+                mcts_record,     // reuse the record flag; true when --diego-imitate-dir is set
+            ))
         }
         "greedy_jack" => {
             let num = agents::greedy_jack::NUM_PARAMS;
@@ -129,7 +134,8 @@ async fn main() {
         println!();
         println!("  Agents: random, greedy_bob, greedy_jack, quick_diego, mcts");
         println!("  Flags:");
-        println!("      --mcts-no-record  Disable search data collection for MCTS");
+        println!("      --mcts-no-record       Disable search data collection for MCTS");
+        println!("      --diego-imitate-dir    Enable imitation-data recording for quick_diego agents");
         std::process::exit(1);
     }
 
@@ -182,8 +188,32 @@ async fn main() {
     
     let mcts_record = !args.contains(&"--mcts-no-record".to_string());
 
-    let white_agent = make_agent(&white_agent_name, white_weights, mcts_budget_white, mcts_data_dir.clone(), white_model_path, mcts_record, verbosity, mcts_threads_white, diego_mcts_budget);
-    let black_agent = make_agent(&black_agent_name, black_weights, mcts_budget_black, mcts_data_dir, black_model_path, mcts_record, verbosity, mcts_threads_black, diego_mcts_budget);
+    // --diego-imitate-dir activates behavioural-cloning data recording in QuickDiegoAgent.
+    // When set, the quick_diego agent records graph states + one-hot pi + z for every
+    // decision, writing the same JSON format as MCTS so train_mcts.py can consume it.
+    let diego_imitate_dir = args.iter()
+        .position(|a| a == "--diego-imitate-dir")
+        .and_then(|i| args.get(i + 1))
+        .cloned();
+    let diego_record = diego_imitate_dir.is_some();
+    // For quick_diego we (re)use the mcts_data_dir slot to pass the imitation dir.
+    // MCTS agents are unaffected: they still use mcts_data_dir via their own flag.
+    let diego_data_dir = diego_imitate_dir.unwrap_or_default();
+
+    let white_agent = make_agent(
+        &white_agent_name, white_weights, mcts_budget_white,
+        if white_agent_name == "quick_diego" { diego_data_dir.clone() } else { mcts_data_dir.clone() },
+        white_model_path,
+        if white_agent_name == "quick_diego" { diego_record } else { mcts_record },
+        verbosity, mcts_threads_white, diego_mcts_budget,
+    );
+    let black_agent = make_agent(
+        &black_agent_name, black_weights, mcts_budget_black,
+        if black_agent_name == "quick_diego" { diego_data_dir.clone() } else { mcts_data_dir.clone() },
+        black_model_path,
+        if black_agent_name == "quick_diego" { diego_record } else { mcts_record },
+        verbosity, mcts_threads_black, diego_mcts_budget,
+    );
 
     if let Some(batch_pos) = args.iter().position(|a| a == "--batch") {
         let n_games: u32 = args.get(batch_pos + 1)
