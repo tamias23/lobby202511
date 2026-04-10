@@ -122,13 +122,20 @@ def load_agents(filepath):
                 mcts_threads = line[4].strip() if len(line) > 4 else ""
 
                 diego_mcts_budget_val = None
-                if agent_type == "greedy_bob" or agent_type == "quick_diego":
+                if agent_type == "greedy_bob":
                     # Data column is a quoted comma-separated weight string
                     data = [float(x) for x in raw_data.split(',') if x.strip()]
-                    if agent_type == "quick_diego":
-                        # MctsBudget column is reused as diego MCTS color look-ahead budget
-                        diego_mcts_budget_val = mcts_budget or None
-                        mcts_budget = ""  # not used for MCTS search
+                elif agent_type == "quick_diego":
+                    # MctsBudget column is reused as diego MCTS color look-ahead budget
+                    diego_mcts_budget_val = mcts_budget or None
+                    mcts_budget = ""  # not used for MCTS search
+                    if raw_data.endswith('.json'):
+                        # Data column is a path to a JSON file with {"weights": [...]}
+                        with open(raw_data, 'r') as wf:
+                            data = json.loads(wf.read())["weights"]
+                    else:
+                        # Data column is inline comma-separated floats
+                        data = [float(x) for x in raw_data.split(',') if x.strip()]
                 else:
                     data = raw_data
 
@@ -140,6 +147,33 @@ def load_agents(filepath):
                 print(f"Skipping line due to parse error: {line} -> {e}")
 
     return agents
+
+
+def validate_agent_files(agents):
+    """Check that all file-based agents have valid, existing model/weight files.
+
+    Exits with an error message if any file is missing.
+    """
+    errors = []
+    for a in agents:
+        if a.type in ("mcts", "greedy_jack"):
+            # data is a file path string
+            if not os.path.isfile(a.data):
+                errors.append(f"  {a.name} ({a.type}): file not found: {a.data}")
+        elif a.type == "quick_diego" and isinstance(a.data, list):
+            # Weights were already loaded (either from JSON file or inline)
+            if len(a.data) == 0:
+                errors.append(f"  {a.name} ({a.type}): empty weight vector")
+        elif a.type == "greedy_bob" and isinstance(a.data, list):
+            if len(a.data) == 0:
+                errors.append(f"  {a.name} ({a.type}): empty weight vector")
+
+    if errors:
+        print(f"\nERROR: {len(errors)} agent(s) failed validation:")
+        for e in errors:
+            print(e)
+        sys.exit(1)
+    print(f"✓ All {len(agents)} agents validated successfully.")
 
 
 # ---------------------------------------------------------------------------
@@ -311,6 +345,7 @@ async def run_round(r, agents, sem, board_path, temp_dir):
 async def main():
     agents = load_agents(args.agents)
     print(f"Loaded {len(agents)} agents from {args.agents}.")
+    validate_agent_files(agents)
     for a in agents:
         extra = ""
         if a.type == "mcts":

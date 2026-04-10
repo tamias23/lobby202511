@@ -179,11 +179,16 @@ def load_agents(filepath):
                 mcts_threads = line[4].strip() if len(line) > 4 else ""
 
                 diego_mcts_budget_val = None
-                if agent_type in ("greedy_bob", "quick_diego"):
+                if agent_type == "greedy_bob":
                     data = [float(x) for x in raw_data.split(",") if x.strip()]
-                    if agent_type == "quick_diego":
-                        diego_mcts_budget_val = mcts_budget or None
-                        mcts_budget = ""
+                elif agent_type == "quick_diego":
+                    diego_mcts_budget_val = mcts_budget or None
+                    mcts_budget = ""
+                    if raw_data.endswith('.json'):
+                        with open(raw_data, 'r') as wf:
+                            data = json.loads(wf.read())["weights"]
+                    else:
+                        data = [float(x) for x in raw_data.split(",") if x.strip()]
                 else:
                     data = raw_data
 
@@ -197,6 +202,31 @@ def load_agents(filepath):
                 print(f"Skipping line due to parse error: {line} -> {e}")
 
     return agents
+
+
+def validate_agent_files(agents):
+    """Check that all file-based agents have valid, existing model/weight files.
+
+    Exits with an error message if any file is missing.
+    """
+    errors = []
+    for a in agents:
+        if a.type in ("mcts", "greedy_jack"):
+            if not os.path.isfile(a.data):
+                errors.append(f"  {a.name} ({a.type}): file not found: {a.data}")
+        elif a.type == "quick_diego" and isinstance(a.data, list):
+            if len(a.data) == 0:
+                errors.append(f"  {a.name} ({a.type}): empty weight vector")
+        elif a.type == "greedy_bob" and isinstance(a.data, list):
+            if len(a.data) == 0:
+                errors.append(f"  {a.name} ({a.type}): empty weight vector")
+
+    if errors:
+        logger.error(f"\nERROR: {len(errors)} agent(s) failed validation:")
+        for e in errors:
+            logger.error(e)
+        sys.exit(1)
+    logger.info(f"✓ All {len(agents)} agents validated successfully.")
 
 
 def validate_mcts_agents(agents):
@@ -444,6 +474,7 @@ def render_trend(win_rate_history):
 async def main():
     agents = load_agents(args.agents)
     logger.info(f"Loaded {len(agents)} agent entries from {args.agents}.")
+    validate_agent_files(agents)
     for a in agents:
         extra = ""
         if a.type == "mcts":
