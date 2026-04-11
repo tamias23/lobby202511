@@ -362,7 +362,7 @@ function renderBoard(container, pieces, isInitial = false) {
         
         pElement.setAttribute("d", d);
         pElement.setAttribute("fill", getHexColor(poly.color));
-        pElement.setAttribute("stroke", "#1e293b");
+        pElement.setAttribute("stroke", "var(--card-bg-solid)");
         pElement.setAttribute("stroke-width", "1");
         pElement.setAttribute("data-poly-id", key);
         
@@ -398,14 +398,14 @@ function renderBoard(container, pieces, isInitial = false) {
         if (occupant) {
             // Capture indicator
             circle.setAttribute("r", "16");
-            circle.setAttribute("fill", "rgba(239, 68, 68, 0.4)");
-            circle.setAttribute("stroke", "#ef4444");
+            circle.setAttribute("fill", "color-mix(in srgb, var(--danger) 40%, transparent)");
+            circle.setAttribute("stroke", "var(--danger)");
             circle.setAttribute("stroke-width", "2");
         } else {
             // Move indicator
             circle.setAttribute("r", "5");
-            circle.setAttribute("fill", "rgba(0, 0, 0, 0.4)");
-            circle.setAttribute("stroke", "rgba(0, 0, 0, 0.2)");
+            circle.setAttribute("fill", "color-mix(in srgb, var(--text-main) 40%, transparent)");
+            circle.setAttribute("stroke", "var(--border)");
         }
         circle.style.pointerEvents = 'none';
         boardGroup.appendChild(circle);
@@ -735,12 +735,12 @@ function drawPieceSVG(type, side, cx, cy, isSelected = false) {
 
 function getHexColor(colorName) {
     const colors = {
-        'orange': '#f97316',
-        'blue': '#3b82f6',
-        'green': '#22c55e',
-        'grey': '#64748b',
-        'red': '#ef4444',
-        'black': '#1e293b'
+        'orange': '#f27813', // Matches main app accent
+        'blue':   '#46b0d4', // Matches main app primary
+        'green':  '#2ecc71', // Matches main app success
+        'grey':   '#94a3b8', // Matches main app muted
+        'red':    '#ef4444', // Matches main app danger
+        'black':  'var(--card-bg-solid)'
     };
     return colors[colorName.toLowerCase()] || '#ccc';
 }

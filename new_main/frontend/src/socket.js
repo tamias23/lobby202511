@@ -5,5 +5,22 @@ import { io } from "socket.io-client";
 const URL = ""; 
 
 export const socket = io(URL, {
-    autoConnect: false
+    autoConnect: false,
+    auth: {
+        // JWT token is injected before connect() is called
+        token: localStorage.getItem('jwt_token') || null,
+    },
 });
+
+/**
+ * Update the socket auth token and reconnect if needed.
+ * Called after login (set token) and logout (clear token).
+ */
+export function setSocketToken(token) {
+    socket.auth = { ...socket.auth, token };
+    if (socket.connected) {
+        // Disconnect and reconnect so the new token is sent in the handshake
+        socket.disconnect();
+        socket.connect();
+    }
+}

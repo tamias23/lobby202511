@@ -25,6 +25,7 @@ const GamePage = ({ user }) => {
         spectator: false,
         whiteRating: stateFromNav.initialState?.whiteRating,
         blackRating: stateFromNav.initialState?.blackRating,
+        tournamentId: stateFromNav.tournamentId || null,
       });
       setLoading(false);
     } else if (stateFromNav && stateFromNav.spectator) {
@@ -32,6 +33,7 @@ const GamePage = ({ user }) => {
       socket.emit('join_game_by_hash', { hash, spectator: true });
     } else {
       // Direct URL navigation — ask server what our role is
+      // Pass tournamentId in state if we came from a tournament room
       socket.emit('join_game_by_hash', { hash, spectator: false, userId: user?.id || null });
     }
 
@@ -52,6 +54,7 @@ const GamePage = ({ user }) => {
         blackName: data.initialState?.blackName,
         whiteRating: data.initialState?.whiteRating,
         blackRating: data.initialState?.blackRating,
+        tournamentId: data.tournamentId || null,
       });
       setLoading(false);
     };
@@ -71,14 +74,23 @@ const GamePage = ({ user }) => {
     );
   }
 
+  // Grab tournamentId from nav state (set when coming from TournamentRoom)
+  const tournamentId = gameInfo?.tournamentId || location.state?.tournamentId || null;
+
   if (error) {
     return (
       <div className="game-page-error glass-panel">
         <h2>Game not found</h2>
         <p>{error}</p>
-        <button onClick={() => navigate('/')} className="back-to-lobby-btn">
-          ← Back to Lobby
-        </button>
+        {tournamentId ? (
+          <button onClick={() => navigate(`/tournament/${tournamentId}`)} className="back-to-lobby-btn">
+            ← Back to Tournament
+          </button>
+        ) : (
+          <button onClick={() => navigate('/')} className="back-to-lobby-btn">
+            ← Back to Lobby
+          </button>
+        )}
       </div>
     );
   }
@@ -107,6 +119,7 @@ const GamePage = ({ user }) => {
         blackName={gameInfo.blackName}
         whiteRating={gameInfo.whiteRating}
         blackRating={gameInfo.blackRating}
+        tournamentId={tournamentId}
       />
     </div>
   );

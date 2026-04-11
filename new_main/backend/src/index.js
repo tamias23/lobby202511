@@ -1,11 +1,14 @@
-require('dotenv').config();
+require('./utils/configLoader');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
-const { initDb, getUsersDb } = require('./db');
+const { initDb, getUsersDb, getGamesDb, getTournamentsDb } = require('./db');
+const { restoreFromGcs, startGcsSync } = require('./gcsSync');
+const tournamentManager = require('./tournament/tournamentManager');
 const { generateGuestId } = require('./utils/auth');
 const fs = require('fs');
 const path = require('path');
@@ -40,11 +43,25 @@ try {
     throw err;
 }
 
-const { saveMatchResult } = require('./utils/gameStorage');
+const { saveMatchResult: _saveMatchResult } = require('./utils/gameStorage');
+
+// Wrapper: after saving a match result, also notify the tournament system (if applicable)
+const saveMatchResult = async (gameId, timestamp, whiteName, blackName, whitePlayerId, blackPlayerId, boardId, winner, moves, io) => {
+    await _saveMatchResult(gameId, timestamp, whiteName, blackName, whitePlayerId, blackPlayerId, boardId, winner, moves, io);
+    // Hook: if this game belongs to a tournament, update it
+    if (TOURNAMENTS_ENABLED) {
+        try {
+            await tournamentManager.onGameComplete(gameId, winner);
+        } catch (e) {
+            console.error('[Tournament] onGameComplete error:', e.message);
+        }
+    }
+};
 
 // Helper to fetch a player's rating from the database
 async function fetchUserRating(userId) {
-    if (!userId || userId.startsWith('guest_')) return null;
+    if (!userId || (userId.startsWith('guest_') && !userId.startsWith('bot_'))) return null;
+    // Allow bots to have ratings fetched
     try {
         const usersDb = getUsersDb();
         const res = await usersDb.runAndReadAll(
@@ -59,11 +76,52 @@ async function fetchUserRating(userId) {
 }
 
 // --- BOT SERVER INTEGRATION ---
-const BOT_SERVER_URL = process.env.BOT_SERVER_URL || 'http://localhost:5001';
+const BOT_SERVER_URL       = process.env.BOT_SERVER_URL || 'http://localhost:5001';
+const BOT_POLL_INTERVAL_MS = parseInt(process.env.BOT_POLL_INTERVAL_MS) || 60000;
+const BOT_MOVE_DELAY_MS    = parseInt(process.env.BOT_MOVE_DELAY_MS) || 600;
+const MCTS_DEFAULT_BUDGET  = parseInt(process.env.MCTS_DEFAULT_BUDGET_MS) || 500;
+
+// Background Bot Matches
+const BOT_MATCH_INTERVAL_MS = parseInt(process.env.BOT_MATCH_INTERVAL_MS) || 90000;
+const BOT_MATCH_PROBABILITY = parseFloat(process.env.BOT_MATCH_PROBABILITY) || 0.5;
+
+// JWT config
+const JWT_SECRET = process.env.JWT_SECRET || 'change_me_in_production';
+const JWT_EXPIRY_DAYS = parseInt(process.env.JWT_EXPIRY_DAYS) || 7;
+
+/**
+ * Deep-sanitize an object so it's safe to emit over socket.io.
+ * DuckDB returns BigInt for integer columns; JSON.stringify chokes on them.
+ * This converts BigInt → Number everywhere in the payload.
+ */
+function sanitizeBigInt(val) {
+    if (typeof val === 'bigint') return Number(val);
+    if (Array.isArray(val)) return val.map(sanitizeBigInt);
+    if (val !== null && typeof val === 'object') {
+        const out = {};
+        for (const k of Object.keys(val)) out[k] = sanitizeBigInt(val[k]);
+        return out;
+    }
+    return val;
+}
+
+// Tournament config
+const TOURNAMENTS_ENABLED = process.env.TOURNAMENTS_ENABLED !== 'false';
+
+/**
+ * Build a short, friendly bot display name from its model filename.
+ * e.g. agent_type='quick_diego', model_name='jixxBwEv95' → '🤖 jixx'
+ */
+function makeBotDisplayName(agentType, modelName) {
+    const shortId = (modelName || agentType || 'bot').slice(0, 4);
+    return `🤖 ${shortId}`;
+}
 
 // Available bot models (fetched from bot server) and busy tracking
 let availableBots = [];  // [{agent_type, model_name, display_name}]
 const busyBots = new Map(); // key: "agent_type:model_name" → gameId
+const registeredBotsCache = new Set(); // set of "agent_type:model_name" strings already registered/checked
+const botRatingsCache = new Map();  // botId → { rating, ratingDeviation }
 
 async function fetchAvailableBots() {
     const prevCount = availableBots.length;
@@ -71,7 +129,17 @@ async function fetchAvailableBots() {
         const resp = await fetch(`${BOT_SERVER_URL}/models`, { signal: AbortSignal.timeout(3000) });
         if (resp.ok) {
             const data = await resp.json();
-            availableBots = data.models || [];
+            const models = data.models || [];
+            
+            // Check for TRULY new bots we haven't seen in this session
+            const newBots = models.filter(b => !registeredBotsCache.has(getBotKey(b.agent_type, b.model_name)));
+            
+            availableBots = models;
+
+            if (newBots.length > 0) {
+                console.log(`[Bot] ${newBots.length} new bot models noticed: ${newBots.map(b => b.model_name).join(', ')}`);
+                ensureBotsRegistered(newBots).catch(err => console.error("[Bot] New bot registration failed:", err));
+            }
         } else {
             availableBots = [];
         }
@@ -83,27 +151,160 @@ async function fetchAvailableBots() {
         console.log(`[Bot] Bot availability changed: ${prevCount} → ${availableBots.length} models`);
         if (typeof io !== 'undefined') broadcastLobbyUpdate(io);
     }
+    // Always refresh ratings from DB
+    refreshBotRatings().catch(() => {});
 }
 
-// Poll every 10s so the panel appears/disappears quickly when the bot server starts/stops
-fetchAvailableBots();
-setInterval(fetchAvailableBots, 60000);
+/** Fetch current ratings for all known bots from the DB into botRatingsCache */
+async function refreshBotRatings() {
+    if (availableBots.length === 0) return;
+    try {
+        const usersDb = getUsersDb();
+        const con = await usersDb.connect();
+        for (const bot of availableBots) {
+            const botId = `bot_${bot.agent_type}_${bot.model_name}`;
+            const r = await con.runAndReadAll(
+                `SELECT rating, rating_deviation FROM users WHERE id = ?`, [botId]
+            );
+            const rows = r.getRows();
+            if (rows.length > 0) {
+                botRatingsCache.set(botId, {
+                    rating: Math.round(Number(rows[0][0]) || 1500),
+                    ratingDeviation: Math.round(Number(rows[0][1]) || 350),
+                });
+            }
+        }
+    } catch (e) {
+        // Non-fatal
+    }
+}
+
+async function ensureBotsRegistered(bots) {
+    if (!bots || bots.length === 0) return;
+    try {
+        const usersDb = getUsersDb();
+        const con = await usersDb.connect();
+        for (const bot of bots) {
+            const botKey = getBotKey(bot.agent_type, bot.model_name);
+            const botId = `bot_${bot.agent_type}_${bot.model_name}`;
+            const botName = makeBotDisplayName(bot.agent_type, bot.model_name);
+            
+            const existing = await con.runAndReadAll(`SELECT id FROM users WHERE id = ?`, [botId]);
+            if (existing.getRows().length === 0) {
+                console.log(`[Bot] Registering new bot in DB: ${botId}`);
+                await con.run(`
+                    INSERT INTO users (id, username, email, role, is_verified, rating)
+                    VALUES (?, ?, ?, 'bot', 1, 1500)
+                `, [botId, botName, `${botId}@internal`]);
+                
+                try {
+                    await con.run(`INSERT INTO profiles (user_id) VALUES (?)`, [botId]);
+                } catch (_) { /* profile might already exist if table was partially wiped */ }
+            }
+            // Mark as checked to avoid re-checking DB in this session
+            registeredBotsCache.add(botKey);
+        }
+    } catch (e) {
+        console.error(`[Bot] Bot registration error:`, e.message);
+    }
+}
+
+/**
+ * Periodically attempts to start a match between two random idle bots.
+ */
+async function startRandomBotMatch() {
+    if (Math.random() > BOT_MATCH_PROBABILITY) {
+        console.log(`[BotMatch] Coin flip (prob ${BOT_MATCH_PROBABILITY}) said NO.`);
+        return;
+    }
+    
+    // Find idle bots
+    const idleBots = availableBots.filter(b => !busyBots.has(getBotKey(b.agent_type, b.model_name)));
+    
+    if (idleBots.length < 2) {
+        console.log(`[BotMatch] Coin flip YES, but not enough idle bots (${idleBots.length}).`);
+        return;
+    }
+    
+    // Pick 2 random bots
+    const shuffled = [...idleBots].sort(() => 0.5 - Math.random());
+    const bot1 = shuffled[0];
+    const bot2 = shuffled[1];
+    
+    const bot1Key = getBotKey(bot1.agent_type, bot1.model_name);
+    const bot2Key = getBotKey(bot2.agent_type, bot2.model_name);
+    
+    const bot1Id = `bot_${bot1.agent_type}_${bot1.model_name}`;
+    const bot1Name = makeBotDisplayName(bot1.agent_type, bot1.model_name);
+    
+    const bot2Id = `bot_${bot2.agent_type}_${bot2.model_name}`;
+    const bot2Name = makeBotDisplayName(bot2.agent_type, bot2.model_name);
+    
+    console.log(`[BotMatch] Coin flip YES! Starting match between ${bot1Name} and ${bot2Name}`);
+    
+    const whiteBot = { socketId: null, userId: bot1Id, username: bot1Name, role: 'bot' };
+    const blackBot = { socketId: null, userId: bot2Id, username: bot2Name, role: 'bot' };
+    
+    // Time control 15+10
+    const { hash, gameData } = await createGame(whiteBot, blackBot, { minutes: 15, increment: 10 });
+    
+    // Configure game for two bots
+    gameData.whiteBotConfig = { type: bot1.agent_type, modelName: bot1.model_name };
+    gameData.whiteBotKey = bot1Key;
+    gameData.whiteDisconnectedAt = null;
+    
+    gameData.blackBotConfig = { type: bot2.agent_type, modelName: bot2.model_name };
+    gameData.blackBotKey = bot2Key;
+    gameData.blackDisconnectedAt = null;
+    
+    gameData.botThinking = false;
+    
+    // Mark bots as busy
+    busyBots.set(bot1Key, hash);
+    busyBots.set(bot2Key, hash);
+    
+    broadcastLobbyUpdate(io);
+    
+    // Trigger first move (white bot always goes first in setup)
+    setImmediate(() => triggerBotMoveIfNeeded(hash));
+}
+
+// Bot polling and background matches are started AFTER the DB is ready (see initDb().then below)
 
 function getBotKey(agentType, modelName) {
     return `${agentType}:${modelName}`;
 }
 
 function getBotsForLobby() {
-    return availableBots.map(b => ({
-        ...b,
-        busy: busyBots.has(getBotKey(b.agent_type, b.model_name)),
-    }));
+    return availableBots.map(b => {
+        const botId = `bot_${b.agent_type}_${b.model_name}`;
+        const ratingInfo = botRatingsCache.get(botId);
+        // Always use our canonical display name (🤖 xxxx)
+        const displayName = makeBotDisplayName(b.agent_type, b.model_name);
+        return {
+            ...b,
+            display_name: displayName,
+            rating: ratingInfo?.rating ?? 1500,
+            ratingDeviation: ratingInfo?.ratingDeviation ?? 350,
+            busy: busyBots.has(getBotKey(b.agent_type, b.model_name)),
+        };
+    });
 }
 
 function releaseBotIfNeeded(game) {
-    if (game && game.botKey) {
+    if (!game) return;
+    if (game.whiteBotKey) {
+        busyBots.delete(game.whiteBotKey);
+        console.log(`[Bot] Released white bot ${game.whiteBotKey}`);
+    }
+    if (game.blackBotKey) {
+        busyBots.delete(game.blackBotKey);
+        console.log(`[Bot] Released black bot ${game.blackBotKey}`);
+    }
+    // Backward compatibility for old single-bot games (if any remain in memory)
+    if (game.botKey && !game.whiteBotKey && !game.blackBotKey) {
         busyBots.delete(game.botKey);
-        console.log(`[Bot] Released bot ${game.botKey}`);
+        console.log(`[Bot] Released legacy bot ${game.botKey}`);
     }
 }
 
@@ -112,10 +313,14 @@ function releaseBotIfNeeded(game) {
  * @returns {Promise<{action, piece, target, color}>}
  */
 async function requestBotMove(game) {
+    const currentTurn = game.turn;
+    const config = currentTurn === 'white' ? game.whiteBotConfig : game.blackBotConfig;
+    if (!config) throw new Error(`No bot config for turn ${currentTurn}`);
+
     const payload = {
-        agent_type: game.botConfig.type,
-        model_name: game.botConfig.modelName || null,
-        mcts_budget_ms: game.botConfig.budgetMs || 500,
+        agent_type: config.type,
+        model_name: config.modelName || null,
+        mcts_budget_ms: config.budgetMs || MCTS_DEFAULT_BUDGET,
         game_state: {
             board: game.board,
             pieces: game.pieces,
@@ -133,7 +338,7 @@ async function requestBotMove(game) {
             setup_placements_this_turn: game.setupPlacementsThisTurn || 0,
         }
     };
-
+    
     const resp = await fetch(`${BOT_SERVER_URL}/move`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -163,28 +368,25 @@ function emitGameUpdate(gameId, game, extra = {}) {
  */
 async function triggerBotMoveIfNeeded(gameId) {
     const game = lobby.activeGames.get(gameId);
-    if (!game || !game.botSide || game.phase === 'GameOver') {
-        console.log(`[Bot] triggerBotMoveIfNeeded(${gameId}): SKIP — game=${!!game}, botSide=${game?.botSide}, phase=${game?.phase}`);
-        return;
-    }
-    if (game.turn !== game.botSide) {
-        console.log(`[Bot] triggerBotMoveIfNeeded(${gameId}): SKIP — turn=${game.turn} !== botSide=${game.botSide}`);
-        return;
+    if (!game || game.phase === 'GameOver') return;
+
+    const currentTurn = game.turn;
+    const botConfig = currentTurn === 'white' ? game.whiteBotConfig : game.blackBotConfig;
+
+    if (!botConfig) {
+        return; // Not a bot's turn
     }
     if (game.botThinking) {
-        console.log(`[Bot] triggerBotMoveIfNeeded(${gameId}): SKIP — already thinking`);
-        return;
+        return; // already processing a move
     }
 
-    console.log(`[Bot] triggerBotMoveIfNeeded(${gameId}): STARTING — phase=${game.phase}, turn=${game.turn}, botSide=${game.botSide}, isNewTurn=${game.isNewTurn}`);
+
     game.botThinking = true;
     try {
         // ── Setup phase: call bot server for each piece placement ──
         if (game.phase === 'Setup') {
             // Ask the bot server for one placement at a time
-            console.log(`[Bot] Setup: calling bot server for gameId=${gameId}, step=${game.setupStep}, turn=${game.turn}`);
             const botMove = await requestBotMove(game);
-            console.log(`[Bot] Setup: bot server responded: ${JSON.stringify(botMove)}`);
             const currentGame = lobby.activeGames.get(gameId);
             if (!currentGame || currentGame.phase === 'GameOver') return;
 
@@ -219,10 +421,9 @@ async function triggerBotMoveIfNeeded(gameId) {
                         moves: currentGame.moves || [],
                     });
 
-                    console.log(`[Bot] Setup placement: ${botMove.piece} → ${botMove.target}`);
                 }
                 // Continue placing pieces (small delay so the human sees each one)
-                setTimeout(() => triggerBotMoveIfNeeded(gameId), 600);
+                setTimeout(() => triggerBotMoveIfNeeded(gameId), BOT_MOVE_DELAY_MS);
                 return;
 
             } else if (botMove.action === 'setup_done') {
@@ -273,25 +474,24 @@ async function triggerBotMoveIfNeeded(gameId) {
                         moves: currentGame.moves || [],
                 });
 
-                console.log(`[Bot] Setup turn ended: phase=${currentGame.phase}, setupStep=${currentGame.setupStep}, turn=${currentGame.turn}`);
 
                 // If still the bot's turn (more setup steps or just transitioned to Playing)
-                if (currentGame.turn === currentGame.botSide) {
-                    setImmediate(() => triggerBotMoveIfNeeded(gameId));
-                }
+                // If the next turn is a bot's turn, trigger it
+                setImmediate(() => triggerBotMoveIfNeeded(gameId));
                 return;
             }
         }
 
-
         // ── Playing phase: ask the Bot Server ──
-        console.log(`[Bot] Playing: calling bot server for gameId=${gameId}, turn=${game.turn}, isNewTurn=${game.isNewTurn}`);
-        const botMove = await requestBotMove(game);
-        console.log(`[Bot] Playing: bot server responded: ${JSON.stringify(botMove)}`);
-
-        // Re-fetch game after await (might have been deleted)
+        // Re-fetch game so we always send the latest state, not the one captured at function entry.
         const currentGame = lobby.activeGames.get(gameId);
         if (!currentGame || currentGame.phase === 'GameOver') return;
+
+        const botMove = await requestBotMove(currentGame);
+
+        // Re-fetch again after await in case the game was deleted while waiting
+        const freshGame = lobby.activeGames.get(gameId);
+        if (!freshGame || freshGame.phase === 'GameOver') return;
 
         if (botMove.action === 'color') {
             // Bot chose a color
@@ -300,160 +500,161 @@ async function triggerBotMoveIfNeeded(gameId) {
                 color: botMove.color
             });
             // Apply it server-side too
-            const fakeSocket = { id: 'bot' };
             const response = selectColorNapi({
-                boardJson: JSON.stringify(currentGame.board),
-                piecesJson: JSON.stringify(currentGame.pieces),
+                boardJson: JSON.stringify(freshGame.board),
+                piecesJson: JSON.stringify(freshGame.pieces),
                 color: botMove.color,
-                turn: currentGame.turn,
-                phase: currentGame.phase,
-                setupStep: currentGame.setupStep,
-                colorChosen: currentGame.colorChosen || {},
-                colorsEverChosen: currentGame.colorsEverChosen || [],
-                turnCounter: currentGame.turnCounter || 0,
-                isNewTurn: currentGame.isNewTurn,
-                movesThisTurn: currentGame.movesThisTurn || 0,
-                lockedSequencePiece: currentGame.lockedSequencePiece || undefined,
-                heroeTakeCounter: currentGame.heroeTakeCounter || 0,
+                turn: freshGame.turn,
+                phase: freshGame.phase,
+                setupStep: freshGame.setupStep,
+                colorChosen: freshGame.colorChosen || {},
+                colorsEverChosen: freshGame.colorsEverChosen || [],
+                turnCounter: freshGame.turnCounter || 0,
+                isNewTurn: freshGame.isNewTurn,
+                movesThisTurn: freshGame.movesThisTurn || 0,
+                lockedSequencePiece: freshGame.lockedSequencePiece || undefined,
+                heroeTakeCounter: freshGame.heroeTakeCounter || 0,
             });
-            currentGame.pieces = JSON.parse(response.piecesJson);
-            currentGame.turn = response.turn;
-            currentGame.colorChosen = response.colorChosen;
-            currentGame.colorsEverChosen = response.colorsEverChosen;
-            currentGame.mageUnlocked = response.mageUnlocked;
-            currentGame.phase = response.phase;
-            currentGame.setupStep = response.setupStep;
-            currentGame.turnCounter = response.turnCounter;
-            currentGame.isNewTurn = response.isNewTurn;
-            currentGame.movesThisTurn = response.movesThisTurn;
-            currentGame.lockedSequencePiece = response.lockedSequencePiece;
-            currentGame.heroeTakeCounter = response.heroeTakeCounter;
+            freshGame.pieces = JSON.parse(response.piecesJson);
+            freshGame.turn = response.turn;
+            freshGame.colorChosen = response.colorChosen;
+            freshGame.colorsEverChosen = response.colorsEverChosen;
+            freshGame.mageUnlocked = response.mageUnlocked;
+            freshGame.phase = response.phase;
+            freshGame.setupStep = response.setupStep;
+            freshGame.turnCounter = response.turnCounter;
+            freshGame.isNewTurn = response.isNewTurn;
+            freshGame.movesThisTurn = response.movesThisTurn;
+            freshGame.lockedSequencePiece = response.lockedSequencePiece;
+            freshGame.heroeTakeCounter = response.heroeTakeCounter;
             io.to(gameId).emit('game_update', {
-                pieces: currentGame.pieces, turn: currentGame.turn,
-                colorChosen: currentGame.colorChosen, colorsEverChosen: currentGame.colorsEverChosen,
-                mageUnlocked: currentGame.mageUnlocked, phase: currentGame.phase,
-                setupStep: currentGame.setupStep, turnCounter: currentGame.turnCounter,
-                isNewTurn: currentGame.isNewTurn, movesThisTurn: currentGame.movesThisTurn,
-                lockedSequencePiece: currentGame.lockedSequencePiece || null,
-                heroeTakeCounter: currentGame.heroeTakeCounter,
-                clocks: currentGame.clocks, lastTurnTimestamp: currentGame.lastTurnTimestamp,
-                        moves: currentGame.moves || [],
+                pieces: freshGame.pieces, turn: freshGame.turn,
+                colorChosen: freshGame.colorChosen, colorsEverChosen: freshGame.colorsEverChosen,
+                mageUnlocked: freshGame.mageUnlocked, phase: freshGame.phase,
+                setupStep: freshGame.setupStep, turnCounter: freshGame.turnCounter,
+                isNewTurn: freshGame.isNewTurn, movesThisTurn: freshGame.movesThisTurn,
+                lockedSequencePiece: freshGame.lockedSequencePiece || null,
+                heroeTakeCounter: freshGame.heroeTakeCounter,
+                clocks: freshGame.clocks, lastTurnTimestamp: freshGame.lastTurnTimestamp,
+                        moves: freshGame.moves || [],
             });
             // Bot may need to make more moves in same turn
-            setTimeout(() => triggerBotMoveIfNeeded(gameId), 600);
+            setTimeout(() => triggerBotMoveIfNeeded(gameId), BOT_MOVE_DELAY_MS);
 
         } else if (botMove.action === 'move' && botMove.piece && botMove.target) {
             // Bot made a move
-            const oldTurn = currentGame.turn;
+            const oldTurn = freshGame.turn;
             const response = applyMoveNapi({
-                boardJson: JSON.stringify(currentGame.board),
-                piecesJson: JSON.stringify(currentGame.pieces),
+                boardJson: JSON.stringify(freshGame.board),
+                piecesJson: JSON.stringify(freshGame.pieces),
                 pieceId: botMove.piece,
                 targetPoly: botMove.target,
-                turn: currentGame.turn,
-                phase: currentGame.phase,
-                setupStep: currentGame.setupStep,
-                colorChosen: currentGame.colorChosen || {},
-                colorsEverChosen: currentGame.colorsEverChosen || [],
-                turnCounter: currentGame.turnCounter || 0,
-                isNewTurn: currentGame.isNewTurn,
-                movesThisTurn: currentGame.movesThisTurn || 0,
-                lockedSequencePiece: currentGame.lockedSequencePiece || undefined,
-                heroeTakeCounter: currentGame.heroeTakeCounter || 0,
+                turn: freshGame.turn,
+                phase: freshGame.phase,
+                setupStep: freshGame.setupStep,
+                colorChosen: freshGame.colorChosen || {},
+                colorsEverChosen: freshGame.colorsEverChosen || [],
+                turnCounter: freshGame.turnCounter || 0,
+                isNewTurn: freshGame.isNewTurn,
+                movesThisTurn: freshGame.movesThisTurn || 0,
+                lockedSequencePiece: freshGame.lockedSequencePiece || undefined,
+                heroeTakeCounter: freshGame.heroeTakeCounter || 0,
             });
-            currentGame.pieces = JSON.parse(response.piecesJson);
-            currentGame.colorChosen = response.colorChosen;
-            currentGame.colorsEverChosen = response.colorsEverChosen;
-            currentGame.mageUnlocked = response.mageUnlocked;
-            currentGame.phase = response.phase;
-            currentGame.setupStep = response.setupStep;
-            if (oldTurn !== response.turn) updateClocks(currentGame, true);
-            currentGame.turn = response.turn;
-            currentGame.turnCounter = response.turnCounter;
-            currentGame.isNewTurn = response.isNewTurn;
-            currentGame.movesThisTurn = response.movesThisTurn;
-            currentGame.lockedSequencePiece = response.lockedSequencePiece;
-            currentGame.heroeTakeCounter = response.heroeTakeCounter;
-            currentGame.moves.push({ turn_number: currentGame.turnCounter, active_side: oldTurn, phase: 'playing', chosen_color: currentGame.colorChosen?.[oldTurn] || '', piece_id: botMove.piece, target_id: botMove.target, timestamp_ms: Date.now() });
+            freshGame.pieces = JSON.parse(response.piecesJson);
+            freshGame.colorChosen = response.colorChosen;
+            freshGame.colorsEverChosen = response.colorsEverChosen;
+            freshGame.mageUnlocked = response.mageUnlocked;
+            freshGame.phase = response.phase;
+            freshGame.setupStep = response.setupStep;
+            if (oldTurn !== response.turn) updateClocks(freshGame, true);
+            freshGame.turn = response.turn;
+            freshGame.turnCounter = response.turnCounter;
+            freshGame.isNewTurn = response.isNewTurn;
+            freshGame.movesThisTurn = response.movesThisTurn;
+            freshGame.lockedSequencePiece = response.lockedSequencePiece;
+            freshGame.heroeTakeCounter = response.heroeTakeCounter;
+            freshGame.moves.push({ turn_number: freshGame.turnCounter, active_side: oldTurn, phase: 'playing', chosen_color: freshGame.colorChosen?.[oldTurn] || '', piece_id: botMove.piece, target_id: botMove.target, timestamp_ms: Date.now() });
 
             io.to(gameId).emit('game_update', {
-                pieces: currentGame.pieces, turn: currentGame.turn,
-                colorChosen: currentGame.colorChosen, colorsEverChosen: currentGame.colorsEverChosen,
-                mageUnlocked: currentGame.mageUnlocked, phase: currentGame.phase,
-                setupStep: currentGame.setupStep, turnCounter: currentGame.turnCounter,
-                isNewTurn: currentGame.isNewTurn, movesThisTurn: currentGame.movesThisTurn,
-                lockedSequencePiece: currentGame.lockedSequencePiece || null,
-                heroeTakeCounter: currentGame.heroeTakeCounter,
-                clocks: currentGame.clocks, lastTurnTimestamp: currentGame.lastTurnTimestamp,
-                        moves: currentGame.moves || [],
+                pieces: freshGame.pieces, turn: freshGame.turn,
+                colorChosen: freshGame.colorChosen, colorsEverChosen: freshGame.colorsEverChosen,
+                mageUnlocked: freshGame.mageUnlocked, phase: freshGame.phase,
+                setupStep: freshGame.setupStep, turnCounter: freshGame.turnCounter,
+                isNewTurn: freshGame.isNewTurn, movesThisTurn: freshGame.movesThisTurn,
+                lockedSequencePiece: freshGame.lockedSequencePiece || null,
+                heroeTakeCounter: freshGame.heroeTakeCounter,
+                clocks: freshGame.clocks, lastTurnTimestamp: freshGame.lastTurnTimestamp,
+                        moves: freshGame.moves || [],
                 lastMove: { pieceId: botMove.piece, targetPoly: botMove.target, captured: response.captured },
             });
 
             if (response.phase === 'GameOver') {
                 const winnerSide = response.winner;
-                const winnerId = winnerSide === 'white' ? currentGame.white : currentGame.black;
-                currentGame.phase = 'GameOver';
+                const winnerId = winnerSide === 'white' ? freshGame.white : freshGame.black;
+                freshGame.phase = 'GameOver';
                 io.to(gameId).emit('game_over', { 
                     winnerId, 
                     winnerSide: response.winner,
                     reason: response.reason 
                 });
-                saveMatchResult(gameId, currentGame.gameStartTimestamp, currentGame.whiteName, currentGame.blackName, currentGame.white, currentGame.black, currentGame.boardName, winnerSide, currentGame.moves, io)
+                saveMatchResult(gameId, freshGame.gameStartTimestamp, freshGame.whiteName, freshGame.blackName, freshGame.white, freshGame.black, freshGame.boardName, winnerSide, freshGame.moves, io)
                     .catch(err => console.error(`Bot game save error ${gameId}:`, err));
-                releaseBotIfNeeded(currentGame);
+                releaseBotIfNeeded(freshGame);
                 lobby.activeGames.delete(gameId);
                 broadcastLobbyUpdate(io);
             } else {
                 // Bot might need to continue its turn (chaining)
-                setTimeout(() => triggerBotMoveIfNeeded(gameId), 600);
+                setTimeout(() => triggerBotMoveIfNeeded(gameId), BOT_MOVE_DELAY_MS);
             }
 
         } else if (botMove.action === 'pass') {
             // Bot passes
             const response = passTurnPlayingNapi({
-                boardJson: JSON.stringify(currentGame.board),
-                piecesJson: JSON.stringify(currentGame.pieces),
-                turn: currentGame.turn, phase: currentGame.phase,
-                setupStep: currentGame.setupStep,
-                colorChosen: currentGame.colorChosen || {},
-                colorsEverChosen: currentGame.colorsEverChosen || [],
-                turnCounter: currentGame.turnCounter || 0,
-                isNewTurn: currentGame.isNewTurn,
-                movesThisTurn: currentGame.movesThisTurn || 0,
-                lockedSequencePiece: currentGame.lockedSequencePiece || undefined,
-                heroeTakeCounter: currentGame.heroeTakeCounter || 0,
+                boardJson: JSON.stringify(freshGame.board),
+                piecesJson: JSON.stringify(freshGame.pieces),
+                turn: freshGame.turn, phase: freshGame.phase,
+                setupStep: freshGame.setupStep,
+                colorChosen: freshGame.colorChosen || {},
+                colorsEverChosen: freshGame.colorsEverChosen || [],
+                turnCounter: freshGame.turnCounter || 0,
+                isNewTurn: freshGame.isNewTurn,
+                movesThisTurn: freshGame.movesThisTurn || 0,
+                lockedSequencePiece: freshGame.lockedSequencePiece || undefined,
+                heroeTakeCounter: freshGame.heroeTakeCounter || 0,
                 pieceId: '', targetPoly: ''
             });
-            updateClocks(currentGame, true);
-            currentGame.turn = response.turn;
-            currentGame.phase = response.phase;
-            currentGame.setupStep = response.setupStep;
-            currentGame.turnCounter = response.turnCounter;
-            currentGame.isNewTurn = response.isNewTurn;
-            currentGame.movesThisTurn = response.movesThisTurn;
-            currentGame.lockedSequencePiece = response.lockedSequencePiece;
-            currentGame.heroeTakeCounter = response.heroeTakeCounter;
-            currentGame.colorChosen = response.colorChosen;
-            currentGame.colorsEverChosen = response.colorsEverChosen;
-            currentGame.mageUnlocked = response.mageUnlocked;
+            updateClocks(freshGame, true);
+            freshGame.turn = response.turn;
+            freshGame.phase = response.phase;
+            freshGame.setupStep = response.setupStep;
+            freshGame.turnCounter = response.turnCounter;
+            freshGame.isNewTurn = response.isNewTurn;
+            freshGame.movesThisTurn = response.movesThisTurn;
+            freshGame.lockedSequencePiece = response.lockedSequencePiece;
+            freshGame.heroeTakeCounter = response.heroeTakeCounter;
+            freshGame.colorChosen = response.colorChosen;
+            freshGame.colorsEverChosen = response.colorsEverChosen;
+            freshGame.mageUnlocked = response.mageUnlocked;
             io.to(gameId).emit('game_update', {
-                pieces: currentGame.pieces, turn: currentGame.turn,
-                colorChosen: currentGame.colorChosen, colorsEverChosen: currentGame.colorsEverChosen,
-                mageUnlocked: currentGame.mageUnlocked, phase: currentGame.phase,
-                setupStep: currentGame.setupStep, turnCounter: currentGame.turnCounter,
-                isNewTurn: currentGame.isNewTurn, movesThisTurn: currentGame.movesThisTurn,
-                lockedSequencePiece: currentGame.lockedSequencePiece || null,
-                heroeTakeCounter: currentGame.heroeTakeCounter,
-                clocks: currentGame.clocks, lastTurnTimestamp: currentGame.lastTurnTimestamp,
-                        moves: currentGame.moves || [],
+                pieces: freshGame.pieces, turn: freshGame.turn,
+                colorChosen: freshGame.colorChosen, colorsEverChosen: freshGame.colorsEverChosen,
+                mageUnlocked: freshGame.mageUnlocked, phase: freshGame.phase,
+                setupStep: freshGame.setupStep, turnCounter: freshGame.turnCounter,
+                isNewTurn: freshGame.isNewTurn, movesThisTurn: freshGame.movesThisTurn,
+                lockedSequencePiece: freshGame.lockedSequencePiece || null,
+                heroeTakeCounter: freshGame.heroeTakeCounter,
+                clocks: freshGame.clocks, lastTurnTimestamp: freshGame.lastTurnTimestamp,
+                        moves: freshGame.moves || [],
             });
+            // Bot ended turn by passing — trigger next bot move if applicable
+            setImmediate(() => triggerBotMoveIfNeeded(gameId));
         }
     } catch (err) {
         console.error(`[Bot] Error computing move for game ${gameId}:`, err.message);
         // Notify the human player that the bot had an error
         const g = lobby.activeGames.get(gameId);
         if (g) {
-            const humanSocketId = game.botSide === 'white' ? g.blackSocketId : g.whiteSocketId;
+            const humanSocketId = g.whiteBotConfig ? g.blackSocketId : (g.blackBotConfig ? g.whiteSocketId : null);
             if (humanSocketId) {
                 io.to(humanSocketId).emit('bot_error', { message: 'Bot failed to respond. This may be due to a cold start. It will retry on the next move.' });
             }
@@ -491,6 +692,15 @@ loadBoards();
 
 const app = express();
 app.use(express.json()); // Enable JSON parsing
+
+// Redirect www → apex domain (canonical URL)
+app.use((req, res, next) => {
+    if (req.hostname === 'www.dedalthegame.com') {
+        return res.redirect(301, 'https://dedalthegame.com' + req.url);
+    }
+    next();
+});
+
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
@@ -501,9 +711,34 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 4000;
 
-// Initialize Database
-initDb().then(() => {
+// Initialize Database — restore from GCS first (no-op locally), then start services
+restoreFromGcs()
+    .then(() => initDb())
+    .then(async () => {
     console.log('DuckDB Neo initialized successfully');
+
+    // Start bot polling NOW that the DB is ready
+    fetchAvailableBots();
+    setInterval(fetchAvailableBots, BOT_POLL_INTERVAL_MS);
+
+    // Start background bot-vs-bot match scheduler
+    setInterval(startRandomBotMatch, BOT_MATCH_INTERVAL_MS);
+
+    // Initialize tournament system
+    if (TOURNAMENTS_ENABLED) {
+        tournamentManager.initConfig(process.env);
+        tournamentManager.setDependencies(createTournamentGame, io);
+        await tournamentManager.loadFromDb();
+        // Cleanup expired tournaments every 60s
+        setInterval(() => tournamentManager.cleanupExpired(), 60 * 1000);
+        console.log('[Tournament] System initialized.');
+    } else {
+        console.log('[Tournament] Tournaments are DISABLED in config.');
+    }
+
+    // Start GCS persistence sync (no-op locally)
+    startGcsSync(getUsersDb, getTournamentsDb, getGamesDb);
+
 }).catch(err => {
     console.error('Failed to initialize DuckDB Neo:', err);
 });
@@ -554,6 +789,77 @@ app.get('/api/boards/:boardId', (req, res) => {
     }
 });
 
+// ── Tutorial API ──────────────────────────────────────────────────────────────
+// These endpoints mirror what ./tutorial/server.js exposes, but served through
+// the main backend so the SPA Tutorial page doesn't need a separate server.
+
+// POST /api/tutorial/moves — return legal targets for a piece
+app.post('/api/tutorial/moves', (req, res) => {
+    try {
+        const result = getLegalMovesNapi(req.body);
+        res.json(result);
+    } catch (e) {
+        console.error('[Tutorial] /api/tutorial/moves error:', e.message);
+        res.status(400).json({ error: e.name + ': ' + e.message });
+    }
+});
+
+// POST /api/tutorial/apply — apply a move and return updated piece positions
+app.post('/api/tutorial/apply', (req, res) => {
+    try {
+        const result = applyMoveNapi(req.body);
+        res.json(result);
+    } catch (e) {
+        console.error('[Tutorial] /api/tutorial/apply error:', e.message);
+        res.status(400).json({ error: e.name + ': ' + e.message });
+    }
+});
+
+
+// GET /api/boards/random/:count — return N random boards with polygon data for SVG preview
+app.get('/api/boards/random/:count', (req, res) => {
+    const count = Math.min(20, Math.max(1, parseInt(req.params.count) || 10));
+    const shuffled = [...boardPool].sort(() => 0.5 - Math.random()).slice(0, count);
+    const boards = shuffled.map(f => {
+        const id = f.replace('.json', '');
+        try {
+            const boardData = JSON.parse(fs.readFileSync(path.join(BOARDS_PATH, f), 'utf8'));
+            const allPolygons = boardData.allPolygons || {};
+            const polyKeys = Object.keys(allPolygons);
+
+            // Extract polygon shapes for SVG rendering
+            const polygons = polyKeys.map(k => {
+                const p = allPolygons[k];
+                return {
+                    points: p.points, // [[x,y], ...]
+                    color: p.color || '#888',
+                };
+            });
+
+            // Compute bounding box
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            for (const poly of polygons) {
+                for (const [x, y] of (poly.points || [])) {
+                    if (x < minX) minX = x;
+                    if (y < minY) minY = y;
+                    if (x > maxX) maxX = x;
+                    if (y > maxY) maxY = y;
+                }
+            }
+
+            return {
+                id,
+                polygonCount: polyKeys.length,
+                polygons,
+                bbox: { minX, minY, maxX, maxY },
+            };
+        } catch (_) {
+            return { id, polygonCount: 0, polygons: [], bbox: { minX: 0, minY: 0, maxX: 100, maxY: 100 } };
+        }
+    });
+    res.json({ boards });
+});
+
 app.post('/register', async (req, res) => {
     const { username, email, password } = req.body;
     
@@ -565,30 +871,29 @@ app.post('/register', async (req, res) => {
         return res.status(400).json({ error: 'Username cannot start with "guest_"' });
     }
 
+    if (username.toLowerCase().startsWith('bot_')) {
+        return res.status(400).json({ error: 'Username cannot start with "bot_"' });
+    }
+
     try {
         const userId = uuidv4();
         const passwordHash = await bcrypt.hash(password, 10);
-        const verificationToken = uuidv4();
-        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+        // NOTE: Email verification is currently DISABLED.
+        // is_verified is set to 0 (unverified) but the login gate is bypassed below.
+        // To re-enable: generate verificationToken, insert with token/expires, call sendVerificationEmail.
 
         const con = await getUsersDb().connect();
         
         try {
             await con.run(`
-                INSERT INTO users (id, username, email, password_hash, role, verification_token, token_expires_at)
-                VALUES (?, ?, ?, ?, 'registered', ?, ?)
-            `, [userId, username, email, passwordHash, verificationToken, expiresAt.toISOString()]);
+                INSERT INTO users (id, username, email, password_hash, role, is_verified)
+                VALUES (?, ?, ?, ?, 'registered', 0)
+            `, [userId, username, email, passwordHash]);
 
             // Create empty profile
             await con.run(`INSERT INTO profiles (user_id) VALUES (?)`, [userId]);
 
-            // Send verification email
-            try {
-                await sendVerificationEmail(email, verificationToken);
-                res.status(201).json({ message: 'User registered. Please check your email for verification.' });
-            } catch (emailError) {
-                res.status(201).json({ message: 'User registered, but failed to send verification email.' });
-            }
+            res.status(201).json({ message: 'User registered successfully. You can now log in.' });
         } catch (err) {
             if (err.message.includes('Constraint Error') || err.message.includes('UNIQUE constraint')) {
                 return res.status(400).json({ error: 'Username or Email already registered' });
@@ -651,15 +956,59 @@ app.post('/login', async (req, res) => {
 
         const [userId, username, passwordHash, role, isVerified, rating, ratingDeviation, ratingVolatility] = rows[0];
 
-        if (!isVerified) {
-            return res.status(401).json({ error: 'Please verify your email before logging in.' });
-        }
+        // NOTE: Email verification gate is currently DISABLED.
+        // To re-enable: uncomment the block below.
+        // if (!isVerified) {
+        //     return res.status(401).json({ error: 'Please verify your email before logging in.' });
+        // }
 
         const isMatch = await bcrypt.compare(password, passwordHash);
         if (!isMatch) {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
 
+        // Sign JWT
+        const token = jwt.sign(
+            { id: userId, username, role },
+            JWT_SECRET,
+            { algorithm: 'HS256', expiresIn: `${JWT_EXPIRY_DAYS}d` }
+        );
+
+        res.json({
+            id: userId,
+            username,
+            role,
+            rating: Math.round(rating || 1500),
+            ratingDeviation: Math.round(ratingDeviation || 350),
+            ratingVolatility: ratingVolatility || 0.06,
+            token,
+        });
+    } catch (err) {
+        console.error('Login error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// GET /api/me — restore session from JWT
+app.get('/api/me', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'No token provided' });
+    }
+    const token = authHeader.slice(7);
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+        // Fetch fresh user data from DB
+        const con = await getUsersDb().connect();
+        const reader = await con.runAndReadAll(
+            `SELECT id, username, role, rating, rating_deviation, rating_volatility FROM users WHERE id = ?`,
+            [decoded.id]
+        );
+        const rows = reader.getRows();
+        if (!rows || rows.length === 0) {
+            return res.status(401).json({ error: 'User not found' });
+        }
+        const [userId, username, role, rating, ratingDeviation, ratingVolatility] = rows[0];
         res.json({
             id: userId,
             username,
@@ -669,8 +1018,10 @@ app.post('/login', async (req, res) => {
             ratingVolatility: ratingVolatility || 0.06,
         });
     } catch (err) {
-        console.error('Login error:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        if (err.name === 'TokenExpiredError') {
+            return res.status(401).json({ error: 'Token expired' });
+        }
+        return res.status(401).json({ error: 'Invalid token' });
     }
 });
 
@@ -687,8 +1038,19 @@ const lobby = {
 };
 
 function buildLobbyStats() {
+    // Count unique users, not socket connections
+    // Authenticated users with multiple tabs are counted once
+    const seen = new Set();
+    let count = 0;
+    for (const [, s] of io.sockets.sockets) {
+        const key = s.userId || s.id; // userId for logged-in, socket.id for guests
+        if (!seen.has(key)) {
+            seen.add(key);
+            count++;
+        }
+    }
     return {
-        onlineUsers: lobby.connectedUsers.size,
+        onlineUsers: count,
         activeGames: lobby.activeGames.size,
     };
 }
@@ -720,12 +1082,18 @@ function buildRequestsList() {
 }
 
 function broadcastLobbyUpdate(io) {
-    io.to('lobby').emit('lobby_update', {
+    const payload = {
         gameRequests: buildRequestsList(),
         activeGames: buildActiveGamesList(),
         stats: buildLobbyStats(),
         available_bots: getBotsForLobby(),
-    });
+        tournaments: TOURNAMENTS_ENABLED ? {
+            enabled: true,
+            openTournaments: tournamentManager.getOpenTournaments(),
+            activeTournaments: tournamentManager.getActiveTournamentsList(),
+        } : { enabled: false, openTournaments: [], activeTournaments: [] },
+    };
+    io.to('lobby').emit('lobby_update', sanitizeBigInt(payload));
 }
 
 function updateClocks(game, turnEnded) {
@@ -841,6 +1209,7 @@ function buildInitialState(gameData) {
         lastTurnTimestamp: gameData.lastTurnTimestamp,
         timeControl: gameData.timeControl,
         passCount: gameData.passCount || { white: 0, black: 0 },
+        whiteRole: gameData.whiteRole,
         blackRole: gameData.blackRole,
         whiteName: gameData.whiteName,
         blackName: gameData.blackName,
@@ -928,9 +1297,117 @@ async function createGame(whitePlayer, blackPlayer, timeControl) {
     return { hash, gameData };
 }
 
+// --- helper to create a tournament game (with optional fixed board) ---
+async function createTournamentGame(whitePlayer, blackPlayer, timeControl, boardId) {
+    // If a fixed board is requested, temporarily swap in that board
+    let result;
+    if (boardId) {
+        const boardFile = boardPool.find(f => f === `${boardId}.json` || f.replace('.json', '') === boardId);
+        if (boardFile) {
+            result = await createGame(whitePlayer, blackPlayer, timeControl);
+            try {
+                const boardPath = path.join(BOARDS_PATH, boardFile);
+                const boardData = JSON.parse(fs.readFileSync(boardPath, 'utf8'));
+                result.gameData.board = boardData;
+                result.gameData.boardName = boardId;
+                const response = initGameStateNapi({ boardJson: JSON.stringify(boardData), randomSetup: false });
+                result.gameData.pieces = JSON.parse(response.piecesJson);
+            } catch (e) { console.error('[Tournament] Fixed board load error:', e.message); }
+        } else {
+            result = await createGame(whitePlayer, blackPlayer, timeControl);
+        }
+    } else {
+        result = await createGame(whitePlayer, blackPlayer, timeControl);
+    }
+
+    const { hash, gameData } = result;
+    gameData.botThinking = false;
+
+    // ── Wire up bots ──
+    // Detect bot players by userId prefix or role
+    const whiteIsBot = whitePlayer.userId?.startsWith('bot_') || whitePlayer.role === 'bot';
+    const blackIsBot = blackPlayer.userId?.startsWith('bot_') || blackPlayer.role === 'bot';
+
+    // Look up bot config from the availableBots list by matching the constructed botId
+    function findBotConfigByUserId(botUserId) {
+        for (const b of availableBots) {
+            if (`bot_${b.agent_type}_${b.model_name}` === botUserId) {
+                return { type: b.agent_type, modelName: b.model_name };
+            }
+        }
+        // Fallback: try to guess from userId (shouldn't happen if bot is registered)
+        const suffix = botUserId.replace(/^bot_/, '');
+        return { type: suffix, modelName: '' };
+    }
+
+    if (whiteIsBot) {
+        const botConfig = findBotConfigByUserId(whitePlayer.userId);
+        const botKey = getBotKey(botConfig.type, botConfig.modelName);
+        gameData.whiteBotConfig = botConfig;
+        gameData.whiteBotKey = botKey;
+        busyBots.set(botKey, hash);
+    }
+    if (blackIsBot) {
+        const botConfig = findBotConfigByUserId(blackPlayer.userId);
+        const botKey = getBotKey(botConfig.type, botConfig.modelName);
+        gameData.blackBotConfig = botConfig;
+        gameData.blackBotKey = botKey;
+        busyBots.set(botKey, hash);
+    }
+
+    // ── Wire up human players: find their socket(s) and join them to the game room ──
+    for (const [, s] of io.sockets.sockets) {
+        if (s.userId === whitePlayer.userId && !whiteIsBot) {
+            s.join(hash);
+            gameData.whiteSocketId = gameData.whiteSocketId || s.id;
+            s.emit('game_created', {
+                hash,
+                side: 'white',
+                opponent: blackPlayer.username,
+                initialState: buildInitialState(gameData),
+                tournamentId: gameData.tournamentId || null,
+            });
+        }
+        if (s.userId === blackPlayer.userId && !blackIsBot) {
+            s.join(hash);
+            gameData.blackSocketId = gameData.blackSocketId || s.id;
+            s.emit('game_created', {
+                hash,
+                side: 'black',
+                opponent: whitePlayer.username,
+                initialState: buildInitialState(gameData),
+                tournamentId: gameData.tournamentId || null,
+            });
+        }
+    }
+
+    // ── Trigger first bot move if white is a bot ──
+    if (whiteIsBot) {
+        setImmediate(() => triggerBotMoveIfNeeded(hash));
+    }
+
+    console.log(`[Tournament] Game ${hash} wired: white=${whitePlayer.userId}${whiteIsBot?' (BOT)':''}, black=${blackPlayer.userId}${blackIsBot?' (BOT)':''}`);
+    return result;
+}
+
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
     lobby.connectedUsers.add(socket.id);
+
+    // Auto-identify user from JWT token in handshake auth
+    const token = socket.handshake?.auth?.token;
+    if (token) {
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+            socket.userId = decoded.id;
+            socket.username = decoded.username;
+            socket.userRole = decoded.role || 'registered';
+            console.log(`Socket ${socket.id} authenticated as ${decoded.username} (${decoded.id})`);
+        } catch (e) {
+            console.log(`Socket ${socket.id} had invalid/expired JWT, treating as guest.`);
+        }
+    }
+
     broadcastLobbyUpdate(io);
 
     // Legacy join_lobby (kept for backward compat with registered login flow)
@@ -946,12 +1423,17 @@ io.on('connection', (socket) => {
     // --- ENTER LOBBY: join room + send full state ---
     socket.on('enter_lobby', () => {
         socket.join('lobby');
-        socket.emit('lobby_state', {
+        socket.emit('lobby_state', sanitizeBigInt({
             gameRequests: buildRequestsList(),
             activeGames: buildActiveGamesList(),
             stats: buildLobbyStats(),
             available_bots: getBotsForLobby(),
-        });
+            tournaments: TOURNAMENTS_ENABLED ? {
+                enabled: true,
+                openTournaments: tournamentManager.getOpenTournaments(),
+                activeTournaments: tournamentManager.getActiveTournamentsList(),
+            } : { enabled: false, openTournaments: [], activeTournaments: [] },
+        }));
     });
 
     // --- CREATE GAME REQUEST ---
@@ -1071,7 +1553,7 @@ io.on('connection', (socket) => {
         }
 
         const botId = `bot_${agentType}_${modelName}`;
-        const botName = `🤖 ${agentType === 'mcts' ? 'MCTS' : 'GreedyJack'} (${modelName})`;
+        const botName = makeBotDisplayName(agentType, modelName);
         const isPlayerWhite = Math.random() > 0.5;
 
         const humanPlayer = { socketId: socket.id, userId: effectiveUserId, username: effectiveUsername, role: effectiveRole };
@@ -1082,14 +1564,18 @@ io.on('connection', (socket) => {
 
         const { hash, gameData } = await createGame(whitePlayer, blackPlayer, timeControl || { minutes: 15, increment: 10 });
 
-        // Mark game as a bot game
-        gameData.botSide   = isPlayerWhite ? 'black' : 'white';
-        gameData.botConfig = botConfig || { type: 'greedy_jack', modelName: 'rank_002_yYtlgZLn13' };
+        // Mark game sides as bots if applicable
+        if (!isPlayerWhite) {
+            gameData.whiteBotConfig = botConfig || { type: 'greedy_jack', modelName: 'rank_002_yYtlgZLn13' };
+            gameData.whiteBotKey = botKey;
+            gameData.whiteDisconnectedAt = null;
+        } else {
+            gameData.blackBotConfig = botConfig || { type: 'greedy_jack', modelName: 'rank_002_yYtlgZLn13' };
+            gameData.blackBotKey = botKey;
+            gameData.blackDisconnectedAt = null;
+        }
+        
         gameData.botThinking = false;
-        gameData.botKey = botKey;  // For releasing busy state later
-        // Bot never disconnects
-        if (gameData.botSide === 'white') gameData.whiteDisconnectedAt = null;
-        else gameData.blackDisconnectedAt = null;
 
         // Mark bot as busy
         busyBots.set(botKey, hash);
@@ -1107,10 +1593,140 @@ io.on('connection', (socket) => {
         broadcastLobbyUpdate(io);
         console.log(`Bot game created: /games/${hash} — ${effectiveUserId} (${playerSide}) vs ${botName}`);
 
-        // If bot is white, trigger its first move (setup phase)
-        if (gameData.botSide === 'white') {
+        // Trigger bot's first move if it's white
+        if (gameData.whiteBotConfig) {
             setImmediate(() => triggerBotMoveIfNeeded(hash));
         }
+    });
+
+
+    // ── Tournament Socket Events ────────────────────────────────────────────
+
+    socket.on('create_tournament', async (data) => {
+        if (!TOURNAMENTS_ENABLED) {
+            socket.emit('tournament_error', { message: 'Tournaments are disabled on this server.' });
+            return;
+        }
+        if (!socket.userId || socket.userId.startsWith('guest_')) {
+            socket.emit('tournament_error', { message: 'Only registered users can create tournaments.' });
+            return;
+        }
+        try {
+            const tournament = await tournamentManager.createTournament({
+                creatorId: socket.userId,
+                creatorUsername: socket.username || socket.userId,
+                format: data.format,
+                maxParticipants: data.maxParticipants,
+                timeControlMinutes: data.timeControlMinutes,
+                timeControlIncrement: data.timeControlIncrement,
+                password: data.password || null,
+                boardId: data.boardId || null,
+                ratingMin: data.ratingMin,
+                ratingMax: data.ratingMax,
+                durationValue: data.durationValue,
+                invitedBots: data.invitedBots || 0,
+                creatorPlays: data.creatorPlays !== false,
+                launchMode: data.launchMode || 'when_complete',
+                launchAt: data.launchAt || null,
+            });
+
+            // Auto-join creator to tournament room
+            socket.join(`tournament:${tournament.id}`);
+
+            socket.emit('tournament_created', {
+                id: tournament.id,
+                format: tournament.format,
+                status: tournament.status,
+            });
+
+            // Invite bots if requested
+            if (tournament.invited_bots > 0 && availableBots.length > 0) {
+                const botsToInvite = availableBots.slice(0, tournament.invited_bots);
+                for (const bot of botsToInvite) {
+                    const botId = `bot_${bot.agent_type}_${bot.model_name}`;
+                    const botName = makeBotDisplayName(bot.agent_type, bot.model_name);
+                    try {
+                        await tournamentManager.joinTournament(tournament.id, botId, botName, null, true);
+                    } catch (e) {
+                        console.log(`[Tournament] Bot ${botId} could not join: ${e.message}`);
+                    }
+                }
+            }
+
+            broadcastLobbyUpdate(io);
+        } catch (e) {
+            socket.emit('tournament_error', { message: e.message });
+        }
+    });
+
+    socket.on('join_tournament', async ({ tournamentId, password }) => {
+        if (!socket.userId || socket.userId.startsWith('guest_')) {
+            socket.emit('tournament_error', { message: 'Only registered users can join tournaments.' });
+            return;
+        }
+        try {
+            await tournamentManager.joinTournament(tournamentId, socket.userId, socket.username || socket.userId, password);
+            socket.join(`tournament:${tournamentId}`);
+            socket.emit('tournament_joined', { tournamentId });
+            broadcastLobbyUpdate(io);
+        } catch (e) {
+            socket.emit('tournament_error', { message: e.message });
+        }
+    });
+
+    socket.on('leave_tournament', async ({ tournamentId }) => {
+        try {
+            await tournamentManager.leaveTournament(tournamentId, socket.userId);
+            socket.leave(`tournament:${tournamentId}`);
+            socket.emit('tournament_left', { tournamentId });
+            broadcastLobbyUpdate(io);
+        } catch (e) {
+            socket.emit('tournament_error', { message: e.message });
+        }
+    });
+
+    socket.on('enter_tournament_room', ({ tournamentId }) => {
+        socket.join(`tournament:${tournamentId}`);
+        // Send current tournament state
+        const t = tournamentManager.getTournamentById(tournamentId);
+        if (t) {
+            const standings = require('./tournament/standings').computeStandings(t.participants, t.games, t.format);
+            let bracket = null;
+            if (t.format === 'knockout') {
+                const { computeKnockoutBracket } = require('./tournament/standings');
+                const { knockoutTotalRounds } = require('./tournament/pairings');
+                bracket = computeKnockoutBracket(t.participants, t.games, knockoutTotalRounds(t.current_count));
+            }
+            socket.emit('tournament_update', {
+                id: t.id,
+                status: t.status,
+                format: t.format,
+                currentRound: t.current_round,
+                maxRounds: t.duration_value,
+                currentCount: t.current_count,
+                maxParticipants: t.max_participants,
+                timeControl: { minutes: t.time_control_minutes, increment: t.time_control_increment },
+                standings,
+                bracket,
+                games: t.games.map(g => ({
+                    id: g.id, round: g.round, white_id: g.white_id, black_id: g.black_id,
+                    game_hash: g.game_hash, result: g.result,
+                    white_score: g.white_score, black_score: g.black_score,
+                })),
+                arenaEndAt: t.arenaEndAt || null,
+                hasPassword: t.has_password === 1,
+                boardId: t.board_id,
+                ratingMin: t.rating_min,
+                ratingMax: t.rating_max,
+                creatorId: t.creator_id,
+            });
+        } else {
+            socket.emit('tournament_error', { message: 'Tournament not found.' });
+        }
+    });
+
+    socket.on('leave_tournament_room', ({ tournamentId }) => {
+        socket.leave(`tournament:${tournamentId}`);
     });
 
 
@@ -1156,6 +1772,7 @@ io.on('connection', (socket) => {
             whiteRole: game.whiteRole,
             blackRole: game.blackRole,
             initialState: buildInitialState(game),
+            tournamentId: game.tournamentId || null,
         });
     });
 
@@ -1288,13 +1905,10 @@ io.on('connection', (socket) => {
                 moves: game.moves || [],
                 moves: game.moves || [],
             });
-            console.log(`[randomize_setup] result: turn=${game.turn}, phase=${game.phase}, step=${game.setupStep}, botSide=${game.botSide || 'none'}`);
+            console.log(`[randomize_setup] result: turn=${game.turn}, phase=${game.phase}, step=${game.setupStep}`);
 
-            // If it's now the bot's turn, trigger it
-            if (game.botSide && game.turn === game.botSide) {
-                console.log(`[randomize_setup] Triggering bot for game ${gameId}`);
-                setImmediate(() => triggerBotMoveIfNeeded(gameId));
-            }
+            // Trigger bot if it's its turn
+            setImmediate(() => triggerBotMoveIfNeeded(gameId));
         } catch (e) {
             console.error('Error in randomize_setup:', e);
         }
@@ -1354,8 +1968,8 @@ io.on('connection', (socket) => {
                 });
                 console.log(`Setup turn ended in ${gameId}: Now ${game.turn}'s turn`);
 
-                // If it's now the bot's turn, trigger it
-                if (game.botSide) setImmediate(() => triggerBotMoveIfNeeded(gameId));
+                // Always try to trigger bot if applicable
+                setImmediate(() => triggerBotMoveIfNeeded(gameId));
             } catch (e) {
                 console.error('Error in end_turn_setup:', e);
             }
@@ -1436,8 +2050,8 @@ io.on('connection', (socket) => {
                 });
                 console.log(`Playing turn passed in ${gameId}: Now ${game.turn}'s turn (${passingSide} passCount: ${game.passCount[passingSide]})`);
 
-                // If it's now the bot's turn, trigger it
-                if (game.botSide) setImmediate(() => triggerBotMoveIfNeeded(gameId));
+                // Always try to trigger bot if applicable
+                setImmediate(() => triggerBotMoveIfNeeded(gameId));
             } catch (e) {
                 console.error('Error in pass_turn_playing:', e);
             }
@@ -1606,10 +2220,8 @@ io.on('connection', (socket) => {
                 moves: game.moves || [],
                 });
 
-                // If it is now the bot's turn, trigger it
-                if (game.botSide && game.turn === game.botSide && game.phase === 'Setup') {
-                    setImmediate(() => triggerBotMoveIfNeeded(gameId));
-                }
+                // Always try to trigger bot if applicable
+                setImmediate(() => triggerBotMoveIfNeeded(gameId));
 
             } else {
                 const response = applyMoveNapi({
@@ -1689,8 +2301,8 @@ io.on('connection', (socket) => {
                     releaseBotIfNeeded(game);
                     lobby.activeGames.delete(gameId);
                     broadcastLobbyUpdate(io);
-                } else if (game.botSide) {
-                    // If it's now the bot's turn, trigger its response
+                } else {
+                    // Try to trigger bot if applicable
                     setImmediate(() => triggerBotMoveIfNeeded(gameId));
                 }
 

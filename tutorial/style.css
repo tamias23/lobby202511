@@ -1,11 +1,15 @@
 :root {
-    --primary-bg: #0f172a;
-    --secondary-bg: #1e293b;
-    --accent-color: #38bdf8;
-    --text-primary: #f8fafc;
-    --text-secondary: #94a3b8;
-    --glass-bg: rgba(30, 41, 59, 0.7);
-    --glass-border: rgba(255, 255, 255, 0.1);
+    --primary:       #46b0d4;
+    --primary-hover: #3a96b8;
+    --accent:        #f59e0b;
+    --success:       #22c55e;
+    --danger:        #ef4444;
+    --bg-main:       radial-gradient(ellipse at top right, #1e293b 0%, #0f172a 60%);
+    --card-bg:       rgba(30, 41, 59, 0.72);
+    --card-bg-solid: #1e293b;
+    --text-main:     #f8fafc;
+    --text-muted:    #94a3b8;
+    --border:        rgba(255, 255, 255, 0.1);
     --sidebar-width: 280px;
 }
 
@@ -16,9 +20,10 @@
 }
 
 body {
-    background-color: var(--primary-bg);
-    color: var(--text-primary);
-    font-family: 'Outfit', 'Inter', -apple-system, sans-serif;
+    background: var(--bg-main);
+    background-attachment: fixed;
+    color: var(--text-main);
+    font-family: 'Inter', sans-serif;
     line-height: 1.6;
     overflow-x: hidden;
     height: 100vh;
@@ -27,8 +32,10 @@ body {
 
 #sidebar {
     width: var(--sidebar-width);
-    background: var(--secondary-bg);
-    border-right: 1px solid var(--glass-border);
+    background: var(--card-bg);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-right: 1px solid var(--border);
     padding: 2rem 0;
     display: flex;
     flex-direction: column;
@@ -43,7 +50,8 @@ body {
     padding: 0 2rem 1rem 2rem;
     font-size: 1.5rem;
     font-weight: 800;
-    color: var(--accent-color);
+    font-family: 'Outfit', sans-serif;
+    color: var(--primary);
     letter-spacing: -0.025em;
     text-transform: uppercase;
 }
@@ -55,10 +63,10 @@ body {
 .language-select select {
     width: 100%;
     padding: 0.6rem 1rem;
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border);
     border-radius: 0.75rem;
-    color: var(--text-primary);
+    color: var(--text-main);
     font-family: 'Outfit', sans-serif;
     font-size: 0.9rem;
     cursor: pointer;
@@ -72,18 +80,18 @@ body {
 }
 
 .language-select select:hover {
-    border-color: var(--accent-color);
-    background-color: rgba(56, 189, 248, 0.05);
+    border-color: var(--primary);
+    background-color: rgba(70, 176, 212, 0.05);
 }
 
 .language-select select:focus {
-    border-color: var(--accent-color);
-    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(70, 176, 212, 0.2);
 }
 
 .language-select option {
-    background-color: var(--secondary-bg);
-    color: var(--text-primary);
+    background-color: var(--card-bg-solid);
+    color: var(--text-main);
 }
 
 nav ul {
@@ -93,21 +101,21 @@ nav ul {
 nav li {
     padding: 0.75rem 2rem;
     cursor: pointer;
-    color: var(--text-secondary);
+    color: var(--text-muted);
     transition: all 0.3s ease;
     border-left: 3px solid transparent;
     font-size: 0.95rem;
 }
 
 nav li:hover {
-    background: rgba(56, 189, 248, 0.05);
-    color: var(--accent-color);
+    background: rgba(70, 176, 212, 0.05);
+    color: var(--primary);
 }
 
 nav li.active {
-    color: var(--accent-color);
-    background: rgba(56, 189, 248, 0.1);
-    border-left-color: var(--accent-color);
+    color: var(--primary);
+    background: rgba(70, 176, 212, 0.1);
+    border-left-color: var(--primary);
     font-weight: 600;
 }
 
@@ -146,35 +154,40 @@ nav li.active {
 h1 {
     font-size: 3.5rem;
     margin-bottom: 2rem;
-    background: linear-gradient(to right, var(--accent-color), #818cf8);
+    background: linear-gradient(135deg, #46b0d4 0%, #f27813 100%);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
     line-height: 1.2;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 900;
 }
 
 h2 {
     font-size: 1.8rem;
     margin: 2.5rem 0 1rem 0;
-    color: var(--accent-color);
+    color: var(--primary);
+    font-family: 'Outfit', sans-serif;
 }
 
 h3 {
     font-size: 1.4rem;
     margin-bottom: 0.75rem;
-    color: var(--text-primary);
+    color: var(--text-main);
+    font-family: 'Outfit', sans-serif;
 }
 
 p {
     margin-bottom: 1.5rem;
     font-size: 1.1rem;
-    color: var(--text-secondary);
+    color: var(--text-muted);
 }
 
 .board-container {
-    background: var(--glass-bg);
-    backdrop-filter: blur(12px);
-    border: 1px solid var(--glass-border);
+    background: var(--card-bg);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid var(--border);
     border-radius: 1.5rem;
     padding: 1rem;
     display: flex;
@@ -193,8 +206,10 @@ svg {
 }
 
 .card {
-    background: var(--secondary-bg);
-    border: 1px solid var(--glass-border);
+    background: var(--card-bg);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid var(--border);
     border-radius: 1rem;
     padding: 1.5rem;
     margin-bottom: 1.5rem;
@@ -203,17 +218,17 @@ svg {
 
 .card:hover {
     transform: translateY(-5px);
-    border-color: var(--accent-color);
+    border-color: var(--primary);
 }
 
 .accent {
-    color: var(--accent-color);
+    color: var(--primary);
     font-weight: bold;
 }
 
 .highlight {
-    background: rgba(56, 189, 248, 0.1);
-    color: var(--accent-color);
+    background: rgba(70, 176, 212, 0.1);
+    color: var(--primary);
     padding: 0.1rem 0.4rem;
     border-radius: 0.25rem;
 }
@@ -238,8 +253,8 @@ svg {
     top: -0.2rem;
     width: 2rem;
     height: 2rem;
-    background: var(--accent-color);
-    color: var(--primary-bg);
+    background: var(--primary);
+    color: #ffffff;
     border-radius: 50%;
     display: flex;
     justify-content: center;
@@ -259,7 +274,7 @@ svg {
 
 /* Interactive Pieces */
 .visual-pane g[style*="cursor: pointer"]:hover {
-    filter: drop-shadow(0 0 8px var(--accent-color));
+    filter: drop-shadow(0 0 8px var(--primary));
 }
 
 .visual-pane g[style*="cursor: pointer"] {

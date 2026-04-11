@@ -21,6 +21,10 @@ const LoginForm = ({ onLoginSuccess }) => {
       const result = await response.json();
       if (response.ok) {
         setStatus('success');
+        // Store JWT for session persistence
+        if (result.token) {
+          localStorage.setItem('jwt_token', result.token);
+        }
         if (onLoginSuccess) onLoginSuccess(result);
         navigate('/');
       } else {

@@ -28,6 +28,7 @@ pub struct GameState {
     pub reason: Option<String>,
     pub setup_step: u8, // 0=goddess, 1=heroe, 2=golem, 3=witch, 4=ghoul_siren
     pub setup_placements_this_turn: u32,
+    pub piece_move_counts: HashMap<String, u32>,
 }
 
 impl GameState {
@@ -102,6 +103,13 @@ impl GameState {
                 }
                 
                 if can_start {
+                    // Rule: Piece Stamina Limit (23 moves per piece per turn)
+                    if *self.piece_move_counts.get(&p.id).unwrap_or(&0) >= 23 {
+                        can_start = false;
+                    }
+                }
+                
+                if can_start {
                     eligible.push(p.id.clone());
                 }
             }
@@ -151,6 +159,7 @@ impl GameState {
             reason: None,
             setup_step: 0,
             setup_placements_this_turn: 0,
+            piece_move_counts: HashMap::new(),
         }
     }
 
@@ -539,6 +548,7 @@ pub fn apply_move(state: &mut GameState, piece_id: &str, target_poly: &str) -> V
     }
     
     state.moves_this_turn += 1;
+    *state.piece_move_counts.entry(piece_id.to_string()).or_insert(0) += 1;
     captured_types
 }
 
@@ -1225,10 +1235,14 @@ pub fn apply_move_turnover(state: &mut GameState, chosen_piece: &str, chosen_tar
     // the lock MUST be broken so the current player doesn't get stuck.
     if let Some(ref locked_id) = state.locked_sequence_piece {
         // We use a cloned state to check for moves without modifying the current one.
-        if get_legal_moves(state, locked_id).is_empty() {
+        // Rule: If a piece has reached its stamina limit (23 moves), also break the lock.
+        let has_no_moves = get_legal_moves(state, locked_id).is_empty();
+        let stamina_exhausted = *state.piece_move_counts.get(locked_id).unwrap_or(&0) >= 23;
+
+        if has_no_moves || stamina_exhausted {
             state.locked_sequence_piece = None;
             state.heroe_take_counter = 0;
-            state.visited_polygons.clear();
+            state.visited_polygons.clear(); 
         }
     }
 
@@ -1245,12 +1259,17 @@ pub fn apply_move_turnover(state: &mut GameState, chosen_piece: &str, chosen_tar
         state.color_chosen.clear();
         state.is_new_turn = true;
         state.moves_this_turn = 0; // CRITICAL: Reset move counter!
+        state.piece_move_counts.clear(); 
         state.locked_sequence_piece = None;
         state.heroe_take_counter = 0;
         state.visited_polygons.clear();
     } else {
         // Turn continues.
         state.is_new_turn = false;
+
+        if state.locked_sequence_piece.is_none() {
+            state.visited_polygons.clear();
+        }
 
         // Check if the player is actually stuck.
         if !state.has_any_legal_moves() {
@@ -1259,6 +1278,7 @@ pub fn apply_move_turnover(state: &mut GameState, chosen_piece: &str, chosen_tar
             state.color_chosen.clear();
             state.is_new_turn = true;
             state.moves_this_turn = 0; // CRITICAL: Reset move counter!
+            state.piece_move_counts.clear();
             state.locked_sequence_piece = None;
             state.heroe_take_counter = 0;
             state.visited_polygons.clear(); 
@@ -1277,6 +1297,7 @@ pub fn pass_turn(state: &mut GameState) {
     state.color_chosen.clear();
     state.is_new_turn = true;
     state.moves_this_turn = 0; // CRITICAL: Reset move counter!
+    state.piece_move_counts.clear();
     state.locked_sequence_piece = None;
     state.heroe_take_counter = 0;
     state.visited_polygons.clear();

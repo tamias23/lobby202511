@@ -50,7 +50,7 @@ con.close()
 
 # ========================================================
 
-con = duckdb.connect(inputFolder + 'users.duckdb', read_only=True)
+con = duckdb.connect(inputFolder + 'users.duckdb', read_only=False)
 
 tables = con.execute("SHOW TABLES").fetchall()
 print(tables)
@@ -67,6 +67,11 @@ print(df)
 # """)
 # con.commit()
 
+# con.execute("""
+#     DELETE from users where role = 'bot'
+# """)
+# con.commit()
+
 users = con.execute("SELECT * FROM users ").pl()
 
 # 3. To force the "Merge" (Checkpoint)
@@ -78,5 +83,34 @@ con.close()
 
 # ========================================================
 
-with pd.ExcelWriter('/home/mat/Bureau/lobby202511/users2.xlsx', engine='xlsxwriter') as writer:
+con = duckdb.connect(inputFolder + 'tournaments.duckdb', read_only=False)
+
+tables = con.execute("SHOW TABLES").fetchall()
+print(tables)
+
+df = con.execute("SELECT * FROM profiles LIMIT 5").pl()
+print(df)
+df = con.execute("SELECT * FROM users LIMIT 5").pl()
+print(df)
+
+tournament_games = con.execute("SELECT * FROM tournament_games ").pl()
+tournaments = con.execute("SELECT * FROM tournaments ").pl()
+tournament_participants = con.execute("SELECT * FROM tournament_participants ").pl()
+
+# 3. To force the "Merge" (Checkpoint)
+# This moves all data from the .wal to the .duckdb file immediately
+con.execute("CHECKPOINT")
+
+# 4. Close the connection
+con.close()
+
+# ========================================================
+
+with pd.ExcelWriter('/home/mat/Bureau/lobby202511/users3.xlsx', engine='xlsxwriter') as writer:
     users.to_pandas().to_excel(writer, sheet_name='data', index=False, startrow=0 , startcol=0)
+
+with pd.ExcelWriter('/home/mat/Bureau/lobby202511/tour.xlsx', engine='xlsxwriter') as writer:
+    tournaments.to_pandas().to_excel(writer, sheet_name='tournaments', index=False, startrow=0 , startcol=0)
+    tournament_participants.to_pandas().to_excel(writer, sheet_name='tournament_participants', index=False, startrow=0 , startcol=0)
+    tournament_games.to_pandas().to_excel(writer, sheet_name='tournament_games', index=False, startrow=0 , startcol=0)
+

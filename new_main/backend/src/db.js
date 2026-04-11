@@ -26,11 +26,13 @@ if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true });
 }
 
-const usersDbPath = path.join(dbDir, 'users.duckdb');
-const gamesDbPath = path.join(dbDir, 'games.duckdb');
+const usersDbPath       = path.join(dbDir, 'users.duckdb');
+const gamesDbPath       = path.join(dbDir, 'games.duckdb');
+const tournamentsDbPath = path.join(dbDir, 'tournaments.duckdb');
 
-console.log(`[DB] users.duckdb → ${usersDbPath}`);
-console.log(`[DB] games.duckdb → ${gamesDbPath}`);
+console.log(`[DB] users.duckdb       → ${usersDbPath}`);
+console.log(`[DB] games.duckdb       → ${gamesDbPath}`);
+console.log(`[DB] tournaments.duckdb → ${tournamentsDbPath}`);
 
 // ─── Lazy Connection Wrapper ────────────────────────────────────────────────
 //
@@ -135,8 +137,9 @@ class LazyDbConnection {
 
 // ─── Instances & Lazy Wrappers ───────────────────────────────────────────────
 
-let usersLazy;    // LazyDbConnection for users.duckdb
-let gamesLazy;    // LazyDbConnection for games.duckdb
+let usersLazy;        // LazyDbConnection for users.duckdb
+let gamesLazy;        // LazyDbConnection for games.duckdb
+let tournamentsLazy;  // LazyDbConnection for tournaments.duckdb
 
 const initDb = async () => {
     try {
@@ -177,6 +180,12 @@ const initDb = async () => {
             await userCon.run(`UPDATE users SET rating = 1500.0 WHERE rating = 1200`);
         } catch (_) { /* columns already exist */ }
 
+        // Tournament tracking columns
+        try {
+            await userCon.run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS nb_tournaments_entered INTEGER DEFAULT 0`);
+            await userCon.run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS nb_tournaments_finished INTEGER DEFAULT 0`);
+        } catch (_) { /* columns already exist */ }
+
         try { if (userCon.closeSync) userCon.closeSync(); } catch (_) {}
         try { if (initialUsersInstance.closeSync) initialUsersInstance.closeSync(); } catch (_) {}
 
@@ -202,7 +211,71 @@ const initDb = async () => {
         try { if (gameCon.closeSync) gameCon.closeSync(); } catch (_) {}
         try { if (initialGamesInstance.closeSync) initialGamesInstance.closeSync(); } catch (_) {}
 
-        console.log("DuckDB instances (users & games) initialized. Locks released for lazy loading.");
+        // ── Tournaments Database ──
+        const initialTournamentsInstance = await DuckDBInstance.create(tournamentsDbPath);
+        tournamentsLazy = new LazyDbConnection(tournamentsDbPath, 'tournaments');
+
+        const tournCon = await initialTournamentsInstance.connect();
+        await tournCon.run(`
+            CREATE TABLE IF NOT EXISTS tournaments (
+                id VARCHAR PRIMARY KEY,
+                creator_id VARCHAR NOT NULL,
+                status VARCHAR DEFAULT 'open',
+                format VARCHAR NOT NULL,
+                password_hash VARCHAR,
+                has_password INTEGER DEFAULT 0,
+                max_participants INTEGER NOT NULL,
+                current_count INTEGER DEFAULT 0,
+                time_control_minutes INTEGER NOT NULL,
+                time_control_increment INTEGER NOT NULL,
+                board_id VARCHAR,
+                rating_min INTEGER DEFAULT 0,
+                rating_max INTEGER DEFAULT 5000,
+                duration_value INTEGER NOT NULL,
+                invited_bots INTEGER DEFAULT 0,
+                creator_plays INTEGER DEFAULT 1,
+                launch_mode VARCHAR DEFAULT 'when_complete',
+                launch_at BIGINT,
+                created_at BIGINT NOT NULL,
+                started_at BIGINT,
+                completed_at BIGINT,
+                remove_at BIGINT NOT NULL,
+                current_round INTEGER DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS tournament_participants (
+                tournament_id VARCHAR NOT NULL,
+                user_id VARCHAR NOT NULL,
+                username VARCHAR,
+                is_bot INTEGER DEFAULT 0,
+                score DOUBLE DEFAULT 0,
+                wins INTEGER DEFAULT 0,
+                draws INTEGER DEFAULT 0,
+                losses INTEGER DEFAULT 0,
+                tiebreak DOUBLE DEFAULT 0,
+                joined_at BIGINT NOT NULL,
+                PRIMARY KEY (tournament_id, user_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS tournament_games (
+                id VARCHAR PRIMARY KEY,
+                tournament_id VARCHAR NOT NULL,
+                round INTEGER NOT NULL,
+                white_id VARCHAR NOT NULL,
+                black_id VARCHAR NOT NULL,
+                game_hash VARCHAR,
+                result VARCHAR,
+                white_score DOUBLE DEFAULT 0,
+                black_score DOUBLE DEFAULT 0,
+                started_at BIGINT,
+                completed_at BIGINT
+            );
+        `);
+
+        try { if (tournCon.closeSync) tournCon.closeSync(); } catch (_) {}
+        try { if (initialTournamentsInstance.closeSync) initialTournamentsInstance.closeSync(); } catch (_) {}
+
+        console.log("DuckDB instances (users, games & tournaments) initialized. Locks released for lazy loading.");
     } catch (err) {
         console.error("DuckDB initialization error:", err);
         throw err;
@@ -221,4 +294,9 @@ const getGamesDb = () => {
     return gamesLazy;
 };
 
-module.exports = { initDb, getUsersDb, getGamesDb };
+const getTournamentsDb = () => {
+    if (!tournamentsLazy) throw new Error("Tournaments Database not initialized.");
+    return tournamentsLazy;
+};
+
+module.exports = { initDb, getUsersDb, getGamesDb, getTournamentsDb };

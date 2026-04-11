@@ -836,8 +836,7 @@ impl Agent for QuickDiegoAgent {
                     }
                     let captures = Self::simulate_captures(state, p_id, target);
                     let cap_count = captures.len();
-                    if cap_count > best_chain_captures
-                        || (cap_count == best_chain_captures && best_chain_piece.is_empty())
+                    if cap_count > 0 && (cap_count > best_chain_captures || best_chain_piece.is_empty())
                     {
                         best_chain_captures = cap_count;
                         best_chain_piece = p_id.clone();

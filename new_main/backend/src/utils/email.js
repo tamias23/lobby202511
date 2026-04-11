@@ -1,5 +1,5 @@
 const nodemailer = require('nodemailer');
-require('dotenv').config();
+require('./configLoader');
 
 const transporter = nodemailer.createTransport({
     service: process.env.EMAIL_SERVICE || 'gmail', // or 'outlook'

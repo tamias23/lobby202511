@@ -37,7 +37,7 @@ if [ ! -f "./target/release/bot-server" ]; then
     echo "ERROR: bot-server binary not found. Run: cd bot-server && cargo build --release"
     exit 1
 fi
-MODELS_DIR=./models PORT=5001 ORT_LOGGING_LEVEL=3 RUST_LOG=info ./target/release/bot-server &
+MODELS_DIR=./models PORT=5001 ORT_LOGGING_LEVEL=3 RUST_LOG=warn ./target/release/bot-server &
 BOT_PID=$!
 
 # --- 3. Start Game Server (A) --- (also serves the built frontend on port 4000)

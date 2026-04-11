@@ -507,6 +507,7 @@ const GameBoard = ({
   blackName,
   whiteRating: initialWhiteRating,
   blackRating: initialBlackRating,
+  tournamentId,
 }) => {
   const [wasmReady, setWasmReady] = useState(false);
   const [pieces, setPieces] = useState(initialState.pieces);
@@ -588,6 +589,7 @@ const GameBoard = ({
   
   const formatUsername = (name, role) => {
     if (!name) return 'Guest';
+    if (role === 'bot') return name; // Already formatted by makeBotDisplayName, e.g. "🤖 jixx"
     if (role === 'guest' && name.startsWith('guest_')) {
       return `guest_${name.slice(6, 13)}`;
     }
@@ -597,12 +599,20 @@ const GameBoard = ({
   const [gameOverInfo, setGameOverInfo] = useState({ winnerId: null, reason: null });
   const [whiteRating, setWhiteRating] = useState(initialWhiteRating || null);
   const [blackRating, setBlackRating] = useState(initialBlackRating || null);
+  const [ratingDelta, setRatingDelta] = useState(null); // { whiteOld, whiteNew, blackOld, blackNew }
 
   // Listen for live rating updates after a match ends
   useEffect(() => {
     const onRatingUpdated = (data) => {
       if (data.whiteRating != null) setWhiteRating(data.whiteRating);
       if (data.blackRating != null) setBlackRating(data.blackRating);
+      // Store old/new for delta display in game over overlay
+      setRatingDelta({
+        whiteOld: data.whiteRatingOld,
+        whiteNew: data.whiteRating,
+        blackOld: data.blackRatingOld,
+        blackNew: data.blackRating,
+      });
     };
     socket.on('rating_updated', onRatingUpdated);
     return () => socket.off('rating_updated', onRatingUpdated);
@@ -1186,66 +1196,133 @@ const GameBoard = ({
           <div
             style={{ display: "flex", flexDirection: "column", gap: "15px" }}
           >
-            {/* Player (Self) */}
-            <div
-              style={{
-                padding: "10px",
-                backgroundColor: "rgba(255,255,255,0.05)",
-                borderRadius: "8px",
-                borderLeft: `3px solid ${side === "white" ? "#f1c40f" : "#3498db"}`,
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "11px",
-                  opacity: 0.6,
-                  textTransform: "uppercase",
-                  marginBottom: "2px",
-                }}
-              >
-                You ({side})
-              </div>
-              <div style={{ fontWeight: 'bold', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {formatUsername(playerName, side === 'white' ? whiteRole : blackRole)}
-              </div>
-              <div
-                style={{ fontSize: "12px", color: "#2ecc71", marginTop: "4px" }}
-              >
-                Rating: {side === 'white' ? (whiteRating || '—') : (blackRating || '—')}
-              </div>
-            </div>
+            {spectatorMode ? (
+              // ── Spectator view: show White then Black, no "You" label ──
+              <>
+                <div
+                  style={{
+                    padding: "10px",
+                    backgroundColor: "rgba(255,255,255,0.05)",
+                    borderRadius: "8px",
+                    borderLeft: "3px solid #f1c40f",
+                  }}
+                >
+                  <div style={{ fontSize: "11px", opacity: 0.6, textTransform: "uppercase", marginBottom: "2px" }}>
+                    ⚪ White
+                  </div>
+                  <div style={{ fontWeight: 'bold', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {formatUsername(whiteName, whiteRole)}
+                  </div>
+                  <div style={{ fontSize: "12px", color: "#2ecc71", marginTop: "4px" }}>
+                    Rating: {whiteRating || '—'}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    padding: "10px",
+                    backgroundColor: "rgba(255,255,255,0.05)",
+                    borderRadius: "8px",
+                    borderLeft: "3px solid #3498db",
+                  }}
+                >
+                  <div style={{ fontSize: "11px", opacity: 0.6, textTransform: "uppercase", marginBottom: "2px" }}>
+                    ⚫ Black
+                  </div>
+                  <div style={{ fontWeight: 'bold', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {formatUsername(blackName, blackRole)}
+                  </div>
+                  <div style={{ fontSize: "12px", color: "#2ecc71", marginTop: "4px" }}>
+                    Rating: {blackRating || '—'}
+                  </div>
+                </div>
+              </>
+            ) : (
+              // ── Player view: YOU on top, OPPONENT below ──
+              <>
+                <div
+                  style={{
+                    padding: "10px",
+                    backgroundColor: "rgba(255,255,255,0.05)",
+                    borderRadius: "8px",
+                    borderLeft: `3px solid ${side === "white" ? "#f1c40f" : "#3498db"}`,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      opacity: 0.6,
+                      textTransform: "uppercase",
+                      marginBottom: "2px",
+                    }}
+                  >
+                    You ({side})
+                  </div>
+                  <div style={{ fontWeight: 'bold', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {formatUsername(playerName, side === 'white' ? whiteRole : blackRole)}
+                  </div>
+                  <div
+                    style={{ fontSize: "12px", color: "#2ecc71", marginTop: "4px" }}
+                  >
+                    Rating: {side === 'white' ? (whiteRating || '—') : (blackRating || '—')}
+                  </div>
+                </div>
 
-            {/* Opponent */}
-            <div
-              style={{
-                padding: "10px",
-                backgroundColor: "rgba(255,255,255,0.05)",
-                borderRadius: "8px",
-                borderLeft: `3px solid ${side !== "white" ? "#f1c40f" : "#3498db"}`,
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "11px",
-                  opacity: 0.6,
-                  textTransform: "uppercase",
-                  marginBottom: "2px",
-                }}
-              >
-                Opponent
-              </div>
-              <div style={{ fontWeight: 'bold', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {formatUsername(opponent, side === 'white' ? blackRole : whiteRole)}
-              </div>
-              <div
-                style={{ fontSize: "12px", color: "#2ecc71", marginTop: "4px" }}
-              >
-                Rating: {side === 'white' ? (blackRating || '—') : (whiteRating || '—')}
-              </div>
-            </div>
+                <div
+                  style={{
+                    padding: "10px",
+                    backgroundColor: "rgba(255,255,255,0.05)",
+                    borderRadius: "8px",
+                    borderLeft: `3px solid ${side !== "white" ? "#f1c40f" : "#3498db"}`,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      opacity: 0.6,
+                      textTransform: "uppercase",
+                      marginBottom: "2px",
+                    }}
+                  >
+                    Opponent
+                  </div>
+                  <div style={{ fontWeight: 'bold', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {formatUsername(opponent, side === 'white' ? blackRole : whiteRole)}
+                  </div>
+                  <div
+                    style={{ fontSize: "12px", color: "#2ecc71", marginTop: "4px" }}
+                  >
+                    Rating: {side === 'white' ? (blackRating || '—') : (whiteRating || '—')}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
-      </div>
+
+        {/* SPECTATOR INFO PANEL */}
+        {spectatorMode && (
+          <div
+            className="glass-panel"
+            style={{
+              marginTop: "10px",
+              padding: "14px",
+              width: "100%",
+              boxSizing: "border-box",
+              textAlign: "center",
+              border: "1px solid rgba(70, 176, 212, 0.3)",
+              background: "rgba(70, 176, 212, 0.06)",
+            }}
+          >
+            <div style={{ fontSize: "18px", marginBottom: "6px" }}>👁</div>
+            <div style={{ fontSize: "12px", fontWeight: "700", color: "#46b0d4", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "4px" }}>
+              Spectating
+            </div>
+            <div style={{ fontSize: "11px", opacity: 0.6, lineHeight: 1.4 }}>
+              You are watching this match live.
+            </div>
+          </div>
+        )}
+      </div>{/* end left hud-panel */}
 
       {/* CENTER - Game Board */}
       <div className="game-board-wrapper" style={{ position: 'relative', flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', minWidth: 0, minHeight: 0 }}>
@@ -1271,7 +1348,15 @@ const GameBoard = ({
       {/* RIGHT HUD - Color Selection & Status */}
       <div className="hud-panel" style={{ display: 'flex', flexDirection: 'column', gap: '15px', width: '180px', minWidth: '180px' }}>
         <div className="glass-panel" style={{ ...rightHudStyle, width: "100%", marginBottom: "10px" }}>
-          <Clock clocks={clocks} lastTurnTimestamp={lastTurnTimestamp} turn={turn} side={side} phase={phase} />
+          <Clock
+            clocks={clocks}
+            lastTurnTimestamp={lastTurnTimestamp}
+            turn={turn}
+            side={side}
+            phase={phase}
+            whiteName={formatUsername(whiteName, whiteRole)}
+            blackName={formatUsername(blackName, blackRole)}
+          />
         </div>
 
         <div className="glass-panel" style={{ ...rightHudStyle, width: '100%' }}>
@@ -1666,8 +1751,44 @@ const GameBoard = ({
               </span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {/* ── Rating changes ── */}
+              {ratingDelta && (
+                <div style={{
+                  background: 'var(--bg)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '12px',
+                  padding: '12px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                  fontSize: '13px',
+                  fontFamily: "'Outfit', sans-serif",
+                }}>
+                  {[
+                    { label: whiteName || 'White', old: ratingDelta.whiteOld, nw: ratingDelta.whiteNew },
+                    { label: blackName || 'Black', old: ratingDelta.blackOld, nw: ratingDelta.blackNew },
+                  ].map(({ label, old: o, nw }) => {
+                    if (o == null || nw == null) return null;
+                    const diff = Math.round(nw) - Math.round(o);
+                    const sign = diff >= 0 ? '+' : '';
+                    const color = diff > 0 ? '#4caf82' : diff < 0 ? '#e05c5c' : 'var(--text-muted)';
+                    return (
+                      <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>{label}</span>
+                        <span style={{ color: 'var(--text-main)', letterSpacing: '0.02em' }}>
+                          {Math.round(o)}
+                          <span style={{ color: 'var(--text-muted)', margin: '0 4px' }}>→</span>
+                          {Math.round(nw)}
+                          <span style={{ color, fontWeight: 700, marginLeft: '6px' }}>({sign}{diff})</span>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
               <button
-                onClick={() => navigate("/")}
+                onClick={() => tournamentId ? navigate(`/tournament/${tournamentId}`) : navigate("/")}
                 style={{
                   padding: "11px 28px",
                   background: "linear-gradient(135deg, #46b0d4, #f27813)",
@@ -1685,7 +1806,7 @@ const GameBoard = ({
                 onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.04)"; }}
                 onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; }}
               >
-                Back to Lobby
+                {tournamentId ? '🏆 Back to Tournament' : 'Back to Lobby'}
               </button>
               <button
                 onClick={() => {

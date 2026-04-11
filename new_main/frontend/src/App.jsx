@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, createContext } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { socket } from './socket';
+import { socket, setSocketToken } from './socket';
 import LobbyPage from './components/LobbyPage';
 import AuthHeader from './components/AuthHeader';
 import GamePage from './components/GamePage';
@@ -8,6 +8,12 @@ import LoginForm from './components/LoginForm';
 import RegistrationForm from './components/RegistrationForm';
 import BubbleBackground from './components/BubbleBackground';
 import AnalysisPage from './components/AnalysisPage';
+import TutorialPage from './components/TutorialPage';
+import TournamentCreate from './components/TournamentCreate';
+import TournamentRoom from './components/TournamentRoom';
+
+// Socket context so tournament pages can access the socket without prop drilling
+export const SocketContext = createContext(null);
 
 function App() {
   const [user, setUser] = useState(null);
@@ -29,12 +35,31 @@ function App() {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
-  // Connect socket on mount (everyone gets a socket connection for live stats/lobby)
+  // Connect socket on mount + restore session from JWT
   useEffect(() => {
     if (!socket.connected) {
       socket.connect();
     }
-    // If we had a persisted session, we could restore user here
+
+    // Restore user session from stored JWT
+    const token = localStorage.getItem('jwt_token');
+    if (token && !user) {
+      fetch('/api/me', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      })
+        .then(r => {
+          if (!r.ok) throw new Error('Token invalid');
+          return r.json();
+        })
+        .then(userData => {
+          setUser(userData);
+          socket.emit('join_lobby', { userId: userData.id, role: userData.role });
+        })
+        .catch(() => {
+          // Token expired or invalid — clear it
+          localStorage.removeItem('jwt_token');
+        });
+    }
     return () => {};
   }, []);
 
@@ -58,12 +83,18 @@ function App() {
 
   const handleLoginSuccess = (userData) => {
     setUser(userData);
+    // Update socket auth with new JWT and reconnect
+    if (userData.token) {
+      setSocketToken(userData.token);
+    }
     // Re-emit join_lobby so backend knows this socket's identity
     socket.emit('join_lobby', { userId: userData.id, role: userData.role });
   };
 
   const handleLogout = () => {
     setUser(null);
+    localStorage.removeItem('jwt_token');
+    setSocketToken(null);
     socket.emit('join_lobby', {}); // back to guest
   };
 
@@ -77,6 +108,7 @@ function App() {
   };
 
   return (
+    <SocketContext.Provider value={socket}>
     <div className="App">
       {/* Fixed theme toggle - positioned away from header */}
       <button
@@ -104,6 +136,18 @@ function App() {
         </button>
       )}
 
+      {/* Tutorial shortcut — just below Analysis, lobby only */}
+      {location.pathname === '/' && (
+        <button
+          onClick={() => navigate('/tutorial')}
+          style={tutorialButtonStyle}
+          title="Tutorial"
+          id="tutorial-btn"
+        >
+          📖 Tutorial
+        </button>
+      )}
+
       {/* Auth header top-right - ONLY on lobby page */}
       {location.pathname === '/' && (
         <AuthHeader user={user} onLogout={handleLogout} />
@@ -115,8 +159,12 @@ function App() {
         <Route path="/register" element={<RegistrationForm />} />
         <Route path="/games/:hash" element={<GamePage user={user} />} />
         <Route path="/analysis" element={<AnalysisPage />} />
+        <Route path="/tutorial" element={<TutorialPage />} />
+        <Route path="/tournament/create" element={<TournamentCreate user={user} />} />
+        <Route path="/tournament/:id" element={<TournamentRoom user={user} />} />
       </Routes>
     </div>
+    </SocketContext.Provider>
   );
 }
 
@@ -140,6 +188,11 @@ const analysisButtonStyle = {
   boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
   transition: 'all 0.2s',
   fontFamily: "'Outfit', sans-serif",
+};
+
+const tutorialButtonStyle = {
+  ...analysisButtonStyle,
+  top: '58px', // 14px + ~44px button height
 };
 
 const themeToggleStyle = {

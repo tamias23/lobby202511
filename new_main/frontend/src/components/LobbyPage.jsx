@@ -23,6 +23,12 @@ const LobbyPage = ({ user }) => {
   const [botTimeControl, setBotTimeControl] = useState({ minutes: 15, increment: 10 });
   const [showBotPanel, setShowBotPanel] = useState(false);
   const [availableBots, setAvailableBots] = useState([]);
+  // Tournament state
+  const [openTournaments, setOpenTournaments] = useState([]);
+  const [activeTournaments, setActiveTournaments] = useState([]);
+  const [tournamentsEnabled, setTournamentsEnabled] = useState(false);
+  const [joinModal, setJoinModal] = useState(null); // { tournamentId, hasPassword }
+  const [joinPassword, setJoinPassword] = useState('');
 
 
   const showNotif = (msg, type = 'info') => {
@@ -32,11 +38,16 @@ const LobbyPage = ({ user }) => {
 
   // --- Socket listeners ---
   useEffect(() => {
-    const onLobbyState = ({ gameRequests, activeGames, stats, available_bots }) => {
+    const onLobbyState = ({ gameRequests, activeGames, stats, available_bots, tournaments }) => {
       setGameRequests(gameRequests || []);
       setActiveGames(activeGames || []);
       setLiveStats(stats || { onlineUsers: 0, activeGames: 0 });
       if (available_bots) setAvailableBots(available_bots);
+      if (tournaments) {
+        setTournamentsEnabled(tournaments.enabled !== false);
+        setOpenTournaments(tournaments.openTournaments || []);
+        setActiveTournaments(tournaments.activeTournaments || []);
+      }
     };
 
     const onLobbyUpdate = (update) => {
@@ -44,11 +55,16 @@ const LobbyPage = ({ user }) => {
       if (update.activeGames  !== undefined) setActiveGames(update.activeGames);
       if (update.stats        !== undefined) setLiveStats(update.stats);
       if (update.available_bots !== undefined) setAvailableBots(update.available_bots);
+      if (update.tournaments) {
+        setTournamentsEnabled(update.tournaments.enabled !== false);
+        setOpenTournaments(update.tournaments.openTournaments || []);
+        setActiveTournaments(update.tournaments.activeTournaments || []);
+      }
     };
 
-    const onGameCreated = ({ hash, side, opponent, initialState }) => {
+    const onGameCreated = ({ hash, side, opponent, initialState, tournamentId }) => {
       navigate(`/games/${hash}`, {
-        state: { side, opponent, initialState, gameHash: hash },
+        state: { side, opponent, initialState, gameHash: hash, tournamentId: tournamentId || null },
       });
     };
 
@@ -65,12 +81,23 @@ const LobbyPage = ({ user }) => {
       showNotif(`🤖 ${message}`, 'error');
     };
 
+    const onTournamentJoined = ({ tournamentId }) => {
+      setJoinModal(null);
+      setJoinPassword('');
+      navigate(`/tournament/${tournamentId}`);
+    };
+    const onTournamentError = (data) => {
+      showNotif(data.message || 'Tournament error.', 'error');
+    };
+
     socket.on('lobby_state',    onLobbyState);
     socket.on('lobby_update',   onLobbyUpdate);
     socket.on('game_created',   onGameCreated);
     socket.on('request_created', onRequestCreated);
     socket.on('request_error',  onRequestError);
     socket.on('bot_error',      onBotError);
+    socket.on('tournament_joined', onTournamentJoined);
+    socket.on('tournament_error',  onTournamentError);
 
     // Enter lobby room
     socket.emit('enter_lobby');
@@ -81,6 +108,8 @@ const LobbyPage = ({ user }) => {
       socket.off('game_created',   onGameCreated);
       socket.off('request_created', onRequestCreated);
       socket.off('bot_error',      onBotError);
+      socket.off('tournament_joined', onTournamentJoined);
+      socket.off('tournament_error',  onTournamentError);
     };
   }, [navigate]);
 
@@ -165,6 +194,25 @@ const LobbyPage = ({ user }) => {
     });
     setShowBotPanel(false);
   };
+
+  const handleJoinTournament = (t) => {
+    if (!user) {
+      showNotif('You must be logged in to join a tournament.', 'error');
+      return;
+    }
+    if (t.hasPassword) {
+      setJoinModal({ tournamentId: t.id, hasPassword: true });
+    } else {
+      socket.emit('join_tournament', { tournamentId: t.id });
+    }
+  };
+
+  const handleJoinConfirm = () => {
+    if (!joinModal) return;
+    socket.emit('join_tournament', { tournamentId: joinModal.tournamentId, password: joinPassword });
+  };
+
+  const formatLabel = { swiss: '🏔️ Swiss', arena: '⚔️ Arena', knockout: '🥊 KO', round_robin: '🔄 RR' };
 
 
   const formatTC = (tc) => `${tc.minutes}+${tc.increment}`;
@@ -345,9 +393,10 @@ const LobbyPage = ({ user }) => {
                       disabled={bot.busy}
                     >
                       <div className="bot-btn-name">{bot.display_name}</div>
-                      <div className="bot-btn-desc">
-                        {bot.busy ? 'In a game…' : (bot.agent_type === 'mcts' ? 'Neural tree search' : 'Fast heuristic')}
+                      <div className="bot-btn-rating">
+                        {bot.busy ? '⏳ In a game…' : `★ ${bot.rating ?? 1500}`}
                       </div>
+
                     </button>
                   ))}
                 </div>
@@ -356,10 +405,17 @@ const LobbyPage = ({ user }) => {
             )}
           </div>
           )}
+
+          {/* Create Tournament button (registered users only) */}
+          {user && tournamentsEnabled && (
+            <button className="create-tournament-btn glass-panel" onClick={() => navigate('/tournament/create')}>
+              🏆 Create Tournament
+            </button>
+          )}
         </main>
       </div>
 
-      {/* ── Bottom — Game Lists ── */}
+      {/* ── Bottom — 4-Column Grid: Games + Tournaments ── */}
       <div className="game-lists-section">
 
         {/* Open Requests */}
@@ -437,9 +493,96 @@ const LobbyPage = ({ user }) => {
             </div>
           )}
         </div>
-        {/* Right — Space / Filler for centering */}
-        <div className="lobby-side-column" />
+
+        {/* Open Tournaments */}
+        <div className="game-list-panel glass-panel">
+          <h3 className="game-list-title">
+            <span>🏆 Open Tournaments</span>
+            <span className="game-list-count">{openTournaments.length}</span>
+          </h3>
+          {openTournaments.length === 0 ? (
+            <div className="game-list-empty">No open tournaments.<br /><span>Create one!</span></div>
+          ) : (
+            <div className="game-list-scroll">
+              {openTournaments.map((t) => (
+                <div key={t.id} className="game-request-card">
+                  <div className="grc-left">
+                    <span className="grc-user">{formatLabel[t.format] || t.format}</span>
+                    <span className="grc-tc">{t.timeControl.minutes}+{t.timeControl.increment}</span>
+                    <span className="grc-time">
+                      {t.currentCount}/{t.maxParticipants}
+                      {t.hasPassword && ' 🔒'}
+                    </span>
+                  </div>
+                  <div className="grc-right">
+                    <button className="grc-accept-btn" onClick={() => handleJoinTournament(t)}>Join</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Active Tournaments */}
+        <div className="game-list-panel glass-panel">
+          <h3 className="game-list-title">
+            <span>🏆 Active Tournaments</span>
+            <span className="game-list-count">{activeTournaments.length}</span>
+          </h3>
+          {activeTournaments.length === 0 ? (
+            <div className="game-list-empty">No active tournaments.</div>
+          ) : (
+            <div className="game-list-scroll">
+              {activeTournaments.map((t) => (
+                <div key={t.id} className="active-game-card">
+                  <div className="agc-left">
+                    <span className="agc-players">
+                      {formatLabel[t.format] || t.format}
+                      {t.status === 'completed' && ' ✅'}
+                    </span>
+                    <span className="agc-meta">
+                      {t.timeControl.minutes}+{t.timeControl.increment}
+                      {t.format !== 'arena' ? ` · R${t.currentRound}/${t.maxRounds}` : ''}
+                      {' · '}{t.currentCount} players
+                    </span>
+                  </div>
+                  <div className="agc-right">
+                    <button className="agc-spectate-btn" onClick={() => navigate(`/tournament/${t.id}`)}>
+                      View
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Join Tournament Password Modal */}
+      {joinModal && (
+        <div className="tourn-join-modal-overlay" onClick={() => setJoinModal(null)}>
+          <div className="tourn-join-modal glass-panel" onClick={e => e.stopPropagation()}>
+            <h3>Join Tournament</h3>
+            {joinModal.hasPassword && (
+              <>
+                <p style={{color: 'var(--text-muted)'}}>This tournament is password-protected.</p>
+                <input
+                  type="password"
+                  value={joinPassword}
+                  onChange={e => setJoinPassword(e.target.value)}
+                  placeholder="Enter password"
+                  className="tourn-input"
+                  autoFocus
+                />
+              </>
+            )}
+            <div style={{display: 'flex', gap: '0.5rem', marginTop: '1rem'}}>
+              <button className="tourn-btn tourn-btn--primary" onClick={handleJoinConfirm}>Join</button>
+              <button className="tourn-btn tourn-btn--secondary" onClick={() => setJoinModal(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
