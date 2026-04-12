@@ -701,6 +701,15 @@ app.use((req, res, next) => {
     next();
 });
 
+// Redirect Cloud Run default URL (.run.app) → canonical custom domain
+app.use((req, res, next) => {
+    const host = req.get('host') || '';
+    if (host.endsWith('.run.app')) {
+        return res.redirect(301, `https://dedalthegame.com${req.originalUrl}`);
+    }
+    next();
+});
+
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {

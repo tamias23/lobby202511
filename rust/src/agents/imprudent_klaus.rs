@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-/// Total number of learnable parameters for QuickDiego.
+/// Total number of learnable parameters for ImprudentKlaus.
 ///
 /// Layout (33 weights):
 ///   [0]  color: count of moveable pieces
@@ -37,7 +37,7 @@ use std::time::{Duration, Instant};
 ///   [23..32] spare slots for future heuristics (initialised to 0)
 pub const NUM_PARAMS: usize = 33;
 
-pub struct QuickDiegoAgent {
+pub struct ImprudentKlausAgent {
     pub weights: [f64; NUM_PARAMS],
     /// Budget in ms for the MCTS color look-ahead (step 1-a).
     pub mcts_color_budget_ms: u64,
@@ -48,7 +48,7 @@ pub struct QuickDiegoAgent {
     pub record_data: bool,
 }
 
-impl QuickDiegoAgent {
+impl ImprudentKlausAgent {
     /// Standard constructor — no data recording.
     pub fn new(weights: [f64; NUM_PARAMS], mcts_color_budget_ms: u64) -> Self {
         Self::with_recording(weights, mcts_color_budget_ms, String::new(), false)
@@ -187,7 +187,7 @@ impl QuickDiegoAgent {
         }
 
         let _ = std::fs::create_dir_all(&self.data_dir);
-        let filename = format!("{}/diego_{}.json", self.data_dir, uuid::Uuid::new_v4());
+        let filename = format!("{}/klaus_{}.json", self.data_dir, uuid::Uuid::new_v4());
         if let Ok(json_str) = serde_json::to_string(&records) {
             let _ = std::fs::write(filename, json_str);
         }
@@ -344,54 +344,89 @@ impl QuickDiegoAgent {
         max_d
     }
 
-    /// Universal failsafe: validates EVERY candidate move (not just Goddess moves).
-    /// If the proposed move allows the Goddess to be captured next turn, it ignores
-    /// the move and hunts down the `scored_moves` list for a move that keeps her safe.
-    /// This gives Diego the ability to block lines of sight and prevents him from
-    /// moving essential meat shields away.
-    fn universal_failsafe(
-        &self,
+    /// Compute a safety score for the goddess at `poly`: sum of distances
+    /// to the 5 closest enemy pieces currently on the board.
+    /// Higher = safer (goddess is farther from enemies).
+    fn goddess_safety_score(state: &GameState, poly: &str) -> f64 {
+        let enemy = if state.turn == Side::White { Side::Black } else { Side::White };
+        let mut distances: Vec<f64> = Vec::new();
+        for p in state.board.pieces.values() {
+            if p.side == enemy
+                && p.position != "returned"
+                && p.position != "graveyard"
+            {
+                distances.push(Self::poly_distance(state, poly, &p.position));
+            }
+        }
+        distances.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        // Sum of the 5 closest (or fewer if less than 5 enemies on board)
+        distances.iter().take(5).sum()
+    }
+
+    /// Goddess failsafe: given a candidate AgentMove, if it moves the goddess,
+    /// re-evaluate to pick the goddess target that maximises the safety score
+    /// (must be >= current safety). If no such target exists, fall back to
+    /// the best non-goddess move from `scored_moves`, or pass.
+    fn goddess_failsafe(
         state: &GameState,
         candidate: AgentMove,
+        all_moves: &HashMap<String, Vec<String>>,
         scored_moves: &[(String, String, f64, bool)],
         pass_allowed: bool,
     ) -> AgentMove {
-        let mut my_goddess_id = String::new();
-        for (id, p) in &state.board.pieces {
-            if p.side == state.turn && p.piece_type == PieceType::Goddess && p.position != "graveyard" && p.position != "returned" {
-                my_goddess_id = id.clone();
-                break;
+        let goddess_piece_id = match &candidate {
+            AgentMove::Move { piece, .. } => {
+                let p = &state.board.pieces[piece];
+                if p.piece_type == PieceType::Goddess {
+                    Some(piece.clone())
+                } else {
+                    None
+                }
             }
-        }
+            AgentMove::Pass => None,
+        };
 
-        // No goddess on board, return candidate as-is
-        if my_goddess_id.is_empty() {
-            return candidate;
-        }
+        // Not a goddess move → return as-is
+        let goddess_id = match goddess_piece_id {
+            Some(id) => id,
+            None => return candidate,
+        };
 
-        let enemy_side = if state.turn == Side::White { Side::Black } else { Side::White };
-        let budget_ms = 10; // Rapid simulation budget, down from 20 to handle iterating
-
-        // 1. Is the candidate target safe?
-        if let AgentMove::Move { piece, target } = &candidate {
-            let mut test_state = state.clone();
-            apply_move(&mut test_state, piece, target);
-            if self.find_threats_to_piece(&test_state, &my_goddess_id, enemy_side, budget_ms).is_empty() {
-                return candidate;
-            }
+        // Compute current goddess safety (from her current position)
+        let goddess = &state.board.pieces[&goddess_id];
+        let current_safety = if goddess.position != "returned" && goddess.position != "graveyard" {
+            Self::goddess_safety_score(state, &goddess.position)
         } else {
-            // If the candidate is a PASS, simulate if passing is safe.
-            let test_state = state.clone();
-            if self.find_threats_to_piece(&test_state, &my_goddess_id, enemy_side, budget_ms).is_empty() {
-                return candidate;
+            0.0 // deploying from returned: any position is acceptable
+        };
+
+        // Find the goddess target that maximises safety score
+        if let Some(targets) = all_moves.get(&goddess_id) {
+            let mut best_target: Option<&String> = None;
+            let mut best_safety = f64::NEG_INFINITY;
+            for t in targets {
+                let safety = Self::goddess_safety_score(state, t);
+                if safety > best_safety {
+                    best_safety = safety;
+                    best_target = Some(t);
+                }
+            }
+
+            // Accept only if the best target keeps or improves safety
+            if best_safety >= current_safety {
+                if let Some(t) = best_target {
+                    return AgentMove::Move {
+                        piece: goddess_id,
+                        target: t.clone(),
+                    };
+                }
             }
         }
 
-        // 2. Candidate failed the safety check! Sweep through ALL scored moves to find a block/escape
+        // Goddess move is unsafe → pick the best non-goddess move
         for (piece, target, _score, _ends) in scored_moves {
-            let mut test_state = state.clone();
-            apply_move(&mut test_state, piece, target);
-            if self.find_threats_to_piece(&test_state, &my_goddess_id, enemy_side, budget_ms).is_empty() {
+            let p = &state.board.pieces[piece];
+            if p.piece_type != PieceType::Goddess {
                 return AgentMove::Move {
                     piece: piece.clone(),
                     target: target.clone(),
@@ -399,11 +434,11 @@ impl QuickDiegoAgent {
             }
         }
 
-        // 3. Desperation fallback: no safe moves exist, accept our fate
+        // No non-goddess move available
         if pass_allowed {
             AgentMove::Pass
         } else {
-            candidate 
+            candidate // last resort: use the original move
         }
     }
 
@@ -455,101 +490,6 @@ impl QuickDiegoAgent {
             }
         }
         false
-    }
-
-    // ────────────────────────────────────────────────────────────────────────
-    //  Step 1-a.5: Threat simulation (Escape Goddess priority)
-    // ────────────────────────────────────────────────────────────────────────
-
-    fn find_threats_to_piece(&self, state: &GameState, target_piece_id: &str, enemy_side: Side, max_budget_ms: u64) -> std::collections::HashSet<String> {
-        let budget = Duration::from_millis(max_budget_ms);
-        let start = Instant::now();
-        let mut threats = std::collections::HashSet::new();
-
-        while start.elapsed() < budget {
-            let mut sim = state.clone();
-            sim.turn = enemy_side;
-            sim.is_new_turn = true;
-            
-            let valid_colors = get_legal_colors(&sim, &enemy_side);
-            if !valid_colors.is_empty() {
-                let mut rng = rand::rng();
-                let c = valid_colors.iter().choose(&mut rng).unwrap().clone();
-                sim.color_chosen.insert(enemy_side, c.to_lowercase());
-            }
-            sim.is_new_turn = false;
-
-            let mut steps = 0;
-            while sim.turn == enemy_side && sim.phase == GamePhase::Playing && steps < 50 {
-                steps += 1;
-                let eligible = sim.get_eligible_piece_ids();
-                let mut all_moves: HashMap<String, Vec<String>> = HashMap::new();
-                for p_id in &eligible {
-                    let moves = get_legal_moves(&sim, p_id);
-                    if !moves.is_empty() {
-                        all_moves.insert(p_id.clone(), moves);
-                    }
-                }
-
-                if all_moves.is_empty() {
-                    break;
-                }
-
-                let mut rng = rand::rng();
-                let p_id = all_moves.keys().choose(&mut rng).unwrap().clone();
-                let target = all_moves[&p_id].iter().choose(&mut rng).unwrap().clone();
-
-                let was_returned = sim.board.pieces[&p_id].position == "returned";
-                let captured = apply_move(&mut sim, &p_id, &target);
-                
-                if sim.board.pieces.get(target_piece_id).map(|p| p.position == "graveyard").unwrap_or(true) {
-                    threats.insert(p_id.clone());
-                    break;
-                }
-                
-                apply_move_turnover(&mut sim, &p_id, &target, false, captured.is_empty(), was_returned);
-            }
-        }
-        threats
-    }
-
-    fn move_neutralizes_threats(state: &GameState, p_id: &str, target: &str, threats: &std::collections::HashSet<String>) -> std::collections::HashSet<String> {
-        let mut neutralized = std::collections::HashSet::new();
-        let p_type = &state.board.pieces[p_id].piece_type;
-        let my_side = state.turn;
-        
-        // Direct capture
-        if let Some(occ_id) = state.occupancy.get(target) {
-            if threats.contains(occ_id) {
-                neutralized.insert(occ_id.clone());
-            }
-        }
-        
-        // AoE capture
-        if *p_type == PieceType::Witch || *p_type == PieceType::Mage {
-            for n in state.get_slide_neighbors(target) {
-                if let Some(occ_id) = state.occupancy.get(&n) {
-                    let np = &state.board.pieces[occ_id];
-                    if threats.contains(occ_id) && np.piece_type != PieceType::Golem && np.side != my_side {
-                        neutralized.insert(occ_id.clone());
-                    }
-                }
-            }
-        }
-        
-        // Immobilization
-        if *p_type == PieceType::Siren {
-            for n in state.get_slide_neighbors(target) {
-                if let Some(occ_id) = state.occupancy.get(&n) {
-                    let np = &state.board.pieces[occ_id];
-                    if np.side != my_side && threats.contains(occ_id) {
-                        neutralized.insert(occ_id.clone());
-                    }
-                }
-            }
-        }
-        
-        neutralized
     }
 
     // ────────────────────────────────────────────────────────────────────────
@@ -722,7 +662,7 @@ impl QuickDiegoAgent {
     }
 }
 
-impl Drop for QuickDiegoAgent {
+impl Drop for ImprudentKlausAgent {
     fn drop(&mut self) {
         // Flush any remaining data if the game ended without calling record_winner
         if self.record_data && !self.data_dir.is_empty() {
@@ -735,9 +675,9 @@ impl Drop for QuickDiegoAgent {
     }
 }
 
-impl Agent for QuickDiegoAgent {
+impl Agent for ImprudentKlausAgent {
     fn name(&self) -> &str {
-        "QuickDiego"
+        "ImprudentKlaus"
     }
 
     fn choose_color<'a>(&self, state: &GameState, valid_colors: &'a [String]) -> &'a String {
@@ -877,132 +817,6 @@ impl Agent for QuickDiegoAgent {
             }
         }
 
-        // ── Step 2-c.5: Escape goddess if needed ──
-        let escape_goddess_active = true;
-        if escape_goddess_active {
-            let mut my_goddess_id = String::new();
-            for (id, p) in &state.board.pieces {
-                if p.side == state.turn && p.piece_type == PieceType::Goddess && p.position != "graveyard" && p.position != "returned" {
-                    my_goddess_id = id.clone();
-                    break;
-                }
-            }
-
-            if !my_goddess_id.is_empty() {
-                let enemy_side = if state.turn == Side::White { Side::Black } else { Side::White };
-                let budget_ms = self.mcts_color_budget_ms.max(20);
-                let threats = self.find_threats_to_piece(state, &my_goddess_id, enemy_side, budget_ms);
-                
-                if !threats.is_empty() {
-                    // 1. Try to capture threats without ending our turn
-                    let mut best_non_ending_capture: Option<(String, String, f64)> = None;
-                    for (p_id, targets) in all_moves {
-                        for target in targets {
-                            let ends_turn = Self::would_end_turn(state, p_id, target);
-                            if !ends_turn {
-                                let neut = Self::move_neutralizes_threats(state, p_id, target, &threats);
-                                if !neut.is_empty() {
-                                    let score = self.score_move(state, p_id, target);
-                                    if best_non_ending_capture.is_none() || score > best_non_ending_capture.as_ref().unwrap().2 {
-                                        best_non_ending_capture = Some((p_id.clone(), target.clone(), score));
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    if let Some((p_id, t_id, _score)) = best_non_ending_capture {
-                        let key = format!("{}:{}", p_id, t_id);
-                        self.record_decision(state, &key);
-                        return AgentMove::Move { piece: p_id, target: t_id };
-                    }
-                    
-                    // 2. Try to capture or immobilize all remaining threats with a siren, 
-                    // providing she survives the next turn
-                    let mut best_siren_move: Option<(String, String, f64)> = None;
-                    for (p_id, targets) in all_moves {
-                        let p = &state.board.pieces[p_id];
-                        if p.piece_type == PieceType::Siren {
-                            for target in targets {
-                                let neut = Self::move_neutralizes_threats(state, p_id, target, &threats);
-                                let neutralizes_all = threats.iter().all(|t| neut.contains(t));
-                                
-                                if neutralizes_all {
-                                    let mut test_state = state.clone();
-                                    apply_move(&mut test_state, p_id, target);
-                                    
-                                    let siren_threats = self.find_threats_to_piece(&test_state, p_id, enemy_side, 20);
-                                    if siren_threats.is_empty() {
-                                        let score = self.score_move(state, p_id, target);
-                                        if best_siren_move.is_none() || score > best_siren_move.as_ref().unwrap().2 {
-                                            best_siren_move = Some((p_id.clone(), target.clone(), score));
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    if let Some((p_id, t_id, _score)) = best_siren_move {
-                        let key = format!("{}:{}", p_id, t_id);
-                        self.record_decision(state, &key);
-                        return AgentMove::Move { piece: p_id, target: t_id };
-                    }
-                    
-                    // 3. Flee with the goddess
-                    if let Some(targets) = all_moves.get(&my_goddess_id) {
-                        let mut best_flee: Option<(String, String, f64)> = None;
-                        for target in targets {
-                            let mut test_state = state.clone();
-                            apply_move(&mut test_state, &my_goddess_id, target);
-                            
-                            let g_threats = self.find_threats_to_piece(&test_state, &my_goddess_id, enemy_side, 20);
-                            
-                            if g_threats.is_empty() {
-                                let score = self.score_move(state, &my_goddess_id, target);
-                                if best_flee.is_none() || score > best_flee.as_ref().unwrap().2 {
-                                    best_flee = Some((my_goddess_id.clone(), target.clone(), score));
-                                }
-                            }
-                        }
-                        
-                        if let Some((p_id, t_id, _score)) = best_flee {
-                            let key = format!("{}:{}", p_id, t_id);
-                            self.record_decision(state, &key);
-                            return AgentMove::Move { piece: p_id, target: t_id };
-                        }
-                    }
-                    
-                    // 4. Try any normal turn-ending attack that neutralizes threats and keeps Goddess safe
-                    let mut best_ending_save: Option<(String, String, f64)> = None;
-                    for (p_id, targets) in all_moves {
-                        for target in targets {
-                            let neut = Self::move_neutralizes_threats(state, p_id, target, &threats);
-                            let neutralizes_all = threats.iter().all(|t| neut.contains(t));
-                            
-                            if neutralizes_all {
-                                let mut test_state = state.clone();
-                                apply_move(&mut test_state, p_id, target);
-                                let test_threats = self.find_threats_to_piece(&test_state, &my_goddess_id, enemy_side, 20);
-                                if test_threats.is_empty() {
-                                    let score = self.score_move(state, p_id, target);
-                                    if best_ending_save.is_none() || score > best_ending_save.as_ref().unwrap().2 {
-                                        best_ending_save = Some((p_id.clone(), target.clone(), score));
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    if let Some((p_id, t_id, _score)) = best_ending_save {
-                        let key = format!("{}:{}", p_id, t_id);
-                        self.record_decision(state, &key);
-                        return AgentMove::Move { piece: p_id, target: t_id };
-                    }
-                }
-            }
-        }
-
         // ── Step 2-d: Soldiers/Golems that can move without ending turn, maximise captures ──
         {
             let mut best_chain_piece = String::new();
@@ -1022,7 +836,8 @@ impl Agent for QuickDiegoAgent {
                     }
                     let captures = Self::simulate_captures(state, p_id, target);
                     let cap_count = captures.len();
-                    if cap_count > 0 && (cap_count > best_chain_captures || best_chain_piece.is_empty())
+                    if cap_count > best_chain_captures
+                        || (cap_count == best_chain_captures && best_chain_piece.is_empty())
                     {
                         best_chain_captures = cap_count;
                         best_chain_piece = p_id.clone();
@@ -1062,7 +877,7 @@ impl Agent for QuickDiegoAgent {
                     piece: piece.clone(),
                     target: target.clone(),
                 };
-                let result = self.universal_failsafe(state, candidate, &scored_moves, pass_allowed);
+                let result = Self::goddess_failsafe(state, candidate, all_moves, &scored_moves, pass_allowed);
                 let key = match &result {
                     AgentMove::Move { piece, target } => format!("{}:{}", piece, target),
                     AgentMove::Pass => "PASS".to_string(),
@@ -1092,7 +907,7 @@ impl Agent for QuickDiegoAgent {
                 piece: piece.clone(),
                 target: target.clone(),
             };
-            let result = self.universal_failsafe(state, candidate, &scored_moves, pass_allowed);
+            let result = Self::goddess_failsafe(state, candidate, all_moves, &scored_moves, pass_allowed);
             let key = match &result {
                 AgentMove::Move { piece, target } => format!("{}:{}", piece, target),
                 AgentMove::Pass => "PASS".to_string(),
@@ -1138,29 +953,29 @@ mod tests {
     }
 
     #[test]
-    fn test_quick_diego_name() {
-        let agent = QuickDiegoAgent::new([1.0; NUM_PARAMS], 100);
-        assert_eq!(agent.name(), "QuickDiego");
+    fn test_imprudent_klaus_name() {
+        let agent = ImprudentKlausAgent::new([1.0; NUM_PARAMS], 100);
+        assert_eq!(agent.name(), "ImprudentKlaus");
     }
 
     #[test]
-    fn test_quick_diego_choose_color() {
+    fn test_imprudent_klaus_choose_color() {
         let mut gs = setup_test_board();
         gs.is_new_turn = true;
         gs.phase = GamePhase::Playing;
-        let agent = QuickDiegoAgent::new([1.0; NUM_PARAMS], 50);
+        let agent = ImprudentKlausAgent::new([1.0; NUM_PARAMS], 50);
         let valid_colors = vec!["Blue".to_string(), "Yellow".to_string()];
         let c = agent.choose_color(&gs, &valid_colors);
         assert!(valid_colors.contains(c));
     }
 
     #[test]
-    fn test_quick_diego_choose_move_captures_goddess() {
+    fn test_imprudent_klaus_choose_move_captures_goddess() {
         let mut gs = setup_test_board();
         gs.phase = GamePhase::Playing;
         gs.color_chosen.insert(Side::White, "blue".to_string());
         gs.is_new_turn = false;
-        let agent = QuickDiegoAgent::new([1.0; NUM_PARAMS], 50);
+        let agent = ImprudentKlausAgent::new([1.0; NUM_PARAMS], 50);
 
         // w_goddess on p1, b_goddess on p2. p1 neighbours (jump) = p3.
         // p1 (slide) neighbors = [p2, p3]. Goddess range is 2-jump.
@@ -1195,14 +1010,14 @@ mod tests {
         gs.occupancy.insert("p2".to_string(), "w_soldier_0".to_string());
 
         // Soldier moving to p1 (Blue = chosen) should NOT end turn (chainable)
-        assert!(!QuickDiegoAgent::would_end_turn(&gs, "w_soldier_0", "p1"));
+        assert!(!ImprudentKlausAgent::would_end_turn(&gs, "w_soldier_0", "p1"));
 
         // Goddess moving to p3 (Blue = chosen) SHOULD end turn
-        assert!(QuickDiegoAgent::would_end_turn(&gs, "w_goddess", "p3"));
+        assert!(ImprudentKlausAgent::would_end_turn(&gs, "w_goddess", "p3"));
     }
 
     #[test]
-    fn test_quick_diego_prioritizes_mage_deployment_on_forced_end() {
+    fn test_imprudent_klaus_prioritizes_mage_deployment_on_forced_end() {
         let mut gs = setup_test_board();
         gs.phase = GamePhase::Playing;
         gs.color_chosen.insert(Side::White, "blue".to_string());
@@ -1235,7 +1050,7 @@ mod tests {
         // Use weights that favor distance (so Hero move gets higher score)
         let mut weights = [0.0; NUM_PARAMS];
         weights[22] = 100.0; // Distance heuristic
-        let agent = QuickDiegoAgent::new(weights, 50);
+        let agent = ImprudentKlausAgent::new(weights, 50);
 
         let m = agent.choose_move(&gs, &all_moves, false);
         match m {

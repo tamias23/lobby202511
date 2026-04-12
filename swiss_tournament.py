@@ -125,7 +125,7 @@ def load_agents(filepath):
                 if agent_type == "greedy_bob":
                     # Data column is a quoted comma-separated weight string
                     data = [float(x) for x in raw_data.split(',') if x.strip()]
-                elif agent_type == "quick_diego":
+                elif agent_type in ("quick_diego", "imprudent_klaus"):
                     # MctsBudget column is reused as diego MCTS color look-ahead budget
                     diego_mcts_budget_val = mcts_budget or None
                     mcts_budget = ""  # not used for MCTS search
@@ -160,7 +160,7 @@ def validate_agent_files(agents):
             # data is a file path string
             if not os.path.isfile(a.data):
                 errors.append(f"  {a.name} ({a.type}): file not found: {a.data}")
-        elif a.type == "quick_diego" and isinstance(a.data, list):
+        elif a.type in ("quick_diego", "imprudent_klaus") and isinstance(a.data, list):
             # Weights were already loaded (either from JSON file or inline)
             if len(a.data) == 0:
                 errors.append(f"  {a.name} ({a.type}): empty weight vector")
@@ -207,7 +207,7 @@ async def run_match(sem, agent1, agent2, board_path, temp_dir):
         for side, agent in [("white", white), ("black", black)]:
             if agent.type == "greedy_bob":
                 cmd.extend([f"--greedy-weights-{side}", weights_to_str(agent.data)])
-            elif agent.type == "quick_diego":
+            elif agent.type in ("quick_diego", "imprudent_klaus"):
                 has_diego = True
                 cmd.extend([f"--greedy-weights-{side}", weights_to_str(agent.data)])
                 diego_budget = agent.diego_mcts_budget

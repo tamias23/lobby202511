@@ -83,8 +83,28 @@ fn make_agent(name: &str, weights_str: Option<&String>, mcts_budget: u64, mcts_d
             };
             Arc::new(agents::greedy_jack::GreedyJackAgent::new(weights))
         }
+        "imprudent_klaus" => {
+            let num = agents::imprudent_klaus::NUM_PARAMS;
+            let mut w = vec![0.0; num];
+            if !weights_str.unwrap_or(&"".to_string()).is_empty() {
+                let parsed: Vec<f64> = weights_str.unwrap().split(',').filter_map(|s| s.parse().ok()).collect();
+                for (i, val) in parsed.into_iter().enumerate().take(num) {
+                    w[i] = val;
+                }
+            } else {
+                eprintln!("Warning: imprudent_klaus requested but no/empty weights provided, using zeros.");
+            }
+            let mut arr = [0.0; 33];
+            arr.copy_from_slice(&w[0..num]);
+            Arc::new(agents::imprudent_klaus::ImprudentKlausAgent::with_recording(
+                arr,
+                diego_mcts_budget,
+                mcts_data_dir,
+                mcts_record,
+            ))
+        }
         other => {
-            eprintln!("Unknown agent '{}'. Available: random, greedy_bob, greedy_jack, quick_diego, mcts", other);
+            eprintln!("Unknown agent '{}'. Available: random, greedy_bob, greedy_jack, quick_diego, imprudent_klaus, mcts", other);
             std::process::exit(1);
         }
     }
@@ -132,7 +152,7 @@ async fn main() {
         println!("      --greedy-weights-white \"1.0,1.0,-2.0,...\"");
         println!("      --greedy-weights-black \"1.0,1.0,-2.0,...\"");
         println!();
-        println!("  Agents: random, greedy_bob, greedy_jack, quick_diego, mcts");
+        println!("  Agents: random, greedy_bob, greedy_jack, quick_diego, imprudent_klaus, mcts");
         println!("  Flags:");
         println!("      --mcts-no-record       Disable search data collection for MCTS");
         println!("      --diego-imitate-dir    Enable imitation-data recording for quick_diego agents");
@@ -200,18 +220,22 @@ async fn main() {
     // MCTS agents are unaffected: they still use mcts_data_dir via their own flag.
     let diego_data_dir = diego_imitate_dir.unwrap_or_default();
 
+    let white_diego_dir = if white_agent_name == "quick_diego" || white_agent_name == "imprudent_klaus" { diego_data_dir.clone() } else { mcts_data_dir.clone() };
+    let white_diego_record = if white_agent_name == "quick_diego" || white_agent_name == "imprudent_klaus" { diego_record } else { mcts_record };
     let white_agent = make_agent(
         &white_agent_name, white_weights, mcts_budget_white,
-        if white_agent_name == "quick_diego" { diego_data_dir.clone() } else { mcts_data_dir.clone() },
+        white_diego_dir,
         white_model_path,
-        if white_agent_name == "quick_diego" { diego_record } else { mcts_record },
+        white_diego_record,
         verbosity, mcts_threads_white, diego_mcts_budget,
     );
+    let black_diego_dir = if black_agent_name == "quick_diego" || black_agent_name == "imprudent_klaus" { diego_data_dir.clone() } else { mcts_data_dir.clone() };
+    let black_diego_record = if black_agent_name == "quick_diego" || black_agent_name == "imprudent_klaus" { diego_record } else { mcts_record };
     let black_agent = make_agent(
         &black_agent_name, black_weights, mcts_budget_black,
-        if black_agent_name == "quick_diego" { diego_data_dir.clone() } else { mcts_data_dir.clone() },
+        black_diego_dir,
         black_model_path,
-        if black_agent_name == "quick_diego" { diego_record } else { mcts_record },
+        black_diego_record,
         verbosity, mcts_threads_black, diego_mcts_budget,
     );
 
