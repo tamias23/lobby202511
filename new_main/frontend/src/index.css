@@ -374,6 +374,97 @@ button { font-family: inherit; }
   cursor: pointer;
 }
 .custom-form-actions button:hover { opacity: 0.8; }
+.custom-form-actions .btn-ok:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Custom game form wrapper (expanded layout for board picker) */
+.time-control-custom-form-wrapper {
+  padding: 20px;
+  border-radius: 18px;
+  max-width: 50%;
+  margin: 0 auto;
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Board selection section in custom form */
+.custom-board-section {
+  margin: 16px 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.custom-board-label {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.custom-board-toggle-row {
+  display: flex;
+  gap: 8px;
+}
+.custom-board-picker {
+  margin-top: 8px;
+  animation: fadeIn 0.3s ease-out;
+}
+.custom-board-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 10px;
+}
+.custom-board-card {
+  position: relative;
+  padding: 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s;
+  border: 2px solid transparent;
+}
+.custom-board-card:hover {
+  border-color: rgba(70,176,212,0.4);
+  background: rgba(70,176,212,0.06);
+}
+.custom-board-card--selected {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 1px var(--primary), 0 0 16px rgba(70,176,212,0.25);
+  background: rgba(70,176,212,0.08);
+}
+.custom-board-card-name {
+  font-size: 9px;
+  color: var(--text-muted);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 90px;
+}
+.custom-board-expand-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: rgba(0,0,0,0.4);
+  border: none;
+  border-radius: 6px;
+  width: 22px;
+  height: 22px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.custom-board-card:hover .custom-board-expand-btn {
+  opacity: 1;
+}
 
 /* Cancel request button */
 .cancel-request-btn {
@@ -762,35 +853,18 @@ svg polygon:hover {
   .time-control-btn { padding: 28px 14px; }
   .tc-label { font-size: 1.8rem; }
   .auth-form-panel { padding: 32px 24px; }
+  .time-control-custom-form-wrapper { max-width: 100%; }
 }
 
 /* ──────────────────────────── BOT PANEL ──────────────────────────── */
 .bot-panel {
-  margin-top: 20px;
+  width: 100%;
+  max-width: 900px;
   border-radius: 14px;
   overflow: hidden;
+  animation: fadeIn 0.3s ease-out;
 }
 
-.bot-panel-header {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 20px;
-  background: rgba(70,176,212,0.08);
-  border: none;
-  cursor: pointer;
-  color: var(--text-main);
-  font-size: 15px;
-  font-weight: 600;
-  transition: background 0.2s;
-}
-.bot-panel-header:hover {
-  background: rgba(70,176,212,0.16);
-}
-.bot-panel-icon { font-size: 20px; }
-.bot-panel-label { flex: 1; text-align: left; }
-.bot-panel-chevron { font-size: 11px; color: var(--text-muted); }
 
 .bot-panel-body {
   padding: 16px 20px 20px;
@@ -1397,27 +1471,6 @@ svg polygon:hover {
 
 /* ─────────────────── TOURNAMENT SYSTEM ─────────────────── */
 
-/* Create Tournament button */
-.create-tournament-btn {
-  width: 100%;
-  padding: 14px 20px;
-  margin-top: 10px;
-  border: 1px solid rgba(70,176,212,0.25);
-  border-radius: 12px;
-  background: rgba(70,176,212,0.08);
-  color: var(--primary);
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.25s;
-  font-family: 'Outfit', sans-serif;
-  text-align: center;
-}
-.create-tournament-btn:hover {
-  background: rgba(70,176,212,0.18);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(70,176,212,0.15);
-}
 
 /* ── Tournament Create Page ── */
 .tourn-create-layout {

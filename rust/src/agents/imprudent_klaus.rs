@@ -203,7 +203,7 @@ impl ImprudentKlausAgent {
     }
 
     /// Does landing on `target_poly` end the turn for piece `piece_id`?
-    /// A soldier/golem landing on the chosen color gets sequence-locked but
+    /// A soldier/minotaur landing on the chosen color gets sequence-locked but
     /// does NOT end the turn. Other piece types DO end the turn on chosen color.
     /// Landing on a non-chosen color never ends the turn.
     /// A piece pinned by an enemy siren on arrival on chosen color also ends.
@@ -217,7 +217,7 @@ impl ImprudentKlausAgent {
             .unwrap_or_default();
 
         let piece = &state.board.pieces[piece_id];
-        let is_chainable = piece.piece_type == PieceType::Soldier || piece.piece_type == PieceType::Golem;
+        let is_chainable = piece.piece_type == PieceType::Soldier || piece.piece_type == PieceType::Minotaur;
         let was_returned = piece.position == "returned";
 
         if was_returned {
@@ -232,7 +232,7 @@ impl ImprudentKlausAgent {
         }
 
         if target_color == chosen {
-            // Soldier/Golem get sequence-locked, turn does NOT end
+            // Soldier/Minotaur get sequence-locked, turn does NOT end
             if is_chainable {
                 return false;
             }
@@ -253,30 +253,30 @@ impl ImprudentKlausAgent {
         // Direct capture
         if let Some(defender_id) = state.occupancy.get(target_poly) {
             let defender = &state.board.pieces[defender_id];
-            if defender.side != piece_side && defender.piece_type != PieceType::Golem {
+            if defender.side != piece_side && defender.piece_type != PieceType::Minotaur {
                 captured.push(defender.piece_type.clone());
             }
         }
 
-        // AoE: Witch destroys all adjacent enemies (except Golem)
+        // AoE: Witch destroys all adjacent enemies (except Minotaur)
         if piece_type == PieceType::Witch {
             for n in state.get_slide_neighbors(target_poly) {
                 if let Some(target_id) = state.occupancy.get(&n) {
                     let np = &state.board.pieces[target_id];
-                    if np.side != piece_side && np.piece_type != PieceType::Golem {
+                    if np.side != piece_side && np.piece_type != PieceType::Minotaur {
                         captured.push(np.piece_type.clone());
                     }
                 }
             }
         }
 
-        // AoE: Mage destroys all adjacent enemies on capture (except Golem)
+        // AoE: Mage destroys all adjacent enemies on capture (except Minotaur)
         if piece_type == PieceType::Mage && !captured.is_empty() {
             let enemy = if piece_side == Side::White { Side::Black } else { Side::White };
             for n in state.get_slide_neighbors(target_poly) {
                 if let Some(target_id) = state.occupancy.get(&n) {
                     let np = &state.board.pieces[target_id];
-                    if np.side == enemy && np.piece_type != PieceType::Golem {
+                    if np.side == enemy && np.piece_type != PieceType::Minotaur {
                         captured.push(np.piece_type.clone());
                     }
                 }
@@ -363,10 +363,26 @@ impl ImprudentKlausAgent {
         distances.iter().take(5).sum()
     }
 
+    /// Returns true if any enemy piece can legally reach the goddess's current polygon.
+    /// Used to decide whether it is ever acceptable to move the goddess.
+    fn goddess_is_threatened(state: &GameState, goddess_pos: &str) -> bool {
+        let enemy = if state.turn == Side::White { Side::Black } else { Side::White };
+        for (p_id, p) in &state.board.pieces {
+            if p.side != enemy || p.position == "returned" || p.position == "graveyard" {
+                continue;
+            }
+            let moves = get_legal_moves(state, p_id);
+            if moves.contains(&goddess_pos.to_string()) {
+                return true;
+            }
+        }
+        false
+    }
+
     /// Goddess failsafe: given a candidate AgentMove, if it moves the goddess,
-    /// re-evaluate to pick the goddess target that maximises the safety score
-    /// (must be >= current safety). If no such target exists, fall back to
-    /// the best non-goddess move from `scored_moves`, or pass.
+    /// only permit it when the goddess is under immediate threat OR the move
+    /// strictly improves safety by >10% of the board diameter.
+    /// Otherwise fall back to the best non-goddess move, or pass.
     fn goddess_failsafe(
         state: &GameState,
         candidate: AgentMove,
@@ -392,15 +408,39 @@ impl ImprudentKlausAgent {
             None => return candidate,
         };
 
-        // Compute current goddess safety (from her current position)
         let goddess = &state.board.pieces[&goddess_id];
-        let current_safety = if goddess.position != "returned" && goddess.position != "graveyard" {
-            Self::goddess_safety_score(state, &goddess.position)
-        } else {
-            0.0 // deploying from returned: any position is acceptable
-        };
 
-        // Find the goddess target that maximises safety score
+        // Deploying from reserve: allow freely (goddess has no current position to protect)
+        if goddess.position == "returned" || goddess.position == "graveyard" {
+            return candidate;
+        }
+
+        let current_pos = &goddess.position.clone();
+        let current_safety = Self::goddess_safety_score(state, current_pos);
+        let max_d = Self::max_board_distance(state);
+
+        // Hard rule: only allow goddess movement if she is under immediate threat.
+        // "Immediate threat" = any enemy piece has her current polygon in its legal moves.
+        let threatened = Self::goddess_is_threatened(state, current_pos);
+
+        if !threatened {
+            // Goddess is safe where she is — do NOT move her. Pick best non-goddess move.
+            for (piece, target, _score, _ends) in scored_moves {
+                let p = &state.board.pieces[piece];
+                if p.piece_type != PieceType::Goddess {
+                    return AgentMove::Move {
+                        piece: piece.clone(),
+                        target: target.clone(),
+                    };
+                }
+            }
+            return if pass_allowed { AgentMove::Pass } else { candidate };
+        }
+
+        // Goddess IS threatened: find the target that maximises safety.
+        // Accept only if it strictly improves by > 10% of board diameter.
+        let safety_threshold = current_safety + 0.10 * max_d;
+
         if let Some(targets) = all_moves.get(&goddess_id) {
             let mut best_target: Option<&String> = None;
             let mut best_safety = f64::NEG_INFINITY;
@@ -412,8 +452,7 @@ impl ImprudentKlausAgent {
                 }
             }
 
-            // Accept only if the best target keeps or improves safety
-            if best_safety >= current_safety {
+            if best_safety >= safety_threshold {
                 if let Some(t) = best_target {
                     return AgentMove::Move {
                         piece: goddess_id,
@@ -423,7 +462,8 @@ impl ImprudentKlausAgent {
             }
         }
 
-        // Goddess move is unsafe → pick the best non-goddess move
+        // Threatened but no clearly safe escape → still prefer a non-goddess move
+        // (a defensive piece move may resolve the threat better than fleeing)
         for (piece, target, _score, _ends) in scored_moves {
             let p = &state.board.pieces[piece];
             if p.piece_type != PieceType::Goddess {
@@ -434,11 +474,11 @@ impl ImprudentKlausAgent {
             }
         }
 
-        // No non-goddess move available
+        // Last resort: use the original candidate (only goddess moves available)
         if pass_allowed {
             AgentMove::Pass
         } else {
-            candidate // last resort: use the original move
+            candidate
         }
     }
 
@@ -641,20 +681,40 @@ impl ImprudentKlausAgent {
             }
         }
 
+        // --- Mage deployment safety ---
+        // When deploying the Mage from reserve, strongly penalise targets that have
+        // enemy pieces in their slide neighbourhood. A freshly deployed Mage is
+        // immediately capturable and loses its AoE value before it can act.
+        if piece.position == "returned" && *piece_type == PieceType::Mage {
+            let enemy = if my_side == Side::White { Side::Black } else { Side::White };
+            let has_adjacent_enemy = state.get_slide_neighbors(target_poly).iter().any(|n| {
+                state.occupancy.get(n)
+                    .map(|occ_id| state.board.pieces[occ_id].side == enemy)
+                    .unwrap_or(false)
+            });
+            if has_adjacent_enemy {
+                score -= 1000.0;
+            }
+        }
+
         // --- Distance to enemy goddess ---
-        if let Some(ref goddess_pos) = Self::enemy_goddess_pos(state) {
-            let piece_pos = &piece.position;
-            if piece_pos != "returned" && piece_pos != "graveyard" {
-                let dist_before = Self::poly_distance(state, piece_pos, goddess_pos);
-                let dist_after = Self::poly_distance(state, target_poly, goddess_pos);
-                let max_d = Self::max_board_distance(state);
-                // Normalise: +1 = getting closer, -1 = getting away
-                let normalised = if max_d > 0.0 {
-                    ((dist_before - dist_after) / max_d).clamp(-1.0, 1.0)
-                } else {
-                    0.0
-                };
-                score += self.weights[22] * normalised; // [22] distance heuristic
+        // Excluded for the Goddess herself: moving toward the enemy Goddess is never
+        // desirable for the Goddess piece and was causing it to wander aggressively.
+        if *piece_type != PieceType::Goddess {
+            if let Some(ref goddess_pos) = Self::enemy_goddess_pos(state) {
+                let piece_pos = &piece.position;
+                if piece_pos != "returned" && piece_pos != "graveyard" {
+                    let dist_before = Self::poly_distance(state, piece_pos, goddess_pos);
+                    let dist_after = Self::poly_distance(state, target_poly, goddess_pos);
+                    let max_d = Self::max_board_distance(state);
+                    // Normalise: +1 = getting closer, -1 = getting away
+                    let normalised = if max_d > 0.0 {
+                        ((dist_before - dist_after) / max_d).clamp(-1.0, 1.0)
+                    } else {
+                        0.0
+                    };
+                    score += self.weights[22] * normalised; // [22] distance heuristic
+                }
             }
         }
 
@@ -817,7 +877,7 @@ impl Agent for ImprudentKlausAgent {
             }
         }
 
-        // ── Step 2-d: Soldiers/Golems that can move without ending turn, maximise captures ──
+        // ── Step 2-d: Soldiers/Minotaurs that can move without ending turn, maximise captures ──
         {
             let mut best_chain_piece = String::new();
             let mut best_chain_target = String::new();
@@ -826,7 +886,7 @@ impl Agent for ImprudentKlausAgent {
             for (p_id, targets) in all_moves {
                 let piece = &state.board.pieces[p_id];
                 let is_chainable = piece.piece_type == PieceType::Soldier
-                    || piece.piece_type == PieceType::Golem;
+                    || piece.piece_type == PieceType::Minotaur;
                 if !is_chainable {
                     continue;
                 }

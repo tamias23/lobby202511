@@ -203,7 +203,7 @@ impl QuickDiegoAgent {
     }
 
     /// Does landing on `target_poly` end the turn for piece `piece_id`?
-    /// A soldier/golem landing on the chosen color gets sequence-locked but
+    /// A soldier/minotaur landing on the chosen color gets sequence-locked but
     /// does NOT end the turn. Other piece types DO end the turn on chosen color.
     /// Landing on a non-chosen color never ends the turn.
     /// A piece pinned by an enemy siren on arrival on chosen color also ends.
@@ -217,7 +217,7 @@ impl QuickDiegoAgent {
             .unwrap_or_default();
 
         let piece = &state.board.pieces[piece_id];
-        let is_chainable = piece.piece_type == PieceType::Soldier || piece.piece_type == PieceType::Golem;
+        let is_chainable = piece.piece_type == PieceType::Soldier || piece.piece_type == PieceType::Minotaur;
         let was_returned = piece.position == "returned";
 
         if was_returned {
@@ -232,7 +232,7 @@ impl QuickDiegoAgent {
         }
 
         if target_color == chosen {
-            // Soldier/Golem get sequence-locked, turn does NOT end
+            // Soldier/Minotaur get sequence-locked, turn does NOT end
             if is_chainable {
                 return false;
             }
@@ -253,30 +253,30 @@ impl QuickDiegoAgent {
         // Direct capture
         if let Some(defender_id) = state.occupancy.get(target_poly) {
             let defender = &state.board.pieces[defender_id];
-            if defender.side != piece_side && defender.piece_type != PieceType::Golem {
+            if defender.side != piece_side && defender.piece_type != PieceType::Minotaur {
                 captured.push(defender.piece_type.clone());
             }
         }
 
-        // AoE: Witch destroys all adjacent enemies (except Golem)
+        // AoE: Witch destroys all adjacent enemies (except Minotaur)
         if piece_type == PieceType::Witch {
             for n in state.get_slide_neighbors(target_poly) {
                 if let Some(target_id) = state.occupancy.get(&n) {
                     let np = &state.board.pieces[target_id];
-                    if np.side != piece_side && np.piece_type != PieceType::Golem {
+                    if np.side != piece_side && np.piece_type != PieceType::Minotaur {
                         captured.push(np.piece_type.clone());
                     }
                 }
             }
         }
 
-        // AoE: Mage destroys all adjacent enemies on capture (except Golem)
+        // AoE: Mage destroys all adjacent enemies on capture (except Minotaur)
         if piece_type == PieceType::Mage && !captured.is_empty() {
             let enemy = if piece_side == Side::White { Side::Black } else { Side::White };
             for n in state.get_slide_neighbors(target_poly) {
                 if let Some(target_id) = state.occupancy.get(&n) {
                     let np = &state.board.pieces[target_id];
-                    if np.side == enemy && np.piece_type != PieceType::Golem {
+                    if np.side == enemy && np.piece_type != PieceType::Minotaur {
                         captured.push(np.piece_type.clone());
                     }
                 }
@@ -530,7 +530,7 @@ impl QuickDiegoAgent {
             for n in state.get_slide_neighbors(target) {
                 if let Some(occ_id) = state.occupancy.get(&n) {
                     let np = &state.board.pieces[occ_id];
-                    if threats.contains(occ_id) && np.piece_type != PieceType::Golem && np.side != my_side {
+                    if threats.contains(occ_id) && np.piece_type != PieceType::Minotaur && np.side != my_side {
                         neutralized.insert(occ_id.clone());
                     }
                 }
@@ -701,20 +701,40 @@ impl QuickDiegoAgent {
             }
         }
 
+        // --- Mage deployment safety ---
+        // When deploying the Mage from reserve, strongly penalise targets that have
+        // enemy pieces in their slide neighbourhood. A freshly deployed Mage is
+        // immediately capturable and loses its AoE value before it can act.
+        if piece.position == "returned" && *piece_type == PieceType::Mage {
+            let enemy = if my_side == Side::White { Side::Black } else { Side::White };
+            let has_adjacent_enemy = state.get_slide_neighbors(target_poly).iter().any(|n| {
+                state.occupancy.get(n)
+                    .map(|occ_id| state.board.pieces[occ_id].side == enemy)
+                    .unwrap_or(false)
+            });
+            if has_adjacent_enemy {
+                score -= 1000.0;
+            }
+        }
+
         // --- Distance to enemy goddess ---
-        if let Some(ref goddess_pos) = Self::enemy_goddess_pos(state) {
-            let piece_pos = &piece.position;
-            if piece_pos != "returned" && piece_pos != "graveyard" {
-                let dist_before = Self::poly_distance(state, piece_pos, goddess_pos);
-                let dist_after = Self::poly_distance(state, target_poly, goddess_pos);
-                let max_d = Self::max_board_distance(state);
-                // Normalise: +1 = getting closer, -1 = getting away
-                let normalised = if max_d > 0.0 {
-                    ((dist_before - dist_after) / max_d).clamp(-1.0, 1.0)
-                } else {
-                    0.0
-                };
-                score += self.weights[22] * normalised; // [22] distance heuristic
+        // Excluded for the Goddess herself: moving toward the enemy Goddess is never
+        // desirable for the Goddess piece and was causing it to wander aggressively.
+        if *piece_type != PieceType::Goddess {
+            if let Some(ref goddess_pos) = Self::enemy_goddess_pos(state) {
+                let piece_pos = &piece.position;
+                if piece_pos != "returned" && piece_pos != "graveyard" {
+                    let dist_before = Self::poly_distance(state, piece_pos, goddess_pos);
+                    let dist_after = Self::poly_distance(state, target_poly, goddess_pos);
+                    let max_d = Self::max_board_distance(state);
+                    // Normalise: +1 = getting closer, -1 = getting away
+                    let normalised = if max_d > 0.0 {
+                        ((dist_before - dist_after) / max_d).clamp(-1.0, 1.0)
+                    } else {
+                        0.0
+                    };
+                    score += self.weights[22] * normalised; // [22] distance heuristic
+                }
             }
         }
 
@@ -1003,7 +1023,7 @@ impl Agent for QuickDiegoAgent {
             }
         }
 
-        // ── Step 2-d: Soldiers/Golems that can move without ending turn, maximise captures ──
+        // ── Step 2-d: Soldiers/Minotaurs that can move without ending turn, maximise captures ──
         {
             let mut best_chain_piece = String::new();
             let mut best_chain_target = String::new();
@@ -1012,7 +1032,7 @@ impl Agent for QuickDiegoAgent {
             for (p_id, targets) in all_moves {
                 let piece = &state.board.pieces[p_id];
                 let is_chainable = piece.piece_type == PieceType::Soldier
-                    || piece.piece_type == PieceType::Golem;
+                    || piece.piece_type == PieceType::Minotaur;
                 if !is_chainable {
                     continue;
                 }

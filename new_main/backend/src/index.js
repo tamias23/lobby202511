@@ -1086,6 +1086,7 @@ function buildRequestsList() {
         username: r.username,
         role: r.role,
         timeControl: r.timeControl,
+        boardId: r.boardId || null,
         createdAt: r.createdAt,
     }));
 }
@@ -1229,10 +1230,19 @@ function buildInitialState(gameData) {
 }
 
 // --- helper to create a game from two players ---
-async function createGame(whitePlayer, blackPlayer, timeControl) {
+async function createGame(whitePlayer, blackPlayer, timeControl, boardId) {
     const hash = getRandomHash();
 
-    const randomBoardFile = boardPool[Math.floor(Math.random() * boardPool.length)];
+    let randomBoardFile;
+    if (boardId) {
+        randomBoardFile = boardPool.find(f => f === `${boardId}.json` || f.replace('.json', '') === boardId);
+        if (!randomBoardFile) {
+            console.warn(`[createGame] Requested boardId '${boardId}' not found in pool, falling back to random.`);
+            randomBoardFile = boardPool[Math.floor(Math.random() * boardPool.length)];
+        }
+    } else {
+        randomBoardFile = boardPool[Math.floor(Math.random() * boardPool.length)];
+    }
     const boardName = randomBoardFile ? randomBoardFile.replace('.json', '') : 'unknown';
     let boardData;
     try {
@@ -1446,7 +1456,7 @@ io.on('connection', (socket) => {
     });
 
     // --- CREATE GAME REQUEST ---
-    socket.on('create_game_request', ({ timeControl, userId, username, role }) => {
+    socket.on('create_game_request', ({ timeControl, boardId, userId, username, role }) => {
         // Validate no duplicate request from same socket
         const existing = lobby.gameRequests.find(r => r.socketId === socket.id);
         if (existing) {
@@ -1465,12 +1475,13 @@ io.on('connection', (socket) => {
             username: username || effectiveUserId,
             role: effectiveRole,
             timeControl: timeControl || { minutes: 15, increment: 10 },
+            boardId: boardId || null,
             createdAt: Date.now(),
         });
 
         socket.emit('request_created', { requestId });
         broadcastLobbyUpdate(io);
-        console.log(`Game request ${requestId} created by ${effectiveUserId} (${effectiveRole})`);
+        console.log(`Game request ${requestId} created by ${effectiveUserId} (${effectiveRole})${boardId ? ` board=${boardId}` : ''}`);
     });
 
     // --- CANCEL GAME REQUEST ---
@@ -1517,7 +1528,7 @@ io.on('connection', (socket) => {
         const whitePlayer = isRequesterWhite ? requesterPlayer : acceptorPlayer;
         const blackPlayer = isRequesterWhite ? acceptorPlayer  : requesterPlayer;
 
-        const { hash, gameData } = await createGame(whitePlayer, blackPlayer, req.timeControl);
+        const { hash, gameData } = await createGame(whitePlayer, blackPlayer, req.timeControl, req.boardId || null);
         
         // Place both players in the game room
         const requesterSocket = io.sockets.sockets.get(req.socketId);
@@ -2151,7 +2162,7 @@ io.on('connection', (socket) => {
             if (p.position !== 'returned') return false;
             // step 4 = Ghouls + Sirens
             if (setupStep === 4) return p.type === 'ghoul' || p.type === 'siren';
-            const typeMap = { 0: 'goddess', 1: 'heroe', 2: 'golem', 3: 'witch' };
+            const typeMap = { 0: 'goddess', 1: 'heroe', 2: 'minotaur', 3: 'witch' };
             return p.type === typeMap[setupStep];
         });
     }

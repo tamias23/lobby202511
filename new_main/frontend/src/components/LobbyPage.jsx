@@ -2,11 +2,64 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { socket } from '../socket';
 
+// Color map for polygon colors → hex (shared with TournamentCreate)
+const POLY_COLORS = {
+  orange: '#f97316',
+  green:  '#22c55e',
+  blue:   '#3b82f6',
+  grey:   '#64748b',
+  red:    '#ef4444',
+  purple: '#a855f7',
+  yellow: '#eab308',
+};
+
+/** Mini SVG board renderer for board picker */
+function BoardMiniSvg({ board, size = 120 }) {
+  if (!board || !board.polygons || board.polygons.length === 0) {
+    return (
+      <div style={{ width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+        No preview
+      </div>
+    );
+  }
+
+  const { bbox } = board;
+  const pad = 5;
+  const bw = (bbox.maxX - bbox.minX) || 100;
+  const bh = (bbox.maxY - bbox.minY) || 100;
+  const vb = `${bbox.minX - pad} ${bbox.minY - pad} ${bw + pad * 2} ${bh + pad * 2}`;
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={vb}
+      style={{ display: 'block', margin: '0 auto', borderRadius: '8px' }}
+    >
+      {board.polygons.map((poly, i) => {
+        if (!poly.points || poly.points.length < 3) return null;
+        const pts = poly.points.map(([x, y]) => `${x},${y}`).join(' ');
+        const fill = POLY_COLORS[poly.color] || poly.color || '#888';
+        return (
+          <polygon
+            key={i}
+            points={pts}
+            fill={fill}
+            stroke="rgba(0,0,0,0.3)"
+            strokeWidth={1}
+          />
+        );
+      })}
+    </svg>
+  );
+}
+
 const TIME_CONTROLS = [
-  { label: '30 + 30', minutes: 30, increment: 30, description: 'Classical', color: '#46b0d4' },
-  { label: '15 + 30', minutes: 15, increment: 30, description: 'Rapid',     color: '#f27813' },
-  { label: '15 + 10', minutes: 15, increment: 10, description: 'Rapid',     color: '#06b6d4' },
   { label: '10 + 5',  minutes: 10, increment: 5,  description: 'Blitz',     color: '#f59e0b' },
+  { label: '10 + 10', minutes: 10, increment: 10, description: 'Blitz',     color: '#fb923c' },
+  { label: '15 + 10', minutes: 15, increment: 10, description: 'Rapid',     color: '#06b6d4' },
+  { label: '15 + 30', minutes: 15, increment: 30, description: 'Rapid',     color: '#f27813' },
+  { label: '30 + 30', minutes: 30, increment: 30, description: 'Medium',    color: '#46b0d4' },
   { label: '60 + 30', minutes: 60, increment: 30, description: 'Long',      color: '#ec4899' },
 ];
 
@@ -22,6 +75,11 @@ const LobbyPage = ({ user }) => {
   const [customInc, setCustomInc] = useState(10);
   const [botTimeControl, setBotTimeControl] = useState({ minutes: 15, increment: 10 });
   const [showBotPanel, setShowBotPanel] = useState(false);
+  // Board selection for custom games
+  const [customBoardMode, setCustomBoardMode] = useState('random');
+  const [customSelectedBoardId, setCustomSelectedBoardId] = useState(null);
+  const [customRandomBoards, setCustomRandomBoards] = useState([]);
+  const [customExpandedBoard, setCustomExpandedBoard] = useState(null);
   const [availableBots, setAvailableBots] = useState([]);
   // Tournament state
   const [openTournaments, setOpenTournaments] = useState([]);
@@ -114,6 +172,16 @@ const LobbyPage = ({ user }) => {
   }, [navigate]);
 
 
+  // Fetch boards for custom game picker
+  useEffect(() => {
+    if (showCustomForm && customBoardMode === 'fixed' && customRandomBoards.length === 0) {
+      fetch('/api/boards/random/10')
+        .then(r => r.json())
+        .then(data => setCustomRandomBoards(data.boards || []))
+        .catch(() => {});
+    }
+  }, [showCustomForm, customBoardMode, customRandomBoards.length]);
+
   const handleTimeControl = useCallback((tc) => {
     if (myRequestId) {
       showNotif('You already have an open request. Cancel it first.', 'error');
@@ -144,14 +212,21 @@ const LobbyPage = ({ user }) => {
       showNotif('Increment must be between 3 and 120 seconds.', 'error');
       return;
     }
+    if (customBoardMode === 'fixed' && !customSelectedBoardId) {
+      showNotif('Please select a board or switch to Random.', 'error');
+      return;
+    }
 
     socket.emit('create_game_request', {
       timeControl: { minutes: mins, increment: inc },
+      boardId: customBoardMode === 'fixed' ? customSelectedBoardId : null,
       userId: user?.id || null,
       username: user?.username || null,
       role: user?.role || 'guest',
     });
     setShowCustomForm(false);
+    setCustomBoardMode('random');
+    setCustomSelectedBoardId(null);
   };
 
   const handleCancelRequest = () => {
@@ -292,7 +367,7 @@ const LobbyPage = ({ user }) => {
               );
             })}
 
-            {/* Custom Button / Form */}
+            {/* Custom Button (pos 7) */}
             {!showCustomForm ? (
               <button
                 className="time-control-btn"
@@ -304,34 +379,41 @@ const LobbyPage = ({ user }) => {
                 <span className="tc-desc">User Choice</span>
               </button>
             ) : (
-              <div className="time-control-btn time-control-custom-form glass-panel">
-                <form onSubmit={handleCustomSubmit}>
-                  <div className="custom-form-inputs">
-                    <div className="input-group">
-                      <label>MIN</label>
-                      <input 
-                        type="number" 
-                        value={customMin} 
-                        onChange={e => setCustomMin(e.target.value)}
-                        min="1" max="120"
-                      />
-                    </div>
-                    <div className="input-group">
-                      <label>INC (s)</label>
-                      <input 
-                        type="number" 
-                        value={customInc} 
-                        onChange={e => setCustomInc(e.target.value)}
-                        min="3" max="120"
-                      />
-                    </div>
-                  </div>
-                  <div className="custom-form-actions">
-                    <button type="button" className="btn-cancel" onClick={() => setShowCustomForm(false)}>✕</button>
-                    <button type="submit" className="btn-ok">Post Request</button>
-                  </div>
-                </form>
-              </div>
+              <button
+                className="time-control-btn time-control-btn--active"
+                style={{ '--tc-color': '#f27813' }}
+                onClick={() => { setShowCustomForm(false); setCustomBoardMode('random'); setCustomSelectedBoardId(null); }}
+                id="tc-btn-custom-toggle"
+              >
+                <span className="tc-label">Custom</span>
+                <span className="tc-desc">✕ Close</span>
+              </button>
+            )}
+
+            {/* Play vs Bot Button (pos 8) */}
+            {availableBots.length > 0 && (
+              <button
+                className={`time-control-btn${showBotPanel ? ' time-control-btn--active' : ''}`}
+                style={{ '--tc-color': '#8b5cf6' }}
+                onClick={() => setShowBotPanel(v => !v)}
+                id="bot-toggle-btn"
+              >
+                <span className="tc-label">vs Bot</span>
+                <span className="tc-desc">Play AI</span>
+              </button>
+            )}
+
+            {/* Create Tournament Button (pos 9) */}
+            {user && tournamentsEnabled && (
+              <button
+                className="time-control-btn"
+                style={{ '--tc-color': '#22c55e' }}
+                onClick={() => navigate('/tournament/create')}
+                id="tc-btn-create-tournament"
+              >
+                <span className="tc-label">Tourney</span>
+                <span className="tc-desc">Create</span>
+              </button>
             )}
           </div>
 
@@ -345,19 +427,80 @@ const LobbyPage = ({ user }) => {
             </button>
           )}
 
-          {/* ── Play vs Bot — only shown when bot server is up with models ── */}
-          {availableBots.length > 0 && (
-          <div className="bot-panel glass-panel">
-            <button
-              className="bot-panel-header"
-              onClick={() => setShowBotPanel(v => !v)}
-              id="bot-toggle-btn"
-            >
-              <span className="bot-panel-label">Play vs Bot</span>
-              <span className="bot-panel-chevron">{showBotPanel ? '▲' : '▼'}</span>
-            </button>
+          {/* Custom Form (expands below grid) */}
+          {showCustomForm && (
+            <div className="time-control-custom-form-wrapper glass-panel">
+              <form onSubmit={handleCustomSubmit}>
+                <div className="custom-form-inputs">
+                  <div className="input-group">
+                    <label>MIN</label>
+                    <input 
+                      type="number" 
+                      value={customMin} 
+                      onChange={e => setCustomMin(e.target.value)}
+                      min="1" max="120"
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label>INC (s)</label>
+                    <input 
+                      type="number" 
+                      value={customInc} 
+                      onChange={e => setCustomInc(e.target.value)}
+                      min="3" max="120"
+                    />
+                  </div>
+                </div>
 
-            {showBotPanel && (
+                {/* Board Selection */}
+                <div className="custom-board-section">
+                  <label className="custom-board-label">Board</label>
+                  <div className="custom-board-toggle-row">
+                    <button type="button" className={`tourn-toggle-btn${customBoardMode === 'random' ? ' active' : ''}`}
+                      onClick={() => setCustomBoardMode('random')}>Random</button>
+                    <button type="button" className={`tourn-toggle-btn${customBoardMode === 'fixed' ? ' active' : ''}`}
+                      onClick={() => setCustomBoardMode('fixed')}>Choose Board</button>
+                  </div>
+
+                  {customBoardMode === 'fixed' && (
+                    <div className="custom-board-picker">
+                      {customRandomBoards.length === 0 ? (
+                        <p style={{color: 'var(--text-muted)', fontSize: '0.8rem', textAlign: 'center'}}>Loading boards…</p>
+                      ) : (
+                        <div className="custom-board-grid">
+                          {customRandomBoards.map(b => (
+                            <div
+                              key={b.id}
+                              className={`custom-board-card glass-panel${customSelectedBoardId === b.id ? ' custom-board-card--selected' : ''}`}
+                              onClick={() => setCustomSelectedBoardId(b.id)}
+                            >
+                              <BoardMiniSvg board={b} size={80} />
+                              <div className="custom-board-card-name">{b.id}</div>
+                              <button
+                                type="button"
+                                className="custom-board-expand-btn"
+                                onClick={(e) => { e.stopPropagation(); setCustomExpandedBoard(b); }}
+                                title="Expand"
+                              >🔍</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="custom-form-actions">
+                  <button type="button" className="btn-cancel" onClick={() => { setShowCustomForm(false); setCustomBoardMode('random'); setCustomSelectedBoardId(null); }}>✕</button>
+                  <button type="submit" className="btn-ok" disabled={customBoardMode === 'fixed' && !customSelectedBoardId}>Post Request</button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Bot Panel (expands below grid) */}
+          {showBotPanel && availableBots.length > 0 && (
+            <div className="bot-panel glass-panel">
               <div className="bot-panel-body">
                 <div className="bot-tc-row">
                   <label className="bot-tc-label">Time control:</label>
@@ -381,9 +524,6 @@ const LobbyPage = ({ user }) => {
                   </div>
                 </div>
                 <div className="bot-buttons">
-                  {availableBots.length === 0 && (
-                    <p style={{ color: 'var(--text-muted)', fontStyle: 'italic', textAlign: 'center' }}>No bots available</p>
-                  )}
                   {availableBots.map(bot => (
                     <button
                       key={`${bot.agent_type}:${bot.model_name}`}
@@ -396,21 +536,12 @@ const LobbyPage = ({ user }) => {
                       <div className="bot-btn-rating">
                         {bot.busy ? '⏳ In a game…' : `★ ${bot.rating ?? 1500}`}
                       </div>
-
                     </button>
                   ))}
                 </div>
                 <p className="bot-cold-start-note">⚠️ First move may take a few seconds on cold start.</p>
               </div>
-            )}
-          </div>
-          )}
-
-          {/* Create Tournament button (registered users only) */}
-          {user && tournamentsEnabled && (
-            <button className="create-tournament-btn glass-panel" onClick={() => navigate('/tournament/create')}>
-              🏆 Create Tournament
-            </button>
+            </div>
           )}
         </main>
       </div>
@@ -436,7 +567,7 @@ const LobbyPage = ({ user }) => {
                       <span className="grc-user">
                         {formatUsername(req.username, req.role)}
                       </span>
-                      <span className="grc-tc">{formatTC(req.timeControl)}</span>
+                      <span className="grc-tc">{formatTC(req.timeControl)}{req.boardId ? ` · 🗺️ ${req.boardId}` : ''}</span>
                       <span className="grc-time">{formatTimeAgo(req.createdAt)}</span>
                     </div>
                     <div className="grc-right">
@@ -497,7 +628,7 @@ const LobbyPage = ({ user }) => {
         {/* Open Tournaments */}
         <div className="game-list-panel glass-panel">
           <h3 className="game-list-title">
-            <span>🏆 Open Tournaments</span>
+            <span>Open Tournaments</span>
             <span className="game-list-count">{openTournaments.length}</span>
           </h3>
           {openTournaments.length === 0 ? (
@@ -526,7 +657,7 @@ const LobbyPage = ({ user }) => {
         {/* Active Tournaments */}
         <div className="game-list-panel glass-panel">
           <h3 className="game-list-title">
-            <span>🏆 Active Tournaments</span>
+            <span>Active Tournaments</span>
             <span className="game-list-count">{activeTournaments.length}</span>
           </h3>
           {activeTournaments.length === 0 ? (
@@ -580,6 +711,25 @@ const LobbyPage = ({ user }) => {
               <button className="tourn-btn tourn-btn--primary" onClick={handleJoinConfirm}>Join</button>
               <button className="tourn-btn tourn-btn--secondary" onClick={() => setJoinModal(null)}>Cancel</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Expanded Board Modal for Custom Game */}
+      {customExpandedBoard && (
+        <div className="tourn-board-modal-overlay" onClick={() => setCustomExpandedBoard(null)}>
+          <div className="tourn-board-modal" onClick={e => e.stopPropagation()}>
+            <button className="tourn-board-modal-close" onClick={() => setCustomExpandedBoard(null)}>✕</button>
+            <h3 style={{textAlign:'center', marginBottom:'1rem', fontFamily:"'Outfit',sans-serif"}}>{customExpandedBoard.id}</h3>
+            <BoardMiniSvg board={customExpandedBoard} size={500} />
+            <p style={{textAlign:'center', color:'var(--text-muted)', marginTop:'0.75rem'}}>{customExpandedBoard.polygonCount} tiles</p>
+            <button
+              className="tourn-btn tourn-btn--primary"
+              style={{marginTop:'1rem', width:'100%'}}
+              onClick={() => { setCustomSelectedBoardId(customExpandedBoard.id); setCustomExpandedBoard(null); }}
+            >
+              Select this board
+            </button>
           </div>
         </div>
       )}

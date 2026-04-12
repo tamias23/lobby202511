@@ -26,8 +26,8 @@ const SECTION_PIECES = {
     { id: 'black_soldier_1', type: 'soldier', pos: 'yJ2' },
     { id: 'white_siren_0', type: 'siren', pos: 'oF1' },
     { id: 'black_siren_0', type: 'siren', pos: 'oJ1' },
-    { id: 'white_golem_0', type: 'golem', pos: 'gH1' },
-    { id: 'black_golem_0', type: 'golem', pos: 'gI1' },
+    { id: 'white_minotaur_0', type: 'minotaur', pos: 'gH1' },
+    { id: 'black_minotaur_0', type: 'minotaur', pos: 'gI1' },
   ],
   mage: [
     { id: 'white_mage_0', type: 'mage', pos: 'oH1' },
@@ -83,9 +83,9 @@ const SECTION_PIECES = {
     { id: 'black_soldier_2', type: 'soldier', pos: 'yJ2' },
     { id: 'black_soldier_3', type: 'soldier', pos: 'oJ1' },
   ],
-  golem: [
-    { id: 'white_golem_0', type: 'golem', pos: 'gJ1' },
-    { id: 'black_golem_0', type: 'golem', pos: 'gK1' },
+  minotaur: [
+    { id: 'white_minotaur_0', type: 'minotaur', pos: 'gJ1' },
+    { id: 'black_minotaur_0', type: 'minotaur', pos: 'gK1' },
   ],
   global_overview: 'full',
 };
@@ -94,13 +94,13 @@ const INITIAL_SETUP_PIECES = [
   { id: 'white_goddess_0', type: 'goddess', pos: 'oH1' },
   { id: 'white_heroe_0',   type: 'heroe',   pos: 'bH2' },
   { id: 'white_heroe_1',   type: 'heroe',   pos: 'gE2' },
-  { id: 'white_golem_0',   type: 'golem',   pos: 'bF1' },
-  { id: 'white_golem_1',   type: 'golem',   pos: 'gI1' },
+  { id: 'white_minotaur_0',   type: 'minotaur',   pos: 'bF1' },
+  { id: 'white_minotaur_1',   type: 'minotaur',   pos: 'gI1' },
   { id: 'black_goddess_0', type: 'goddess', pos: 'oK1' },
   { id: 'black_heroe_0',   type: 'heroe',   pos: 'yJ1' },
   { id: 'black_heroe_1',   type: 'heroe',   pos: 'yE2' },
-  { id: 'black_golem_0',   type: 'golem',   pos: 'gI2' },
-  { id: 'black_golem_1',   type: 'golem',   pos: 'gE1' },
+  { id: 'black_minotaur_0',   type: 'minotaur',   pos: 'gI2' },
+  { id: 'black_minotaur_1',   type: 'minotaur',   pos: 'gE1' },
 ];
 
 function getFullBoardPieces() {
@@ -143,7 +143,7 @@ function PieceSVG({ type, side }) {
   const stroke = 'black';
 
   switch (type) {
-    case 'golem':
+    case 'minotaur':
       return (
         <g transform="scale(0.09)">
           {[0,120,240].map(a => (
@@ -288,7 +288,7 @@ function TutorialBoard({ boardData, pieces, setPieces }) {
     try {
       const mappedPieces = pieces.map(p => ({
         id: p.id,
-        type: p.type === 'heroe' ? 'king' : p.type === 'witch' ? 'bishop' : p.type === 'golem' ? 'berserker' : p.type,
+        type: p.type === 'heroe' ? 'king' : p.type === 'witch' ? 'bishop' : p.type === 'minotaur' ? 'berserker' : p.type,
         side: p.id.startsWith('white') ? 'white' : 'black',
         position: p.pos,
       }));
@@ -312,7 +312,7 @@ function TutorialBoard({ boardData, pieces, setPieces }) {
     try {
       const mappedPieces = pieces.map(p => ({
         id: p.id,
-        type: p.type === 'heroe' ? 'king' : p.type === 'witch' ? 'bishop' : p.type === 'golem' ? 'berserker' : p.type,
+        type: p.type === 'heroe' ? 'king' : p.type === 'witch' ? 'bishop' : p.type === 'minotaur' ? 'berserker' : p.type,
         side: p.id.startsWith('white') ? 'white' : 'black',
         position: p.pos,
       }));
@@ -330,7 +330,7 @@ function TutorialBoard({ boardData, pieces, setPieces }) {
       if (data.piecesJson) {
         const updated = JSON.parse(data.piecesJson).map(p => ({
           id: p.id,
-          type: p.type === 'king' ? 'heroe' : p.type === 'bishop' ? 'witch' : p.type === 'berserker' ? 'golem' : p.type,
+          type: p.type === 'king' ? 'heroe' : p.type === 'bishop' ? 'witch' : p.type === 'berserker' ? 'minotaur' : p.type,
           pos: p.position,
         }));
         setPieces(updated);
@@ -480,7 +480,7 @@ function TutorialBoard({ boardData, pieces, setPieces }) {
 }
 
 // ─── Main TutorialPage component ──────────────────────────────────────────────
-const SECTIONS = ['intro','setup_phase','board','turn','goddess','heroe','mage','siren','ghoul','witch','soldier','golem','global_overview'];
+const SECTIONS = ['intro','setup_phase','board','turn','goddess','heroe','mage','siren','ghoul','witch','soldier','minotaur','global_overview'];
 const LANGUAGES = [
   { value:'en', label:'English' }, { value:'fr', label:'Français' },
   { value:'es', label:'Español' }, { value:'it', label:'Italiano' },
@@ -529,7 +529,7 @@ export default function TutorialPage() {
     <div className="tut-layout" dir={rtl ? 'rtl' : 'ltr'}>
       {/* ── Sidebar ── */}
       <aside className="tut-sidebar">
-        <div className="tut-logo">📖 Tutorial</div>
+        <div className="tut-logo">Tutorial</div>
 
         {/* Language selector */}
         <div className="tut-lang-select">

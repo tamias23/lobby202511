@@ -26,7 +26,7 @@ pub fn build_graph_data(gs: &GameState) -> (Array2<f32>, Array2<i64>, HashMap<St
     let sides = vec![Side::White, Side::Black];
     let types = vec![
         PieceType::Goddess, PieceType::Heroe, PieceType::Mage, PieceType::Witch,
-        PieceType::Soldier, PieceType::Siren, PieceType::Ghoul, PieceType::Golem,
+        PieceType::Soldier, PieceType::Siren, PieceType::Ghoul, PieceType::Minotaur,
     ];
     for side in &sides {
         for p_type in &types {
@@ -57,13 +57,13 @@ pub fn build_graph_data(gs: &GameState) -> (Array2<f32>, Array2<i64>, HashMap<St
                 "Soldier" => PieceType::Soldier,
                 "Siren" => PieceType::Siren,
                 "Ghoul" => PieceType::Ghoul,
-                "Golem" => PieceType::Golem,
+                "Minotaur" => PieceType::Minotaur,
                 _ => PieceType::Soldier,
             };
             let type_idx = match p_type {
                 PieceType::Goddess => 1, PieceType::Heroe => 2, PieceType::Mage => 3,
                 PieceType::Witch => 4, PieceType::Soldier => 5, PieceType::Siren => 6,
-                PieceType::Ghoul => 7, PieceType::Golem => 8,
+                PieceType::Ghoul => 7, PieceType::Minotaur => 8,
             };
             x[[i, type_idx]] = 1.0;
 
@@ -87,7 +87,7 @@ pub fn build_graph_data(gs: &GameState) -> (Array2<f32>, Array2<i64>, HashMap<St
             let type_idx = match p.piece_type {
                 PieceType::Goddess => 1, PieceType::Heroe => 2, PieceType::Mage => 3,
                 PieceType::Witch => 4, PieceType::Soldier => 5, PieceType::Siren => 6,
-                PieceType::Ghoul => 7, PieceType::Golem => 8,
+                PieceType::Ghoul => 7, PieceType::Minotaur => 8,
             };
             x[[i, type_idx]] = 1.0;
         }

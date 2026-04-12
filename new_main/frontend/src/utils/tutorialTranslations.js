@@ -12,6 +12,7 @@ const translations = {
             ghoul: "Ghoul",
             witch: "Witch",
             soldier: "Soldier",
+            minotaur: "Minotaur",
             global_overview: "Global Overview"
         },
         sections: {
@@ -40,8 +41,8 @@ const translations = {
                             <p>Placed on edges, between <span class="highlight">4 and 6 jumps</span> away from the Goddess, and at least 6 jumps away from each other.</p>
                         </li>
                         <li>
-                            <h3 class="accent">3. The Golems</h3>
-                            <p><span class="accent">Golems</span> are placed within 1-2 jump-hops of the Goddess to form a defensive shell.</p>
+                            <h3 class="accent">3. The Minotaurs</h3>
+                            <p><span class="accent">Minotaurs</span> are placed within 1-2 jump-hops of the Goddess to form a defensive shell.</p>
                         </li>
                         <li>
                             <h3 class="accent">4. The Chromatic Ring</h3>
@@ -100,7 +101,7 @@ const translations = {
                         <h3>Type: <span class="accent">Jumper</span></h3>
                         <p>Movement: <span class="highlight">Jump Range 2</span>. She leaps over obstacles with grace but limited speed.</p>
                     </div>
-                    <p>If your Goddess is captured, the game ends instantly. She is often protected by Golems in the early game.</p>
+                    <p>If your Goddess is captured, the game ends instantly. She is often protected by Minotaurs in the early game.</p>
                 `
             },
             heroe: {
@@ -171,12 +172,12 @@ const translations = {
                     <p>Soldiers are blocked by <span class="accent">Red Edges</span>. Their special <span class="accent">Sliding</span> ability makes them the most dangerous pieces in the game.</p>
                 `
             },
-            golem: {
-                title: "The Golem",
+            minotaur: {
+                title: "The Minotaur",
                 content: `
                     <p>The Unmovable Guard: ancient constructs that cannot be destroyed.</p>
                     <div class="card">
-                        <h3>Golem (Slider)</h3>
+                        <h3>Minotaur (Slider)</h3>
                         <p>Identical to Soldiers but <span class="accent">Invulnerable</span>. They cannot be captured or targeted by AoE effects. They act as strategic obstacles that block enemy movement.</p>
                     </div>
                 `
@@ -202,7 +203,7 @@ const translations = {
                     <div class="card">
                         <h3>Final Positioning</h3>
                         <ul style="padding-left: 1.5rem; color: var(--text-secondary)">
-                            <li>Goddesses protected by Golems.</li>
+                            <li>Goddesses protected by Minotaurs.</li>
                             <li>Heroes positioned for early scouting.</li>
                             <li>Witchs spread across the color spectrum.</li>
                             <li>Sirens and Ghouls screening the advances.</li>
@@ -226,7 +227,7 @@ const translations = {
             ghoul: "Goule",
             witch: "Sorcière",
             soldier: "Soldat",
-            golem: "Golem",
+            minotaur: "Minotaur",
             global_overview: "Vue d'ensemble"
         },
         sections: {
@@ -255,8 +256,8 @@ const translations = {
                             <p>Placés sur les bords, entre <span class="highlight">4 et 6 sauts</span> de la Déesse, et à au moins 6 sauts les uns des autres.</p>
                         </li>
                         <li>
-                            <h3 class="accent">3. Les Golems</h3>
-                            <p>Les <span class="accent">Golems</span> sont placés à 1-2 sauts de la Déesse pour former une coque défensive.</p>
+                            <h3 class="accent">3. Les Minotaurs</h3>
+                            <p>Les <span class="accent">Minotaurs</span> sont placés à 1-2 sauts de la Déesse pour former une coque défensive.</p>
                         </li>
                         <li>
                             <h3 class="accent">4. L'Anneau Chromatique</h3>
@@ -315,7 +316,7 @@ const translations = {
                         <h3>Type : <span class="accent">Sauteur</span></h3>
                         <p>Mouvement : <span class="highlight">Portée de Saut 2</span>. Elle survole les obstacles avec grâce mais une vitesse limitée.</p>
                     </div>
-                    <p>Si votre Déesse est capturée, la partie se termine instantanément. Elle est souvent protégée par des Golems en début de partie.</p>
+                    <p>Si votre Déesse est capturée, la partie se termine instantanément. Elle est souvent protégée par des Minotaurs en début de partie.</p>
                 `
             },
             heroe: {
@@ -386,12 +387,12 @@ const translations = {
                     <p>Les Soldats sont bloqués par les <span class="accent">Arêtes Rouges</span>. Leur capacité spéciale de <span class="accent">Glissade</span> en fait les pièces les plus dangereuses du jeu.</p>
                 `
             },
-            golem: {
-                title: "Le Golem",
+            minotaur: {
+                title: "Le Minotaur",
                 content: `
-                    <p>La Garde Inamovible : des anciens golems qui ne peuvent être détruits.</p>
+                    <p>La Garde Inamovible : des anciens minotaurs qui ne peuvent être détruits.</p>
                     <div class="card">
-                        <h3>Golem (Glisseur)</h3>
+                        <h3>Minotaur (Glisseur)</h3>
                         <p>Identique aux Soldats mais <span class="accent">Invulnérable</span>. Ils ne peuvent être capturés ni ciblés par des effets de zone. Ils agissent comme des obstacles stratégiques.</p>
                     </div>
                 `
@@ -417,7 +418,7 @@ const translations = {
                     <div class="card">
                         <h3>Positionnement Final</h3>
                         <ul style="padding-left: 1.5rem; color: var(--text-secondary)">
-                            <li>Déesses protégées par des Golems.</li>
+                            <li>Déesses protégées par des Minotaurs.</li>
                             <li>Héros positionnés pour l'éclaireur précoce.</li>
                             <li>Sorcières réparties sur le spectre des couleurs.</li>
                             <li>Sirènes et Goules protégeant les avancées.</li>
@@ -441,7 +442,7 @@ const translations = {
             ghoul: "El Necrófago",
             witch: "La Bruja",
             soldier: "El Soldado",
-            golem: "El Gólem",
+            minotaur: "El Minotauro",
             global_overview: "Resumen Global"
         },
         sections: {
@@ -469,8 +470,8 @@ const translations = {
                             <p>Colocados en los bordes, entre <span class="highlight">4 y 6 saltos</span> de distancia de la Diosa, y al menos a 6 saltos de distancia entre sí.</p>
                         </li>
                         <li>
-                            <h3 class="accent">3. Los Gólems</h3>
-                            <p>Los <span class="accent">Gólems</span> se colocan a 1-2 saltos de distancia de la Diosa para formar un escudo defensivo.</p>
+                            <h3 class="accent">3. Los Minotauros</h3>
+                            <p>Los <span class="accent">Minotauros</span> se colocan a 1-2 saltos de distancia de la Diosa para formar un escudo defensivo.</p>
                         </li>
                         <li>
                             <h3 class="accent">4. El Anillo Cromático</h3>
@@ -567,8 +568,8 @@ const translations = {
                     </div>
                 `
             },
-            golem: {
-                title: "El Gólem",
+            minotaur: {
+                title: "El Minotauro",
                 content: `
                     <div class="card">
                         <h3>Tipo: <span class="accent">Invulnerable</span></h3>
@@ -592,7 +593,7 @@ const translations = {
             global_overview: {
                 title: "Resumen Global",
                 content: `
-                    <p>Posicionamiento final tras la fase de configuración: Diosas protegidas por Gólems, Héroes listos para incursiones y Brujas cubriendo el espectro de colores.</p>
+                    <p>Posicionamiento final tras la fase de configuración: Diosas protegidas por Minotauros, Héroes listos para incursiones y Brujas cubriendo el espectro de colores.</p>
                 `
             }
         }
@@ -610,7 +611,7 @@ const translations = {
             ghoul: "Il Ghoul",
             witch: "La Strega",
             soldier: "Il Soldato",
-            golem: "Il Golem",
+            minotaur: "Il Minotaur",
             global_overview: "Panoramica Globale"
         },
         sections: {
@@ -631,7 +632,7 @@ const translations = {
                     <ol class="setup-steps">
                         <li><h3 class="accent">1. La Dea</h3><p>Deve stare sul <span class="highlight">bordo estremo</span>.</p></li>
                         <li><h3 class="accent">2. Gli Eroi</h3><p>Tra <span class="highlight">4 e 6 salti</span> dalla Dea.</p></li>
-                        <li><h3 class="accent">3. I Golem</h3><p>Protezione ravvicinata (1-2 salti) per la Dea.</p></li>
+                        <li><h3 class="accent">3. I Minotaur</h3><p>Protezione ravvicinata (1-2 salti) per la Dea.</p></li>
                         <li><h3 class="accent">4. L'Anello Cromatico</h3><p>Le <span class="accent">Streghe</span> distribuite su 4 colori diversi.</p></li>
                         <li><h3 class="accent">5. Fanteria</h3><p><span class="accent">Ghoul</span> e <span class="accent">Sirene</span> completano le linee.</p></li>
                     </ol>
@@ -713,8 +714,8 @@ const translations = {
                     </div>
                 `
             },
-            golem: {
-                title: "Il Golem",
+            minotaur: {
+                title: "Il Minotaur",
                 content: `
                     <div class="card">
                         <h3>Tipo: <span class="accent">Invulnerabile</span></h3>
@@ -738,7 +739,7 @@ const translations = {
             global_overview: {
                 title: "Panoramica Globale",
                 content: `
-                    <p>Posizionamento finale: Dee protette dai Golem, Eroi pronti all'attacco e Streghe posizionate strategicamente.</p>
+                    <p>Posizionamento finale: Dee protette dai Minotaur, Eroi pronti all'attacco e Streghe posizionate strategicamente.</p>
                 `
             }
         }
@@ -756,7 +757,7 @@ const translations = {
             ghoul: "Der Ghul",
             witch: "Die Hexe",
             soldier: "Der Soldat",
-            golem: "Der Golem",
+            minotaur: "Der Minotaur",
             global_overview: "Gesamtübersicht"
         },
         sections: {
@@ -776,7 +777,7 @@ const translations = {
                     <ol class="setup-steps">
                         <li><h3 class="accent">1. Die Göttin</h3><p>Wird am <span class="highlight">äußersten Rand</span> platziert.</p></li>
                         <li><h3 class="accent">2. Die Helden</h3><p>Zwischen <span class="highlight">4 und 6 Sprüngen</span> von der Göttin entfernt.</p></li>
-                        <li><h3 class="accent">3. Die Golems</h3><p>Schutzschilde in der Nähe der Göttin.</p></li>
+                        <li><h3 class="accent">3. Die Minotaurs</h3><p>Schutzschilde in der Nähe der Göttin.</p></li>
                         <li><h3 class="accent">4. Der Chromatische Ring</h3><p>Die <span class="accent">Hexen</span> werden auf 4 verschiedene Farben verteilt.</p></li>
                         <li><h3 class="accent">5. Infanterie</h3><p><span class="accent">Ghule</span> und <span class="accent">Sirenen</span> füllen die taktischen Lücken.</p></li>
                     </ol>
@@ -855,8 +856,8 @@ const translations = {
                     </div>
                 `
             },
-            golem: {
-                title: "Der Golem",
+            minotaur: {
+                title: "Der Minotaur",
                 content: `
                     <div class="card">
                         <h3>Typ: <span class="accent">Unverwundbar</span></h3>
@@ -894,7 +895,7 @@ const translations = {
             ghoul: "De Ghul",
             witch: "De Heks",
             soldier: "De Soldaat",
-            golem: "De Golem",
+            minotaur: "De Minotaur",
             global_overview: "Globaal Overzicht"
         },
         sections: {
@@ -914,7 +915,7 @@ const translations = {
                     <ol class="setup-steps">
                         <li><h3 class="accent">1. De Godin</h3><p>Wordt aan de <span class="highlight">uiterste rand</span> geplaatst.</p></li>
                         <li><h3 class="accent">2. De Helden</h3><p>Tussen <span class="highlight">4 en 6 sprongen</span> van de Godin.</p></li>
-                        <li><h3 class="accent">3. De Golems</h3><p>Beschermende schilden nabij de Godin.</p></li>
+                        <li><h3 class="accent">3. De Minotaurs</h3><p>Beschermende schilden nabij de Godin.</p></li>
                         <li><h3 class="accent">4. De Chromatische Ring</h3><p>De <span class="accent">Heksen</span> worden over 4 kleuren verdeeld.</p></li>
                         <li><h3 class="accent">5. Infanterie</h3><p><span class="accent">Ghuls</span> en <span class="accent">Sirenes</span> vullen de linies.</p></li>
                     </ol>
@@ -989,8 +990,8 @@ const translations = {
                     </div>
                 `
             },
-            golem: {
-                title: "De Golem",
+            minotaur: {
+                title: "De Minotaur",
                 content: `
                     <div class="card">
                         <h3>Type: <span class="accent">Onkwetsbaar</span></h3>
@@ -1028,7 +1029,7 @@ const translations = {
             ghoul: "食尸鬼",
             witch: "女巫",
             soldier: "士兵",
-            golem: "傀儡",
+            minotaur: "弥诺陶洛斯",
             global_overview: "全局总览"
         },
         sections: {
@@ -1123,7 +1124,7 @@ const translations = {
                     </div>
                 `
             },
-            golem: {
+            minotaur: {
                 title: "傀儡",
                 content: `
                     <div class="card">
@@ -1162,7 +1163,7 @@ const translations = {
             ghoul: "グール",
             witch: "魔女",
             soldier: "兵士",
-            golem: "ゴーレム",
+            minotaur: "ミノタウロス",
             global_overview: "全体概要"
         },
         sections: {
@@ -1261,7 +1262,7 @@ const translations = {
                     </div>
                 `
             },
-            golem: {
+            minotaur: {
                 title: "ゴーレム",
                 content: `
                     <div class="card">
@@ -1300,7 +1301,7 @@ const translations = {
             ghoul: "구울",
             witch: "마녀",
             soldier: "병사",
-            golem: "골렘",
+            minotaur: "미노타우로스",
             global_overview: "전체 개요"
         },
         sections: {
@@ -1399,7 +1400,7 @@ const translations = {
                     </div>
                 `
             },
-            golem: {
+            minotaur: {
                 title: "골렘",
                 content: `
                     <div class="card">
@@ -1438,7 +1439,7 @@ const translations = {
             ghoul: "Ghoul",
             witch: "Penyihir",
             soldier: "Askar",
-            golem: "Golem",
+            minotaur: "Minotaur",
             global_overview: "Gambaran Keseluruhan"
         },
         sections: {
@@ -1458,7 +1459,7 @@ const translations = {
                     <ol class="setup-steps">
                         <li><h3 class="accent">1. Dewi</h3><p>Mesti diletakkan di <span class="highlight">tepi jauh</span> kawasan anda.</p></li>
                         <li><h3 class="accent">2. Wira</h3><p>Di tepi, antara <span class="highlight">4 hingga 6 lompatan</span> dari Dewi.</p></li>
-                        <li><h3 class="accent">3. Golem</h3><p>Sebagai perisai pertahanan berhampiran Dewi (1-2 lompatan).</p></li>
+                        <li><h3 class="accent">3. Minotaur</h3><p>Sebagai perisai pertahanan berhampiran Dewi (1-2 lompatan).</p></li>
                         <li><h3 class="accent">4. Gelang Kromatik</h3><p><span class="accent">Penyihir</span> diagihkan pada 4 warna berbeza.</p></li>
                         <li><h3 class="accent">5. Aturan Infantri</h3><p><span class="accent">Ghoul</span> dan <span class="accent">Siren</span> mengisi baki kedudukan taktikal.</p></li>
                     </ol>
@@ -1533,8 +1534,8 @@ const translations = {
                     </div>
                 `
             },
-            golem: {
-                title: "Golem",
+            minotaur: {
+                title: "Minotaur",
                 content: `
                     <div class="card">
                         <h3>Jenis: <span class="accent">Kebal</span></h3>
@@ -1572,7 +1573,7 @@ const translations = {
             ghoul: "पिशाच",
             witch: "चुड़ैल",
             soldier: "सैनिक",
-            golem: "गोलेम",
+            minotaur: "मिनोटौर",
             global_overview: "वैश्विक अवलोकन"
         },
         sections: {
@@ -1667,7 +1668,7 @@ const translations = {
                     </div>
                 `
             },
-            golem: {
+            minotaur: {
                 title: "गोलेम",
                 content: `
                     <div class="card">
@@ -1706,7 +1707,7 @@ const translations = {
             ghoul: "பூதம்",
             witch: "சூனியக்காரி",
             soldier: "போர்வீரன்",
-            golem: "கோலெம்",
+            minotaur: "மினோட்டார்",
             global_overview: "உலகளாவிய கண்ணோட்டம்"
         },
         sections: {
@@ -1801,7 +1802,7 @@ const translations = {
                     </div>
                 `
             },
-            golem: {
+            minotaur: {
                 title: "கோலெம்",
                 content: `
                     <div class="card">
@@ -1840,7 +1841,7 @@ const translations = {
             ghoul: "الغول",
             witch: "الساحرة",
             soldier: "الجندي",
-            golem: "الغولم",
+            minotaur: "المينوتور",
             global_overview: "نظرة عامة"
         },
         sections: {
@@ -1935,7 +1936,7 @@ const translations = {
                     </div>
                 `
             },
-            golem: {
+            minotaur: {
                 title: "الغولم",
                 content: `
                     <div class="card">
@@ -1974,7 +1975,7 @@ const translations = {
             ghoul: "غول",
             witch: "جادوگرنی",
             soldier: "سپاہی",
-            golem: "گولم",
+            minotaur: "مینوتور",
             global_overview: "مجموعی جائزہ"
         },
         sections: {
@@ -2069,7 +2070,7 @@ const translations = {
                     </div>
                 `
             },
-            golem: {
+            minotaur: {
                 title: "گولم",
                 content: `
                     <div class="card">
@@ -2108,7 +2109,7 @@ const translations = {
             ghoul: "O Carniçal",
             witch: "A Bruxa",
             soldier: "O Soldado",
-            golem: "O Golem",
+            minotaur: "O Minotaur",
             global_overview: "Visão Geral"
         },
         sections: {
@@ -2128,7 +2129,7 @@ const translations = {
                     <ol class="setup-steps">
                         <li><h3 class="accent">1. A Deusa</h3><p>Deve ser colocada na <span class="highlight">borda distante</span> do seu lado.</p></li>
                         <li><h3 class="accent">2. Os Heróis</h3><p>Colocados nas bordas, entre <span class="highlight">4 a 6 saltos</span> de distância da Deusa.</p></li>
-                        <li><h3 class="accent">3. Os Golems</h3><p>Escudos defensivos perto da Deusa (1-2 saltos).</p></li>
+                        <li><h3 class="accent">3. Os Minotaurs</h3><p>Escudos defensivos perto da Deusa (1-2 saltos).</p></li>
                         <li><h3 class="accent">4. O Anel Cromático</h3><p>As <span class="accent">Bruxas</span> são distribuídas por 4 cores diferentes.</p></li>
                         <li><h3 class="accent">5. Destacamento de Infantaria</h3><p><span class="accent">Carniçais</span> e <span class="accent">Sereias</span> ocupam as restantes posições.</p></li>
                     </ol>
@@ -2203,8 +2204,8 @@ const translations = {
                     </div>
                 `
             },
-            golem: {
-                title: "O Golem",
+            minotaur: {
+                title: "O Minotaur",
                 content: `
                     <div class="card">
                         <h3>Tipo: <span class="accent">Invulnerável</span></h3>
@@ -2242,7 +2243,7 @@ const translations = {
             ghoul: "Гуль",
             witch: "Ведьма",
             soldier: "Солдат",
-            golem: "Голем",
+            minotaur: "Минотавр",
             global_overview: "Общий обзор"
         },
         sections: {
@@ -2337,7 +2338,7 @@ const translations = {
                     </div>
                 `
             },
-            golem: {
+            minotaur: {
                 title: "Голем",
                 content: `
                     <div class="card">
@@ -2376,7 +2377,7 @@ const translations = {
             ghoul: "পিশাচ",
             witch: "ডাইনি",
             soldier: "সৈনিক",
-            golem: "গোলেম",
+            minotaur: "মিনোটর",
             global_overview: "সার্বিক চিত্র"
         },
         sections: {
@@ -2471,7 +2472,7 @@ const translations = {
                     </div>
                 `
             },
-            golem: {
+            minotaur: {
                 title: "গোলেম",
                 content: `
                     <div class="card">
@@ -2510,7 +2511,7 @@ const translations = {
             ghoul: "Ghoul",
             witch: "Penyihir",
             soldier: "Prajurit",
-            golem: "Golem",
+            minotaur: "Minotaur",
             global_overview: "Ikhtisar Global"
         },
         sections: {
@@ -2530,7 +2531,7 @@ const translations = {
                     <ol class="setup-steps">
                         <li><h3 class="accent">1. Dewi</h3><p>Harus ditempatkan di <span class="highlight">tepi jauh</span> sisi Anda.</p></li>
                         <li><h3 class="accent">2. Pahlawan</h3><p>Ditempatkan di tepi, berjarak <span class="highlight">4 hingga 6 lompatan</span> dari Dewi.</p></li>
-                        <li><h3 class="accent">3. Golem</h3><p>Sebagai perisai pertahanan di dekat Dewi (1-2 lompatan).</p></li>
+                        <li><h3 class="accent">3. Minotaur</h3><p>Sebagai perisai pertahanan di dekat Dewi (1-2 lompatan).</p></li>
                         <li><h3 class="accent">4. Lingkaran Kromatik</h3><p><span class="accent">Penyihir</span> didistribusikan pada 4 warna yang berbeda.</p></li>
                         <li><h3 class="accent">5. Pengerahan Infanteri</h3><p><span class="accent">Ghoul</span> dan <span class="accent">Siren</span> menempati posisi taktis yang tersisa.</p></li>
                     </ol>
@@ -2605,8 +2606,8 @@ const translations = {
                     </div>
                 `
             },
-            golem: {
-                title: "Golem",
+            minotaur: {
+                title: "Minotaur",
                 content: `
                     <div class="card">
                         <h3>Tipe: <span class="accent">Kebal</span></h3>

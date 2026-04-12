@@ -217,7 +217,7 @@ function renderBoard(board) {
 
             let innerHTML = "";
 
-            if (type === "golem") {
+            if (type === "minotaur") {
                 scale = 0.09;
                 const fill = isBlack ? "black" : "white";
                 const stroke = isBlack ? "black" : "black"; 
@@ -226,7 +226,7 @@ function renderBoard(board) {
                     innerHTML += `<path d="M 0 0 A 10 25 0 0 1 110 110 Z" fill="${fill}" stroke="${stroke}" stroke-width="20" transform="rotate(${j * 120} 0 0)"></path>`;
                 }
                 if (isBlack) {
-                    // Add inner white contours for black golems
+                    // Add inner white contours for black minotaurs
                     for (let j = 0; j < 3; j++) {
                         innerHTML += `<path d="M 0 0 A 10 25 0 0 1 110 110 Z" fill="black" stroke="white" stroke-width="15" transform="rotate(${j * 120} 0 0) scale(0.5)"></path>`;
                     }

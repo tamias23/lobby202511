@@ -11,7 +11,7 @@ pub enum PieceType {
     Soldier,
     Siren,
     Ghoul,
-    Golem,
+    Minotaur,
 }
 
 impl Serialize for PieceType {
@@ -27,7 +27,7 @@ impl Serialize for PieceType {
             PieceType::Soldier => "soldier",
             PieceType::Siren => "siren",
             PieceType::Ghoul => "ghoul",
-            PieceType::Golem => "golem",
+            PieceType::Minotaur => "minotaur",
         };
         serializer.serialize_str(s)
     }
@@ -47,7 +47,7 @@ impl<'de> Deserialize<'de> for PieceType {
             "soldier" | "soldiers" => Ok(PieceType::Soldier),
             "siren" | "sirens" => Ok(PieceType::Siren),
             "ghoul" | "ghouls" => Ok(PieceType::Ghoul),
-            "golem" | "golems" | "berserker" | "berserkers" | "trifox" | "trifoxes" => Ok(PieceType::Golem),
+            "minotaur" | "minotaurs" | "berserker" | "berserkers" | "trifox" | "trifoxes" | "golem" | "golems" => Ok(PieceType::Minotaur),
             _ => Err(serde::de::Error::custom(format!("Unknown piece type: {}" , s))),
         }
     }

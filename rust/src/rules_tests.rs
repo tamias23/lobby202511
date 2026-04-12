@@ -288,29 +288,29 @@ mod tests {
     }
 
     // ---------------------------------------------------------
-    // 5 Specific Golem Tests (Requested by User)
+    // 5 Specific Minotaur Tests (Requested by User)
     // ---------------------------------------------------------
 
     // TEST 1: Absolute Invulnerability from Direct Capture (Get Legal Moves Filter)
     #[test]
-    fn test_golem_invulnerable_direct_capture() {
+    fn test_minotaur_invulnerable_direct_capture() {
         let mut board = create_mock_board();
         add_poly(&mut board, "p1", "white", vec!["p2"]);
         add_poly(&mut board, "p2", "yellow", vec!["p1"]);
         
         add_piece(&mut board, "b_heroe", "p1", Side::Black, PieceType::Heroe);
-        add_piece(&mut board, "w_golem", "p2", Side::White, PieceType::Golem);
+        add_piece(&mut board, "w_minotaur", "p2", Side::White, PieceType::Minotaur);
 
         let gs = gs_playing(board);
         let heroe_moves = get_legal_moves(&gs, "b_heroe");
         
-        // The mighty Black Heroe cannot target p2 because a Golem stands there.
+        // The mighty Black Heroe cannot target p2 because a Minotaur stands there.
         assert!(!heroe_moves.contains(&"p2".to_string())); 
     }
 
     // TEST 2: Absolute Invulnerability from Area of Effect (Mage/Witch Explosions)
     #[test]
-    fn test_golem_invulnerable_aoe() {
+    fn test_minotaur_invulnerable_aoe() {
         let mut board = create_mock_board();
         add_poly(&mut board, "p1", "white", vec!["p2"]);
         add_poly(&mut board, "p2", "black", vec!["p1", "p3", "p4"]);
@@ -319,23 +319,23 @@ mod tests {
         
         add_piece(&mut board, "w_mage", "p1", Side::White, PieceType::Mage);
         add_piece(&mut board, "b_soldier", "p2", Side::Black, PieceType::Soldier); // The target
-        add_piece(&mut board, "b_golem", "p3", Side::Black, PieceType::Golem); // Collateral target
-        add_piece(&mut board, "w_golem", "p4", Side::White, PieceType::Golem); // Friendly Golem
+        add_piece(&mut board, "b_minotaur", "p3", Side::Black, PieceType::Minotaur); // Collateral target
+        add_piece(&mut board, "w_minotaur", "p4", Side::White, PieceType::Minotaur); // Friendly Minotaur
 
         let mut gs = gs_playing(board);
         gs.turn = Side::White;
 
         apply_move(&mut gs, "w_mage", "p2");
 
-        // Verify the soldier died but the massive Golems survived seamlessly.
+        // Verify the soldier died but the massive Minotaurs survived seamlessly.
         assert_eq!(gs.board.pieces.get("b_soldier").unwrap().position, "returned"); 
-        assert_eq!(gs.board.pieces.get("b_golem").unwrap().position, "p3"); 
-        assert_eq!(gs.board.pieces.get("w_golem").unwrap().position, "p4"); 
+        assert_eq!(gs.board.pieces.get("b_minotaur").unwrap().position, "p3"); 
+        assert_eq!(gs.board.pieces.get("w_minotaur").unwrap().position, "p4"); 
     }
 
-    // TEST 3: Golem Phalanx Movement (Chaining via Teammates and Chosen Color)
+    // TEST 3: Minotaur Phalanx Movement (Chaining via Teammates and Chosen Color)
     #[test]
-    fn test_golem_chain_movement() {
+    fn test_minotaur_chain_movement() {
         let mut board = create_mock_board();
         add_poly(&mut board, "p1", "white", vec!["p2"]);
         add_poly(&mut board, "p2", "white", vec!["p1", "p3"]); // Teammate
@@ -343,56 +343,56 @@ mod tests {
         add_poly(&mut board, "p4", "white", vec!["p3", "p5"]); // Chosen Color (Empty)
         add_poly(&mut board, "p5", "grey", vec!["p4"]); // Grey (Empty, Destination)
         
-        add_piece(&mut board, "w_golem", "p1", Side::White, PieceType::Golem);
+        add_piece(&mut board, "w_minotaur", "p1", Side::White, PieceType::Minotaur);
         add_piece(&mut board, "w_soldier", "p2", Side::White, PieceType::Soldier); // The bridge
         
         let mut gs = gs_playing(board);
         gs.color_chosen.insert(Side::White, "white".to_string()); // Start piece must be on chosen color to be eligible
 
-        let golem_moves = get_legal_moves(&gs, "w_golem");
+        let minotaur_moves = get_legal_moves(&gs, "w_minotaur");
         
-        assert!(golem_moves.contains(&"p5".to_string())); // Chained mathematically! 1->2->3->4->5.
+        assert!(minotaur_moves.contains(&"p5".to_string())); // Chained mathematically! 1->2->3->4->5.
     }
 
-    // TEST 4: Golem Solid Collision (Blocks Enemy Phalanxes Natively)
+    // TEST 4: Minotaur Solid Collision (Blocks Enemy Phalanxes Natively)
     #[test]
-    fn test_golem_solid_collision_blocks_all() {
+    fn test_minotaur_solid_collision_blocks_all() {
         let mut board = create_mock_board();
         add_poly(&mut board, "p1", "white", vec!["p2"]);
         add_poly(&mut board, "p2", "orange", vec!["p1", "p3"]); // Intervening gap
         add_poly(&mut board, "p3", "grey", vec!["p2"]); 
         
         add_piece(&mut board, "w_soldier", "p1", Side::White, PieceType::Soldier);
-        add_piece(&mut board, "b_golem", "p2", Side::Black, PieceType::Golem); // The wall
+        add_piece(&mut board, "b_minotaur", "p2", Side::Black, PieceType::Minotaur); // The wall
         
         let mut gs = gs_playing(board);
         gs.color_chosen.insert(Side::White, "orange".to_string());
 
         let soldier_moves = get_legal_moves(&gs, "w_soldier");
         
-        // Cannot chain onto the Golem or jump completely through it safely.
+        // Cannot chain onto the Minotaur or jump completely through it safely.
         assert!(!soldier_moves.contains(&"p2".to_string()));
         assert!(!soldier_moves.contains(&"p3".to_string()));
     }
 
-    // TEST 5: Golem Siren Susceptibility (They are immobilized by Siren singing)
+    // TEST 5: Minotaur Siren Susceptibility (They are immobilized by Siren singing)
     #[test]
-    fn test_golem_vulnerable_to_siren_pinning() {
+    fn test_minotaur_vulnerable_to_siren_pinning() {
         let mut board = create_mock_board();
         add_poly(&mut board, "p1", "white", vec!["p2"]);
         add_poly(&mut board, "p2", "black", vec!["p1", "p3"]);
         add_poly(&mut board, "p3", "grey", vec!["p2"]); 
         
-        add_piece(&mut board, "w_golem", "p1", Side::White, PieceType::Golem);
+        add_piece(&mut board, "w_minotaur", "p1", Side::White, PieceType::Minotaur);
         add_piece(&mut board, "b_siren", "p2", Side::Black, PieceType::Siren); // The singer
         
         let mut gs = gs_playing(board);
         gs.color_chosen.insert(Side::White, "grey".to_string());
 
-        let golem_moves = get_legal_moves(&gs, "w_golem");
+        let minotaur_moves = get_legal_moves(&gs, "w_minotaur");
         
-        // Golem has exactly 0 legal maneuvers generated. Immobilized flawlessly.
-        assert_eq!(golem_moves.len(), 0);
+        // Minotaur has exactly 0 legal maneuvers generated. Immobilized flawlessly.
+        assert_eq!(minotaur_moves.len(), 0);
     }
 
     // ---------------------------------------------------------
@@ -475,7 +475,7 @@ mod tests {
         assert_eq!(moves.len(), 0);
     }
 
-    // TEST 10: Soldiers/Golems landing on NON-chosen colors formally break their personal sequences WITHOUT immediately killing the collective team Turn!
+    // TEST 10: Soldiers/Minotaurs landing on NON-chosen colors formally break their personal sequences WITHOUT immediately killing the collective team Turn!
     #[test]
     fn test_soldier_chain_stops_on_non_chosen_color_without_turn_ending() {
         let mut board = create_mock_board();
@@ -534,9 +534,9 @@ mod tests {
         assert!(moves.contains(&"p3".to_string()), "Captured soldier should be deployable to p3");
     }
 
-    // TEST 12: Soldier/Golem can chain through friendly Golems
+    // TEST 12: Soldier/Minotaur can chain through friendly Minotaurs
     #[test]
-    fn test_soldier_chains_through_friendly_golem() {
+    fn test_soldier_chains_through_friendly_minotaur() {
         let mut board = create_mock_board();
         add_poly(&mut board, "p1", "grey", vec!["p2"]);
         add_poly(&mut board, "p2", "grey", vec!["p1", "p3"]);
@@ -544,16 +544,16 @@ mod tests {
         add_poly(&mut board, "p4", "yellow", vec!["p3"]);
 
         add_piece(&mut board, "w_soldier", "p1", Side::White, PieceType::Soldier);
-        add_piece(&mut board, "w_golem", "p2", Side::White, PieceType::Golem); // Friendly Golem to chain through
+        add_piece(&mut board, "w_minotaur", "p2", Side::White, PieceType::Minotaur); // Friendly Minotaur to chain through
 
         let mut gs = gs_playing(board);
         gs.color_chosen.insert(Side::White, "grey".to_string());
 
         let moves = get_legal_moves(&gs, "w_soldier");
 
-        // Soldier should chain through the friendly Golem on p2 and reach p3 and p4
-        assert!(moves.contains(&"p3".to_string()), "Soldier should chain through friendly Golem to reach p3");
-        assert!(moves.contains(&"p4".to_string()), "Soldier should chain through friendly Golem to reach p4");
+        // Soldier should chain through the friendly Minotaur on p2 and reach p3 and p4
+        assert!(moves.contains(&"p3".to_string()), "Soldier should chain through friendly Minotaur to reach p3");
+        assert!(moves.contains(&"p4".to_string()), "Soldier should chain through friendly Minotaur to reach p4");
     }
 
     // TEST 13: Mage can be deployed adjacent to enemy pieces (only Witch is restricted)
@@ -611,12 +611,12 @@ mod tests {
     }
 
     #[test]
-    fn test_global_constraint_no_golem_capture() {
+    fn test_global_constraint_no_minotaur_capture() {
         let mut board = create_mock_board();
         add_poly(&mut board, "p1", "white", vec!["p2"]);
         add_poly(&mut board, "p2", "white", vec!["p1"]);
         add_piece(&mut board, "w_heroe", "p1", Side::White, PieceType::Heroe);
-        add_piece(&mut board, "b_golem", "p2", Side::Black, PieceType::Golem);
+        add_piece(&mut board, "b_minotaur", "p2", Side::Black, PieceType::Minotaur);
         let gs = gs_playing(board);
         let moves = get_legal_moves(&gs, "w_heroe");
         assert!(!moves.contains(&"p2".to_string()));
@@ -771,12 +771,12 @@ mod tests {
     }
 
     #[test]
-    fn test_goddess_no_golem_capture() {
+    fn test_goddess_no_minotaur_capture() {
         let mut board = create_mock_board();
         add_poly(&mut board, "p1", "white", vec!["p2"]);
         add_poly(&mut board, "p2", "white", vec!["p1"]);
         add_piece(&mut board, "w_goddess", "p1", Side::White, PieceType::Goddess);
-        add_piece(&mut board, "b_golem", "p2", Side::Black, PieceType::Golem);
+        add_piece(&mut board, "b_minotaur", "p2", Side::Black, PieceType::Minotaur);
         let gs = gs_playing(board);
         let moves = get_legal_moves(&gs, "w_goddess");
         assert!(!moves.contains(&"p2".to_string()));
@@ -1057,7 +1057,7 @@ mod tests {
     }
 
     // ---------------------------------------------------------
-    // §3.7 Soldier & Golem 
+    // §3.7 Soldier & Minotaur 
     // ---------------------------------------------------------
     #[test]
     fn test_soldier_chain_through_multiple_friendlies() {
@@ -1123,17 +1123,17 @@ mod tests {
     }
 
     #[test]
-    fn test_golem_chain_same_as_soldier() {
+    fn test_minotaur_chain_same_as_soldier() {
         let mut board = create_mock_board();
         add_poly(&mut board, "p1", "white", vec!["p2"]);
         add_poly(&mut board, "p2", "black", vec!["p1", "p3"]);
         add_poly(&mut board, "p3", "grey", vec!["p2", "p4"]);
         add_poly(&mut board, "p4", "orange", vec!["p3"]);
-        add_piece(&mut board, "w_golem", "p1", Side::White, PieceType::Golem);
+        add_piece(&mut board, "w_minotaur", "p1", Side::White, PieceType::Minotaur);
         add_piece(&mut board, "w_soldier_2", "p2", Side::White, PieceType::Soldier);
         add_piece(&mut board, "w_soldier_3", "p3", Side::White, PieceType::Soldier);
         let gs = gs_playing(board);
-        let moves = get_legal_moves(&gs, "w_golem");
+        let moves = get_legal_moves(&gs, "w_minotaur");
         assert!(moves.contains(&"p4".to_string())); // Traverses p2, p3 to reach p4
     }
 
@@ -1329,20 +1329,20 @@ mod tests {
     }
 
     #[test]
-    fn test_golem_lands_on_different_color_clears_lock() {
+    fn test_minotaur_lands_on_different_color_clears_lock() {
         let mut board = create_mock_board();
         add_poly(&mut board, "p1", "orange", vec!["p2"]);
         add_poly(&mut board, "p2", "blue", vec!["p1", "p3"]); // different color
         add_poly(&mut board, "p3", "orange", vec!["p2"]);
         
-        add_piece(&mut board, "w_golem", "p1", Side::White, PieceType::Golem);
+        add_piece(&mut board, "w_minotaur", "p1", Side::White, PieceType::Minotaur);
         add_piece(&mut board, "w_goddess", "p3", Side::White, PieceType::Goddess);
 
         let mut gs = gs_playing(board);
         gs.color_chosen.insert(Side::White, "orange".to_string());
         
-        let captured = apply_move(&mut gs, "w_golem", "p2");
-        apply_move_turnover(&mut gs, "w_golem", "p2", false, captured.is_empty(), false);
+        let captured = apply_move(&mut gs, "w_minotaur", "p2");
+        apply_move_turnover(&mut gs, "w_minotaur", "p2", false, captured.is_empty(), false);
         
         assert_eq!(gs.locked_sequence_piece, None); // Lock cleared because landed on different color
         assert_eq!(gs.turn, Side::White); // Turn continues because it's a phalanx on different color

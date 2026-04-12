@@ -31,7 +31,7 @@ const COLOR_THEMES = {
 const THEME_LABELS = {
   default: '🟠 Default',
   classic: '🎨 Classic',
-  tutorial: '📖 Tutorial',
+  tutorial: 'Tutorial',
 };
 
 const PieceIcon = ({ type, side }) => {
@@ -40,7 +40,7 @@ const PieceIcon = ({ type, side }) => {
   const stroke = "#000";
 
   switch (type) {
-    case "golem":
+    case "minotaur":
       return (
         <g transform="scale(0.09)">
           {[0, 120, 240].map((angle) => (

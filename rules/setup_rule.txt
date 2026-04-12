@@ -10,9 +10,9 @@ The setup occurs for each side (White plays first):
     *   **Hero Separation**: The two Heroes must be far apart (distance > 6 steps).
     *   **Goddess Guard**: The Goddess must be "guarded" but not "crowded" by her Heroes. Both Heroes must be between 3 and 6 steps away from her.
 
-#### Phase B: Protectors (Golems)
+#### Phase B: Protectors (Minotaurs)
 *   **Target Area**: As close as possible to the Goddess.
-*   **Result**: 2 Golems are placed in these "inner ring" slots to act as immediate bodyguards.
+*   **Result**: 2 Minotaurs are placed in these "inner ring" slots to act as immediate bodyguards.
 
 #### Phase C: Witches
 *   **Target Area**: Witches must be spread across different colored polygons and placed as close as possible to the 3 anchors.
@@ -28,7 +28,7 @@ The setup occurs for each side (White plays first):
 ### 2. The Sequence
 
 *   White plays first at each start of any phase (A, B, C, D, E)
-*   players alternate placing their pieces : goddess (phase A), then 2 heroes (phase B), then 2 golems (phase C), then 4 witches (phase D), then all ghouls and sirens (phase E)
+*   players alternate placing their pieces : goddess (phase A), then 2 heroes (phase B), then 2 minotaurs (phase C), then 4 witches (phase D), then all ghouls and sirens (phase E)
 *   when a player has the move :
     * he/she should play at least one piece 
     * he/she can place any number of his/her pieces for the phase (A, B, C, D or E), or even all, and at least one

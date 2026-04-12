@@ -29,7 +29,7 @@ const PieceIcon = ({ type, side }) => {
   const stroke = '#000';
 
   switch (type) {
-    case 'golem':
+    case 'minotaur':
       return (
         <g transform="scale(0.09)">
           {[0, 120, 240].map(angle => (

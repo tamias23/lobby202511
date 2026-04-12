@@ -132,7 +132,7 @@ function App() {
           title="Analysis Board"
           id="analysis-board-btn"
         >
-          🔍 Analysis
+          Analysis
         </button>
       )}
 
@@ -144,7 +144,7 @@ function App() {
           title="Tutorial"
           id="tutorial-btn"
         >
-          📖 Tutorial
+          Tutorial
         </button>
       )}
 
