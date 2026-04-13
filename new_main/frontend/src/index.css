@@ -79,6 +79,19 @@
 /* ─────────────────── BASE ─────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* ── Mobile / Capacitor: remove tap glow, prevent text-select & scroll interference ── */
+*, *::before, *::after {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* Allow text inputs to remain selectable */
+input, textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 body {
   font-family: 'Inter', sans-serif;
   background: var(--bg-main);
@@ -813,14 +826,36 @@ button { font-family: inherit; }
 }
 
 svg polygon {
-  transition: all 0.3s ease;
+  transition: fill 0.2s ease;
   filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));
 }
 svg polygon:hover {
   filter: brightness(1.1) drop-shadow(0 2px 4px rgba(0,0,0,0.2));
 }
+
+/* Game board SVG: disable browser touch handling so we can capture all touch events */
+.game-board-svg {
+  touch-action: none;
+  -webkit-user-drag: none;
+}
+
+/* Piece group transitions — controlled by JS class */
 .piece-group {
-  transition: transform 500ms cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s, filter 0.2s;
+  /* Base: fast fade for opacity/filter */
+  opacity: 1;
+  transition: opacity 0.15s ease, filter 0.15s ease;
+}
+/* Own piece being smoothly animated (not dragging) */
+.piece-group--smooth {
+  transition: transform 220ms ease-out, opacity 0.15s ease, filter 0.15s ease;
+}
+/* Opponent/spectator server-update snap */
+.piece-group--snap {
+  transition: transform 80ms linear, opacity 0.15s ease, filter 0.15s ease;
+}
+/* Dragging: zero transition so it tracks the finger exactly */
+.piece-group--dragging {
+  transition: none !important;
 }
 .selected-piece {
   animation: pulse-glow 2s infinite;
@@ -849,11 +884,44 @@ svg polygon:hover {
 
 @media (max-width: 640px) {
   .lobby-layout { padding: 30px 14px 24px; }
-  .game-lists-section { grid-template-columns: 1fr; }
+  /* Portrait: 2×2 grid keeps panels compact */
+  .game-lists-section { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .game-list-panel { min-height: 140px; padding: 12px; }
+  .game-list-scroll { max-height: 140px; }
   .time-control-btn { padding: 28px 14px; }
   .tc-label { font-size: 1.8rem; }
   .auth-form-panel { padding: 32px 24px; }
   .time-control-custom-form-wrapper { max-width: 100%; }
+}
+
+/* Very small phones: single column */
+@media (max-width: 360px) {
+  .game-lists-section { grid-template-columns: 1fr; }
+  .game-list-panel { min-height: auto; }
+}
+
+/* ─── Portrait game board: stack HUD above/below the board ─── */
+@media (orientation: portrait) {
+  .game-board-container {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  /* Top HUD strip (game info side) */
+  .hud-panel {
+    flex-direction: row !important;
+    width: 100% !important;
+    min-width: unset !important;
+    flex-wrap: wrap;
+    gap: 8px !important;
+    padding: 6px !important;
+  }
+  /* Panels inside HUD become horizontal pills */
+  .hud-panel .glass-panel {
+    flex: 1;
+    min-width: 140px;
+    padding: 8px 12px;
+    height: auto;
+  }
 }
 
 /* ──────────────────────────── BOT PANEL ──────────────────────────── */

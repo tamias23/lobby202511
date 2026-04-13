@@ -634,19 +634,32 @@ const GameBoard = ({
   const [dragPos, setDragPos] = useState(null);
   const svgRef = useRef(null);
 
+  // ── Portrait detection for responsive layout ──────────────────────────────
+  const [isPortrait, setIsPortrait] = useState(
+    typeof window !== 'undefined' ? window.innerHeight > window.innerWidth : false
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(orientation: portrait)');
+    const handler = (e) => setIsPortrait(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
   const handleGlobalMouseMove = (e) => {
     if (!selectedPiece || !svgRef.current) return;
 
     // If mouse button is NOT held down, reset dragPos to fix "stickiness"
-    if (e.buttons !== 1) {
+    if (e.buttons !== 1 && e.touches?.length === 0) {
       if (dragPos) setDragPos(null);
       return;
     }
 
     const CTM = svgRef.current.getScreenCTM();
     if (CTM) {
-      let x = (e.clientX - CTM.e) / CTM.a;
-      let y = (e.clientY - CTM.f) / CTM.d;
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      let x = (clientX - CTM.e) / CTM.a;
+      let y = (clientY - CTM.f) / CTM.d;
 
       // If board is flipped, mirror the mouse coordinates back to the board's coordinate system
       if (isFlipped) {
@@ -661,6 +674,33 @@ const GameBoard = ({
   const handleGlobalMouseUp = () => {
     if (dragPos) setDragPos(null);
   };
+
+  // Touch drop handler: hit-test the finger-lift position against polygon data attributes
+  const handleTouchEnd = (e) => {
+    e.preventDefault();
+    const touch = e.changedTouches[0];
+    // Temporarily hide dragging piece so elementFromPoint can see the polygon underneath
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    const polyId = el?.dataset?.polyId;
+    if (polyId && legalMoves.includes(polyId)) {
+      handleTargetClick(polyId);
+    } else {
+      setDragPos(null);
+    }
+  };
+
+  useEffect(() => {
+    window.addEventListener('mousemove', handleGlobalMouseMove);
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+    window.addEventListener('touchmove', handleGlobalMouseMove, { passive: false });
+    window.addEventListener('touchend', handleGlobalMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleGlobalMouseMove);
+      window.removeEventListener('mouseup', handleGlobalMouseUp);
+      window.removeEventListener('touchmove', handleGlobalMouseMove);
+      window.removeEventListener('touchend', handleGlobalMouseUp);
+    };
+  }, [selectedPiece, isFlipped, boardCenter, dragPos]);
 
   useEffect(() => {
     init().then(() => setWasmReady(true));
@@ -866,6 +906,7 @@ const GameBoard = ({
           return (
             <polygon
               key={id}
+              data-poly-id={id}
               points={poly.points.map((p) => `${p[0]},${p[1]}`).join(" ")}
               fill={getThemeColor(poly.color)}
               stroke="black"
@@ -949,9 +990,19 @@ const GameBoard = ({
       const isMyTurn = turn === actualPieceSide;
       let allowedToMove = isMyTurn && actualPieceSide === side && eligiblePieceIds.includes(piece.id);
 
+      const isMyPiece = actualPieceSide === side;
       const isDragging = isSelected && dragPos;
       const actualCx = isDragging ? dragPos.x : cx;
       const actualCy = isDragging ? dragPos.y : cy;
+
+      // Dynamic CSS class for transition control
+      const pieceClass = [
+        'piece-group',
+        isSelected ? 'selected-piece' : '',
+        isDragging ? 'piece-group--dragging'
+          : isMyPiece ? 'piece-group--smooth'
+          : 'piece-group--snap',
+      ].join(' ');
 
       const isGrayed = isOffBoard && !allowedToMove;
       const idInLegalMoves =
@@ -960,7 +1011,7 @@ const GameBoard = ({
       return (
         <g
           key={piece.id}
-          className={`piece-group ${isSelected ? "selected-piece" : ""}`}
+          className={pieceClass}
           transform={`translate(${actualCx}, ${actualCy}) ${isFlipped ? "rotate(180)" : ""}`}
           style={{
             cursor: allowedToMove
@@ -970,12 +1021,16 @@ const GameBoard = ({
               : "default",
             opacity: 1.0,
             filter: isGrayed ? "grayscale(100%) brightness(0.7)" : "none",
-            transition: isDragging ? "none" : undefined,
             // During any drag, disable pointer events on all pieces so they don't block
             // target polygons (especially important for captures)
             pointerEvents: dragPos ? "none" : "all",
           }}
           onMouseDown={() => allowedToMove && handlePieceClick(piece)}
+          onTouchStart={(e) => {
+            if (!allowedToMove) return;
+            e.preventDefault(); // eliminates 300ms tap delay and tap highlight
+            handlePieceClick(piece);
+          }}
         >
           <circle
             r="18"
@@ -1328,12 +1383,14 @@ const GameBoard = ({
       <div className="game-board-wrapper" style={{ position: 'relative', flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', minWidth: 0, minHeight: 0 }}>
         <svg
           ref={svgRef}
+          className="game-board-svg"
           viewBox={boardViewBox}
           preserveAspectRatio="xMidYMin meet"
           style={svgStyle}
           onMouseMove={handleGlobalMouseMove}
           onMouseUp={handleGlobalMouseUp}
           onMouseLeave={handleGlobalMouseUp}
+          onTouchEnd={handleTouchEnd}
         >
           {renderBoard()}
         </svg>
