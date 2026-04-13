@@ -648,8 +648,16 @@ const GameBoard = ({
   const handleGlobalMouseMove = (e) => {
     if (!selectedPiece || !svgRef.current) return;
 
-    // If mouse button is NOT held down, reset dragPos to fix "stickiness"
-    if (e.buttons !== 1 && e.touches?.length === 0) {
+    // Detection for "button released" or "no active touch"
+    const isMouse = e.type === 'mousemove' || !e.touches;
+    const isTouch = e.type === 'touchmove' || e.touches;
+    
+    // If it's a mouse event and button 1 is not pressed, it's not a drag. 
+    // If it's a touch event and there are no touches, it's not a drag.
+    const isAbortedMouse = isMouse && e.buttons !== 1;
+    const isAbortedTouch = isTouch && e.touches?.length === 0;
+
+    if (isAbortedMouse || isAbortedTouch) {
       if (dragPos) setDragPos(null);
       return;
     }
@@ -672,20 +680,29 @@ const GameBoard = ({
   };
 
   const handleGlobalMouseUp = () => {
-    if (dragPos) setDragPos(null);
+    if (dragPos) {
+      // If we were dragging but didn't land on a valid polygon (which would have cleared this via handleTargetClick),
+      // then we should cancel the selection so the user can "change their mind" by dropping into the void.
+      setDragPos(null);
+      setSelectedPiece(null);
+      setLegalMoves([]);
+    }
   };
 
   // Touch drop handler: hit-test the finger-lift position against polygon data attributes
   const handleTouchEnd = (e) => {
     e.preventDefault();
     const touch = e.changedTouches[0];
-    // Temporarily hide dragging piece so elementFromPoint can see the polygon underneath
+    // elementFromPoint sees the polygon underneath
     const el = document.elementFromPoint(touch.clientX, touch.clientY);
     const polyId = el?.dataset?.polyId;
     if (polyId && legalMoves.includes(polyId)) {
       handleTargetClick(polyId);
     } else {
+      // Dropped on an invalid target or outside board: clear everything
       setDragPos(null);
+      setSelectedPiece(null);
+      setLegalMoves([]);
     }
   };
 

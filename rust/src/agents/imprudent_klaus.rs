@@ -361,7 +361,17 @@ impl ImprudentKlausAgent {
         }
         distances.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         // Sum of the 5 closest (or fewer if less than 5 enemies on board)
-        distances.iter().take(5).sum()
+        let mut score: f64 = distances.iter().take(5).sum();
+
+        // Edge bonus: strongly prefer polygons with < 6 neighbors to keep Goddess on the edge
+        if let Some(p) = state.board.polygons.get(poly) {
+            let n_count = std::cmp::max(p.neighbors.len(), p.neighbours.len());
+            if n_count < 6 {
+                score += 100.0; // Large arbitrary bonus makes edges fundamentally "safer"
+            }
+        }
+
+        score
     }
 
     /// Returns true if any enemy piece could reach the goddess's current polygon

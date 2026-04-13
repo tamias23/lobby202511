@@ -844,14 +844,17 @@ svg polygon:hover {
   /* Base: fast fade for opacity/filter */
   opacity: 1;
   transition: opacity 0.15s ease, filter 0.15s ease;
+  /* Hardware acceleration hints for smoother mobile movement */
+  will-change: transform;
+  backface-visibility: hidden;
 }
 /* Own piece being smoothly animated (not dragging) */
 .piece-group--smooth {
-  transition: transform 220ms ease-out, opacity 0.15s ease, filter 0.15s ease;
+  transition: transform 500ms cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s ease, filter 0.15s ease;
 }
-/* Opponent/spectator server-update snap */
+/* Opponent/spectator server-update snap (slightly faster than smooth but still weightier than before) */
 .piece-group--snap {
-  transition: transform 80ms linear, opacity 0.15s ease, filter 0.15s ease;
+  transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s ease, filter 0.15s ease;
 }
 /* Dragging: zero transition so it tracks the finger exactly */
 .piece-group--dragging {
