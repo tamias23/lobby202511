@@ -44,7 +44,7 @@ function App() {
     // Restore user session from stored JWT
     const token = localStorage.getItem('jwt_token');
     if (token && !user) {
-      fetch('/api/me', {
+      fetch(`${import.meta.env.VITE_API_URL || ''}/api/me`, {
         headers: { 'Authorization': `Bearer ${token}` },
       })
         .then(r => {

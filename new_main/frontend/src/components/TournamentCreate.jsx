@@ -113,7 +113,7 @@ export default function TournamentCreate({ user }) {
   // Fetch boards for picker
   useEffect(() => {
     if (step === 3 && boardMode === 'fixed' && randomBoards.length === 0) {
-      fetch('/api/boards/random/10')
+      fetch(`${import.meta.env.VITE_API_URL || ''}/api/boards/random/10`)
         .then(r => r.json())
         .then(data => setRandomBoards(data.boards || []))
         .catch(() => {});

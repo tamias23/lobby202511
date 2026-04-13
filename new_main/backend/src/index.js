@@ -691,6 +691,12 @@ function loadBoards() {
 loadBoards();
 
 const app = express();
+const cors = require('cors');
+app.use(cors({
+    origin: '*', // Allow all for now, or specifically 'http://localhost' for Capacitor Android
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json()); // Enable JSON parsing
 
 // Redirect www → apex domain (canonical URL)

@@ -229,7 +229,7 @@ const AnalysisPage = () => {
   useEffect(() => {
     if (!record?.board_id) return;
     setBoardData(null);
-    fetch(`/api/boards/${encodeURIComponent(record.board_id)}`)
+    fetch(`${import.meta.env.VITE_API_URL || ''}/api/boards/${encodeURIComponent(record.board_id)}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data) setBoardData(data); })
       .catch(e => console.error('Failed to fetch board:', e));
@@ -250,7 +250,7 @@ const AnalysisPage = () => {
     setReplayLoading(true);
     try {
       const movesJson = JSON.stringify(record.moves);
-      const res = await fetch('/api/replay', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/replay`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ board_id: record.board_id, movesJson, step }),

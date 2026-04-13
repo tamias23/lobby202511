@@ -13,7 +13,7 @@ const LoginForm = ({ onLoginSuccess }) => {
     setMessage('');
 
     try {
-      const response = await fetch('/login', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifier: formData.identifier, password: formData.password }),

@@ -292,7 +292,7 @@ function TutorialBoard({ boardData, pieces, setPieces }) {
         side: p.id.startsWith('white') ? 'white' : 'black',
         position: p.pos,
       }));
-      const res = await fetch('/api/tutorial/moves', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/tutorial/moves`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -316,7 +316,7 @@ function TutorialBoard({ boardData, pieces, setPieces }) {
         side: p.id.startsWith('white') ? 'white' : 'black',
         position: p.pos,
       }));
-      const res = await fetch('/api/tutorial/apply', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/tutorial/apply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -502,7 +502,7 @@ export default function TutorialPage() {
 
   // Fetch board.json once
   useEffect(() => {
-    fetch('/api/boards/board')
+    fetch(`${import.meta.env.VITE_API_URL || ''}/api/boards/board`)
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data) setBoardData(data); })
       .catch(e => console.error('Tutorial: board fetch failed', e));

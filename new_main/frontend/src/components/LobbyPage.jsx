@@ -175,7 +175,7 @@ const LobbyPage = ({ user }) => {
   // Fetch boards for custom game picker
   useEffect(() => {
     if (showCustomForm && customBoardMode === 'fixed' && customRandomBoards.length === 0) {
-      fetch('/api/boards/random/10')
+      fetch(`${import.meta.env.VITE_API_URL || ''}/api/boards/random/10`)
         .then(r => r.json())
         .then(data => setCustomRandomBoards(data.boards || []))
         .catch(() => {});
