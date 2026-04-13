@@ -769,7 +769,9 @@ button { font-family: inherit; }
 .game-page-wrapper {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh; /* dynamic viewport height — excludes mobile browser chrome / status bar */
+  overflow: hidden;
 }
 
 /* Spectator banner */
@@ -903,33 +905,155 @@ svg polygon:hover {
   .game-list-panel { min-height: auto; }
 }
 
-/* ─── Portrait game board: stack HUD above/below the board ─── */
+/* ─── HUD Panels (Standard/Desktop) ─── */
+.hud-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(8px, 2vh, 15px);
+  padding: clamp(6px, 1.5vw, 10px);
+  width: clamp(140px, 18vw, 180px);
+  min-width: 0;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+  z-index: 100;
+}
+
+/* ─── Portrait layout: Compact Top Header ─── */
 @media (orientation: portrait) {
+  .game-page-wrapper {
+    overflow: hidden;
+  }
   .game-board-container {
     flex-direction: column !important;
     align-items: stretch !important;
+    position: relative;
+    z-index: 50 !important;
   }
-  /* Top HUD strip (game info side) */
-  .hud-panel {
+  /* Hide the right panel entirely in portrait - clocks moved to header */
+  /* Transform the Right panel into a bottom action bar */
+  .hud-panel-right {
     flex-direction: row !important;
     width: 100% !important;
-    min-width: unset !important;
-    flex-wrap: wrap;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 8px !important;
     gap: 8px !important;
-    padding: 6px !important;
+    background: rgba(0,0,0,0.4);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid rgba(255,255,255,0.15);
+    border-radius: 0;
+    justify-content: center;
+    flex-wrap: wrap;
   }
-  /* Panels inside HUD become horizontal pills */
-  .hud-panel .glass-panel {
+  .hud-panel-right .glass-panel {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    flex-direction: row !important;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .hud-panel-right .glass-panel > button {
+    flex: 1 1 calc(50% - 6px) !important;
+    max-width: calc(50% - 4px) !important;
+    width: auto !important;
+    padding: 12px 8px !important;
+  }
+
+  /* The "Left" panel becomes the top centered horizontal strip */
+  .hud-panel-left {
+    flex-direction: row !important;
+    width: 25% !important;
+    min-width: 220px !important; /* Minimum width to keep clocks readable */
+    margin: 10px auto !important;
+    height: auto !important;
+    padding: 8px !important;
+    gap: 8px !important;
+    background: rgba(0,0,0,0.4);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 16px;
+    justify-content: center;
+    z-index: 10 !important;
+  }
+  /* Compact info panels in the header */
+  .hud-panel-left .glass-panel {
     flex: 1;
-    min-width: 140px;
-    padding: 8px 12px;
-    height: auto;
+    min-width: 0;
+    padding: 4px 8px !important;
+    margin: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
   }
 }
 
-/* ──────────────────────────── BOT PANEL ──────────────────────────── */
+/* ─── Landscape Mobile Layout: Slide-out Drawers ─── */
+@media (orientation: landscape) and (max-height: 500px), (orientation: landscape) and (max-width: 1000px) {
+  .game-board-container {
+    position: relative;
+    overflow: hidden;
+  }
+  .hud-panel {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 200px !important;
+    background: rgba(15, 23, 42, 0.95);
+    backdrop-filter: blur(16px);
+    box-shadow: 0 0 40px rgba(0,0,0,0.5);
+    padding: 15px !important;
+    margin: 0 !important;
+  }
+  .hud-panel-left {
+    left: 0;
+    transform: translateX(-100%);
+    border-right: 1px solid rgba(255,255,255,0.1);
+  }
+  .hud-panel-right {
+    right: 0;
+    transform: translateX(100%);
+    border-left: 1px solid rgba(255,255,255,0.1);
+  }
+  /* When open */
+  .hud-panel.drawer-open {
+    transform: translateX(0);
+  }
+}
+
+/* ─── Drawer Toggle Buttons ─── */
+.drawer-toggle {
+  position: absolute;
+  top: 15px;
+  width: 44px;
+  height: 44px;
+  background: rgba(255,255,255,0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 12px;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 50;
+  transition: all 0.2s ease;
+}
+.drawer-toggle:active {
+  transform: scale(0.9);
+  background: rgba(255,255,255,0.2);
+}
+.drawer-toggle.left { left: 15px; }
+.drawer-toggle.right { right: 15px; }
+
+/* Hide toggles on desktop */
+@media (min-width: 1001px) and (min-height: 501px) {
+  .drawer-toggle { display: none; }
+}
 .bot-panel {
-  width: 100%;
   max-width: 900px;
   border-radius: 14px;
   overflow: hidden;

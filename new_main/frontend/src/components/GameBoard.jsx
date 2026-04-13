@@ -550,6 +550,22 @@ const GameBoard = ({
   const [passCount, setPassCount] = useState(initialState.passCount || { white: 0, black: 0 });
   const [passWarningShown, setPassWarningShown] = useState(false);
 
+  // Mobile accessibility: slide-out drawers for HUD panels
+  const [isLeftDrawerOpen, setIsLeftDrawerOpen] = useState(false);
+  const [isRightDrawerOpen, setIsRightDrawerOpen] = useState(false);
+  
+  // Drag threshold state
+  const [dragStartPos, setDragStartPos] = useState(null);
+
+  // Orientation state for piece placement logic
+  const [isPortrait, setIsPortrait] = useState(window.matchMedia("(orientation: portrait)").matches);
+  useEffect(() => {
+    const mql = window.matchMedia("(orientation: portrait)");
+    const handler = (e) => setIsPortrait(e.matches);
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, []);
+
   // Resolve a logical board color name to the current theme's CSS color
   const getThemeColor = (logicalColor) => {
     const theme = COLOR_THEMES[colorTheme] || COLOR_THEMES.classic;
@@ -573,15 +589,16 @@ const GameBoard = ({
       });
     });
     const pad = 20;
+    const topPad = isPortrait ? 40 : pad; // Tighter bounds now that overflow is visible (pieces can bleed over the header)
     const vbX = minX - pad;
-    const vbY = minY - pad;
+    const vbY = minY - topPad;
     const vbW = (maxX - minX) + pad * 2;
-    const vbH = (maxY - minY) + pad * 2;
+    const vbH = (maxY - minY) + pad + topPad;
     return {
       boardCenter: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 },
       boardViewBox: `${vbX} ${vbY} ${vbW} ${vbH}`,
     };
-  }, [board]);
+  }, [board, isPortrait]);
   const [colorChosen, setColorChosen] = useState(
     initialState.colorChosen || {},
   );
@@ -633,17 +650,12 @@ const GameBoard = ({
 
   const [dragPos, setDragPos] = useState(null);
   const svgRef = useRef(null);
+  
+  // Audio refs
+  const audioRefs = useRef({});
 
-  // ── Portrait detection for responsive layout ──────────────────────────────
-  const [isPortrait, setIsPortrait] = useState(
-    typeof window !== 'undefined' ? window.innerHeight > window.innerWidth : false
-  );
-  useEffect(() => {
-    const mq = window.matchMedia('(orientation: portrait)');
-    const handler = (e) => setIsPortrait(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
+  // Move lock ref to prevent rapid double-click emissions
+  const moveLockRef = useRef(false);
 
   const handleGlobalMouseMove = (e) => {
     if (!selectedPiece || !svgRef.current) return;
@@ -666,16 +678,37 @@ const GameBoard = ({
     if (CTM) {
       const clientX = e.touches ? e.touches[0].clientX : e.clientX;
       const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      const isOffBoard = selectedPiece && (selectedPiece.position === "returned" || selectedPiece.position === "graveyard");
+
+      // Threshold check: don't start shifting the piece visually until we move enough
+      if (dragStartPos && !dragPos) {
+        const dx = clientX - dragStartPos.x;
+        const dy = clientY - dragStartPos.y;
+        if (Math.sqrt(dx*dx + dy*dy) > 8) {
+          // Trigger drag start
+          const startX = (clientX - CTM.e) / CTM.a;
+          const startY = (clientY - CTM.f) / CTM.d;
+          setDragPos({ 
+            x: (isFlipped && !isOffBoard) ? 2 * boardCenter.x - startX : startX, 
+            y: (isFlipped && !isOffBoard) ? 2 * boardCenter.y - startY : startY 
+          });
+        }
+        return;
+      }
+
       let x = (clientX - CTM.e) / CTM.a;
       let y = (clientY - CTM.f) / CTM.d;
 
       // If board is flipped, mirror the mouse coordinates back to the board's coordinate system
-      if (isFlipped) {
+      // ONLY if the piece is ON the board (since off-board pieces were pulled out of the rotation group)
+      if (isFlipped && !isOffBoard) {
         x = 2 * boardCenter.x - x;
         y = 2 * boardCenter.y - y;
       }
 
-      setDragPos({ x, y });
+      if (dragPos) {
+        setDragPos({ x, y });
+      }
     }
   };
 
@@ -701,9 +734,13 @@ const GameBoard = ({
     } else {
       // Dropped on an invalid target or outside board: clear everything
       setDragPos(null);
-      setSelectedPiece(null);
-      setLegalMoves([]);
+      // Wait, don't clear selectedPiece if we were just clicking (no dragPos yet)
+      if (dragPos) {
+         setSelectedPiece(null);
+         setLegalMoves([]);
+      }
     }
+    setDragStartPos(null);
   };
 
   useEffect(() => {
@@ -828,9 +865,20 @@ const GameBoard = ({
     updateEligiblePieces();
   }, [wasmReady, pieces, turn, phase, setupStep, colorChosen, lockedSequencePiece, turnCounter, isNewTurn, movesThisTurn, heroeTakeCounter]);
 
-  const handlePieceClick = async (piece) => {
+  const handlePieceClick = async (piece, e) => {
     if (turn !== side) return;
-    if (piece.side !== side) return;
+
+    if (piece.side !== side) {
+      // Handle capturing opponent piece via click
+      if (selectedPiece && legalMoves.includes(piece.position)) {
+        handleTargetClick(piece.position);
+      }
+      return;
+    }
+
+    if (e) {
+      setDragStartPos({ x: e.clientX || e.touches?.[0]?.clientX, y: e.clientY || e.touches?.[0]?.clientY });
+    }
 
     if (selectedPiece?.id === piece.id) {
       setSelectedPiece(null);
@@ -876,6 +924,13 @@ const GameBoard = ({
 
   const handleTargetClick = (targetPoly) => {
     if (!selectedPiece) return;
+    if (moveLockRef.current) return;
+    
+    moveLockRef.current = true;
+    setTimeout(() => {
+      moveLockRef.current = false;
+    }, 400); // 400ms lock to prevent double clicks and synthetic Android events
+
     console.log(
       `Applying move: ${selectedPiece.type} (${selectedPiece.id}) to ${targetPoly}`,
     );
@@ -912,71 +967,92 @@ const GameBoard = ({
   const renderBoard = () => {
     if (!board || !board.allPolygons) return null;
     return (
-      <g
-        transform={
-          isFlipped ? `rotate(180, ${boardCenter.x}, ${boardCenter.y})` : ""
-        }
-        style={{ transition: "transform 0.6s ease-in-out" }}
-      >
-        {Object.entries(board.allPolygons).map(([id, poly]) => {
-          const isLegalMove = legalMoves.includes(id);
-          return (
-            <polygon
-              key={id}
-              data-poly-id={id}
-              points={poly.points.map((p) => `${p[0]},${p[1]}`).join(" ")}
-              fill={getThemeColor(poly.color)}
-              stroke="black"
-              strokeWidth="0.5"
-              style={{
-                cursor: isLegalMove ? "pointer" : "default",
-                transition: "fill 0.2s",
-              }}
-              onClick={() => isLegalMove && handleTargetClick(id)}
-              onMouseUp={() =>
-                isLegalMove && selectedPiece && handleTargetClick(id)
-              }
-            />
-          );
-        })}
-        {renderEdges()}
-        {renderPieces()}
-        {/* Visual Move Indicators */}
-        {legalMoves.map((targetId) => {
-          const poly = board.allPolygons[targetId];
-          if (!poly || !poly.center) return null;
-          const [cx, cy] = poly.center;
-          const isOccupied = pieces.some(
-            (p) =>
-              p.position === targetId &&
-              p.position !== "returned" &&
-              p.position !== "graveyard",
-          );
+      <g>
+        <g
+          transform={
+            isFlipped ? `rotate(180, ${boardCenter.x}, ${boardCenter.y})` : ""
+          }
+          style={{ transition: "transform 0.6s ease-in-out" }}
+        >
+          {Object.entries(board.allPolygons).map(([id, poly]) => {
+            const isLegalMove = legalMoves.includes(id);
+            return (
+              <polygon
+                key={id}
+                data-poly-id={id}
+                points={poly.points.map((p) => `${p[0]},${p[1]}`).join(" ")}
+                fill={getThemeColor(poly.color)}
+                stroke="black"
+                strokeWidth="0.5"
+                style={{
+                  cursor: isLegalMove ? "pointer" : "default",
+                  transition: "fill 0.2s",
+                }}
+                onClick={() => isLegalMove && handleTargetClick(id)}
+                onMouseUp={() =>
+                  isLegalMove && selectedPiece && handleTargetClick(id)
+                }
+              />
+            );
+          })}
+          {renderEdges()}
+          {renderPieces('on-board')}
+          {/* Visual Move Indicators */}
+          {legalMoves.map((targetId) => {
+            const poly = board.allPolygons[targetId];
+            if (!poly || !poly.center) return null;
+            const [cx, cy] = poly.center;
+            const isOccupied = pieces.some(
+              (p) =>
+                p.position === targetId &&
+                p.position !== "returned" &&
+                p.position !== "graveyard",
+            );
 
-          return (
-            <circle
-              key={`move-indicator-${targetId}`}
-              cx={cx}
-              cy={cy}
-              r={isOccupied ? 16 : 5}
-              fill={
-                isOccupied ? "rgba(239, 68, 68, 0.4)" : "rgba(0, 0, 0, 0.4)"
-              }
-              stroke={isOccupied ? "#ef4444" : "rgba(0, 0, 0, 0.2)"}
-              strokeWidth={isOccupied ? 2 : 1}
-              style={{ pointerEvents: "none" }}
-            />
-          );
-        })}
+            return (
+              <circle
+                key={`move-indicator-${targetId}`}
+                cx={cx}
+                cy={cy}
+                r={isOccupied ? 16 : 5}
+                fill={
+                  isOccupied ? "rgba(239, 68, 68, 0.4)" : "rgba(0, 0, 0, 0.4)"
+                }
+                stroke={isOccupied ? "#ef4444" : "rgba(0, 0, 0, 0.2)"}
+                strokeWidth={isOccupied ? 2 : 1}
+                style={{ pointerEvents: "none" }}
+              />
+            );
+          })}
+        </g>
+        {renderPieces('off-board')}
       </g>
     );
   };
 
-  const renderPieces = () => {
-    const returnedCounters = { white: 0, black: 0 };
-    const boardWidth = board?.width || 410;
+  const renderPieces = (renderType = 'all') => {
+    // Keep track of how many pieces of each type are in the returned zone for stacking
+    const returnedStacks = {
+      white: {}, // { soldier: count, tower: count, ... }
+      black: {}
+    };
+    
+    // Sort pieces to ensure stable stacking order
+    let sortedPieces = [...pieces].sort((a,b) => {
+      if (a.type !== b.type) return a.type.localeCompare(b.type);
+      return a.id.localeCompare(b.id);
+    });
 
-    return [...pieces].sort((a,b) => a.id.localeCompare(b.id)).map((piece) => {
+    if (renderType === 'on-board') {
+      sortedPieces = sortedPieces.filter(p => p.position !== "returned" && p.position !== "graveyard");
+    } else if (renderType === 'off-board') {
+      sortedPieces = sortedPieces.filter(p => p.position === "returned" || p.position === "graveyard");
+    }
+
+    // Track total returned per side for single-column stacking
+    const returnedCounters = { white: 0, black: 0 };
+
+    return sortedPieces.map((piece) => {
       let cx = 0,
         cy = 0;
       const isOffBoard =
@@ -985,16 +1061,37 @@ const GameBoard = ({
       const actualPieceSide = piece.side || pieceSide;
 
       if (isOffBoard) {
-        if (actualPieceSide === "white") {
-          // Tightened horizontal placement
-          cx = -25 - (returnedCounters.white % 3) * 26;
-          cy = 60 + Math.floor(returnedCounters.white / 3) * 30;
-          returnedCounters.white++;
+        const count = returnedCounters[actualPieceSide];
+        returnedCounters[actualPieceSide]++;
+
+        if (isPortrait) {
+          // Portrait: tight 4-column cluster to fit between top header and board
+          const row = Math.floor(count / 4);
+          const col = count % 4;
+          const colStep = 18; // Very tight horizontal
+          const rowStep = -22; // Stack upwards tightly
+
+          if (actualPieceSide === "white") {
+            cx = 25 + col * colStep;
+            cy = -5 + row * rowStep;
+          } else {
+            cx = 320 + col * colStep;
+            cy = -5 + row * rowStep;
+          }
         } else {
-          // Tightened horizontal placement
-          cx = 435 + (returnedCounters.black % 3) * 26;
-          cy = 60 + Math.floor(returnedCounters.black / 3) * 30;
-          returnedCounters.black++;
+          // Landscape: Zig-zag column stacking
+          const verticalStep = 7.2; // 6 * 1.2
+          const horizontalShift = 13; // half of 26 for total swing of 26
+          const isRight = count % 2 === 0;
+          const xOffset = isRight ? horizontalShift : -horizontalShift;
+
+          if (actualPieceSide === "white") {
+            cx = -20 + xOffset;
+            cy = 60 + count * verticalStep;
+          } else {
+            cx = 430 + xOffset;
+            cy = 60 + count * verticalStep;
+          }
         }
       } else {
         const poly = board.allPolygons[piece.position];
@@ -1029,7 +1126,7 @@ const GameBoard = ({
         <g
           key={piece.id}
           className={pieceClass}
-          transform={`translate(${actualCx}, ${actualCy}) ${isFlipped ? "rotate(180)" : ""}`}
+          transform={`translate(${actualCx}, ${actualCy}) ${isFlipped && !isOffBoard ? "rotate(180)" : ""}`}
           style={{
             cursor: allowedToMove
               ? isDragging
@@ -1042,11 +1139,11 @@ const GameBoard = ({
             // target polygons (especially important for captures)
             pointerEvents: dragPos ? "none" : "all",
           }}
-          onMouseDown={() => allowedToMove && handlePieceClick(piece)}
+          onMouseDown={(e) => allowedToMove && handlePieceClick(piece, e)}
           onTouchStart={(e) => {
             if (!allowedToMove) return;
-            e.preventDefault(); // eliminates 300ms tap delay and tap highlight
-            handlePieceClick(piece);
+            e.preventDefault(); // Prevents synthetic 'mousedown' which was immediately undoing the selection
+            handlePieceClick(piece, e);
           }}
         >
           <circle
@@ -1071,134 +1168,24 @@ const GameBoard = ({
   };
 
   return (
-    <div className="game-board-container" style={boardContainerStyle}>
+    <div 
+      className="game-board-container" 
+      style={boardContainerStyle}
+      onClick={(e) => {
+        // Deselect if clicking the general game container (outside HUDs/SVGs)
+        if (e.target.classList.contains('game-board-container')) {
+          setSelectedPiece(null);
+          setLegalMoves([]);
+        }
+      }}
+    >
+      {/* Drawer Toggle Buttons (Removed as requested) */}
       <div
-        className="hud-panel"
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: "15px",
-          padding: "10px",
-          width: "180px",
-          minWidth: "180px",
-        }}
+        className={`hud-panel hud-panel-left ${isLeftDrawerOpen ? 'drawer-open' : ''}`}
+        style={{ pointerEvents: "all" }}
       >
 
-        <div className="glass-panel" style={{ ...leftHudStyle, width: "100%" }}>
-          <div
-            style={{
-              fontWeight: "bold",
-              color: "#46b0d4",
-              marginBottom: "20px",
-              textAlign: "center",
-            }}
-          >
-            Room: {gameId.slice(-4)}
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: "10px",
-              padding: "15px 10px",
-              borderRadius: "20px",
-              marginBottom: "15px",
-              width: "100%",
-              boxSizing: "border-box",
-              backgroundColor:
-                turn === side
-                  ? "rgba(46, 204, 113, 0.2)"
-                  : "rgba(255,255,255,0.05)",
-              border:
-                turn === side
-                  ? "1px solid #2ecc71"
-                  : "1px solid rgba(255,255,255,0.1)",
-            }}
-          >
-            <span style={{ fontSize: "24px" }}>
-              {turn === "white" ? "⚪" : "⚫"}
-            </span>
-            <span
-              style={{
-                fontWeight: "bold",
-                textAlign: "center",
-                fontSize: "14px",
-              }}
-            >
-              {turn.toUpperCase()}'S TURN
-            </span>
-            <span style={{ opacity: 0.7, fontSize: "12px" }}>
-              [{phase} Step {setupStep}]
-            </span>
-          </div>
-        </div>
-
-        {/* DEBUG ENGINE STATE PANEL - Foldable (Now on Left) */}
-        <div 
-          className="glass-panel" 
-          style={{ 
-            marginTop: "10px", 
-            padding: "12px", 
-            width: "100%", 
-            boxSizing: "border-box",
-            border: "1px solid rgba(255, 215, 0, 0.2)",
-            fontSize: "11px",
-            color: "rgba(255,255,255,0.8)",
-            textAlign: "left"
-          }}
-        >
-          <div 
-            onClick={() => setIsDebugFolded(!isDebugFolded)}
-            style={{ 
-              color: "#f1c40f", 
-              fontWeight: "bold", 
-              fontSize: "12px", 
-              textAlign: "center",
-              cursor: "pointer",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center"
-            }}
-          >
-            <span>DEBUG ENGINE</span>
-            <span>{isDebugFolded ? "▼" : "▲"}</span>
-          </div>
-          
-          {!isDebugFolded && (
-            <div style={{ marginTop: "10px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                <span style={{ opacity: 0.6 }}>Phase:</span>
-                <span style={{ color: "#fff" }}>{phase}</span>
-              </div>
-              
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                <span style={{ opacity: 0.6 }}>Turn:</span>
-                <span style={{ color: "#fff" }}>{turn}</span>
-              </div>
-              
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                <span style={{ opacity: 0.6 }}>Moves:</span>
-                <span style={{ color: "#fff" }}>{movesThisTurn}</span>
-              </div>
-              
-              <div style={{ marginBottom: "8px", borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "8px" }}>
-                <div style={{ opacity: 0.6, marginBottom: "2px" }}>Locked:</div>
-                <div style={{ color: lockedSequencePiece ? "#2ecc71" : "#e74c3c", fontWeight: "bold", wordBreak: "break-all" }}>
-                  {lockedSequencePiece || "NONE"}
-                </div>
-              </div>
-              
-              <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "8px" }}>
-                <div style={{ opacity: 0.6, marginBottom: "2px" }}>Selected:</div>
-                <div style={{ color: "#fff" }}>{selectedPiece?.id || "NONE"}</div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* GAME INFO PANEL */}
+        {/* GAME INFO PANEL — merged with Clock */}
         <div
           className="glass-panel"
           style={{ 
@@ -1210,165 +1197,51 @@ const GameBoard = ({
             overflow: "hidden"
           }}
         >
-          <h3
-            style={{
-              margin: "0 0 15px 0",
-              textAlign: "center",
-              fontSize: "16px",
-              color: "#f27813",
-            }}
-          >
-            Game Info
-          </h3>
-
+          {/* Phase + Turn + Move counters — side by side */}
           <div
             style={{
               display: "flex",
-              justifyContent: "space-between",
-              marginBottom: "8px",
+              justifyContent: "space-around",
+              marginBottom: "12px",
               fontSize: "13px",
-            }}
-          >
-            <span style={{ opacity: 0.7 }}>Time Control:</span>
-            <span style={{ fontWeight: "bold" }}>
-              {initialState?.timeControl ? `${initialState.timeControl.minutes} + ${initialState.timeControl.increment}` : "None"}
-            </span>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              marginBottom: "8px",
-              fontSize: "13px",
-            }}
-          >
-            <span style={{ opacity: 0.7 }}>Turn:</span>
-            <span style={{ fontWeight: "bold" }}>
-              {turnCounter || Math.floor((gameMoves?.length || 0) / 2) + 1}
-            </span>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              marginBottom: "20px",
-              fontSize: "13px",
-              borderBottom: "1px solid rgba(255,255,255,0.1)",
               paddingBottom: "10px",
+              borderBottom: "1px solid rgba(255,255,255,0.1)",
             }}
           >
-            <span style={{ opacity: 0.7 }}>Move:</span>
-            <span style={{ fontWeight: "bold" }}>
-              {gameMoves?.length || 0}
-            </span>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ opacity: 0.7, fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Phase</div>
+              <div style={{ fontWeight: "bold", fontSize: "14px", color: phase === "Setup" ? "#9b59b6" : phase === "Playing" ? "#2ecc71" : "#e74c3c" }}>
+                {phase}
+              </div>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ opacity: 0.7, fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Turn</div>
+              <div style={{ fontWeight: "bold", fontSize: "16px" }}>
+                {turnCounter || Math.floor((gameMoves?.length || 0) / 2) + 1}
+              </div>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ opacity: 0.7, fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Move</div>
+              <div style={{ fontWeight: "bold", fontSize: "16px" }}>
+                {gameMoves?.length || 0}
+              </div>
+            </div>
           </div>
 
-          <div
-            style={{ display: "flex", flexDirection: "column", gap: "15px" }}
-          >
-            {spectatorMode ? (
-              // ── Spectator view: show White then Black, no "You" label ──
-              <>
-                <div
-                  style={{
-                    padding: "10px",
-                    backgroundColor: "rgba(255,255,255,0.05)",
-                    borderRadius: "8px",
-                    borderLeft: "3px solid #f1c40f",
-                  }}
-                >
-                  <div style={{ fontSize: "11px", opacity: 0.6, textTransform: "uppercase", marginBottom: "2px" }}>
-                    ⚪ White
-                  </div>
-                  <div style={{ fontWeight: 'bold', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {formatUsername(whiteName, whiteRole)}
-                  </div>
-                  <div style={{ fontSize: "12px", color: "#2ecc71", marginTop: "4px" }}>
-                    Rating: {whiteRating || '—'}
-                  </div>
-                </div>
-                <div
-                  style={{
-                    padding: "10px",
-                    backgroundColor: "rgba(255,255,255,0.05)",
-                    borderRadius: "8px",
-                    borderLeft: "3px solid #3498db",
-                  }}
-                >
-                  <div style={{ fontSize: "11px", opacity: 0.6, textTransform: "uppercase", marginBottom: "2px" }}>
-                    ⚫ Black
-                  </div>
-                  <div style={{ fontWeight: 'bold', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {formatUsername(blackName, blackRole)}
-                  </div>
-                  <div style={{ fontSize: "12px", color: "#2ecc71", marginTop: "4px" }}>
-                    Rating: {blackRating || '—'}
-                  </div>
-                </div>
-              </>
-            ) : (
-              // ── Player view: YOU on top, OPPONENT below ──
-              <>
-                <div
-                  style={{
-                    padding: "10px",
-                    backgroundColor: "rgba(255,255,255,0.05)",
-                    borderRadius: "8px",
-                    borderLeft: `3px solid ${side === "white" ? "#f1c40f" : "#3498db"}`,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: "11px",
-                      opacity: 0.6,
-                      textTransform: "uppercase",
-                      marginBottom: "2px",
-                    }}
-                  >
-                    You ({side})
-                  </div>
-                  <div style={{ fontWeight: 'bold', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {formatUsername(playerName, side === 'white' ? whiteRole : blackRole)}
-                  </div>
-                  <div
-                    style={{ fontSize: "12px", color: "#2ecc71", marginTop: "4px" }}
-                  >
-                    Rating: {side === 'white' ? (whiteRating || '—') : (blackRating || '—')}
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    padding: "10px",
-                    backgroundColor: "rgba(255,255,255,0.05)",
-                    borderRadius: "8px",
-                    borderLeft: `3px solid ${side !== "white" ? "#f1c40f" : "#3498db"}`,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: "11px",
-                      opacity: 0.6,
-                      textTransform: "uppercase",
-                      marginBottom: "2px",
-                    }}
-                  >
-                    Opponent
-                  </div>
-                  <div style={{ fontWeight: 'bold', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {formatUsername(opponent, side === 'white' ? blackRole : whiteRole)}
-                  </div>
-                  <div
-                    style={{ fontSize: "12px", color: "#2ecc71", marginTop: "4px" }}
-                  >
-                    Rating: {side === 'white' ? (blackRating || '—') : (whiteRating || '—')}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
+          {/* Clocks */}
+          <Clock
+            clocks={clocks}
+            lastTurnTimestamp={lastTurnTimestamp}
+            turn={turn}
+            side={side}
+            phase={phase}
+            whiteName={formatUsername(whiteName, whiteRole)}
+            blackName={formatUsername(blackName, blackRole)}
+            whiteRating={whiteRating}
+            blackRating={blackRating}
+            whiteRole={whiteRole}
+            blackRole={blackRole}
+          />
         </div>
 
         {/* SPECTATOR INFO PANEL */}
@@ -1404,6 +1277,16 @@ const GameBoard = ({
           viewBox={boardViewBox}
           preserveAspectRatio="xMidYMin meet"
           style={svgStyle}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              // Close drawers on mobile if clicking the empty background
+              setIsLeftDrawerOpen(false);
+              setIsRightDrawerOpen(false);
+              // Deselect piece if clicking background
+              setSelectedPiece(null);
+              setLegalMoves([]);
+            }
+          }}
           onMouseMove={handleGlobalMouseMove}
           onMouseUp={handleGlobalMouseUp}
           onMouseLeave={handleGlobalMouseUp}
@@ -1419,22 +1302,14 @@ const GameBoard = ({
         )}
       </div>
 
-      {/* RIGHT HUD - Color Selection & Status */}
-      <div className="hud-panel" style={{ display: 'flex', flexDirection: 'column', gap: '15px', width: '180px', minWidth: '180px' }}>
-        <div className="glass-panel" style={{ ...rightHudStyle, width: "100%", marginBottom: "10px" }}>
-          <Clock
-            clocks={clocks}
-            lastTurnTimestamp={lastTurnTimestamp}
-            turn={turn}
-            side={side}
-            phase={phase}
-            whiteName={formatUsername(whiteName, whiteRole)}
-            blackName={formatUsername(blackName, blackRole)}
-          />
-        </div>
+      <div 
+        className={`hud-panel hud-panel-right ${isRightDrawerOpen ? 'drawer-open' : ''}`} 
+        style={{ pointerEvents: "all" }}
+      >
 
+        {phase === "Playing" && (
         <div className="glass-panel" style={{ ...rightHudStyle, width: '100%' }}>
-          {phase === "Playing" && (
+          {true && (
             <div
               style={{
                 display: "flex",
@@ -1450,6 +1325,10 @@ const GameBoard = ({
                   color: "#f1c40f",
                   fontSize: "13px",
                   textAlign: "center",
+                  height: "18px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
               >
                 {turn === side 
@@ -1458,10 +1337,12 @@ const GameBoard = ({
               </span>
               <div
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: colorChosen[turn] ? "1fr" : "1fr 1fr",
-                  gap: "10px",
-                  justifyItems: "center",
+                  display: "flex",
+                  justifyContent: "center",
+                  gap: "15px",
+                  height: isPortrait ? "45px" : "95px", // Strictly locked height prevents the board from jumping!
+                  alignItems: "center",
+                  flexWrap: isPortrait ? "nowrap" : "wrap",
                 }}
               >
                 {(colorChosen[turn] ? [colorChosen[turn]] : ["grey", "green", "blue", "orange"]).map((color) => (
@@ -1473,8 +1354,8 @@ const GameBoard = ({
                       socket.emit("color_selected", { gameId, color, side })
                     }
                     style={{
-                      width: "50px",
-                      height: "50px",
+                      width: "40px",
+                      height: "40px",
                       backgroundColor: color,
                       borderRadius: "50%",
                       cursor: (turn === side && !colorChosen[side]) ? "pointer" : "default",
@@ -1486,7 +1367,7 @@ const GameBoard = ({
                     onMouseOver={(e) =>
                       turn === side &&
                       !colorChosen[side] &&
-                      (e.target.style.transform = "scale(1.1)")
+                      (e.target.style.transform = "scale(1.15)")
                     }
                     onMouseOut={(e) =>
                       (e.target.style.transform = "scale(1)")
@@ -1494,20 +1375,10 @@ const GameBoard = ({
                   />
                 ))}
               </div>
-              {turn !== side && !colorChosen[turn] && (
-                <div style={{ 
-                  fontSize: "11px", 
-                  color: "rgba(255, 255, 255, 0.4)", 
-                  textAlign: "center",
-                  marginTop: "5px",
-                  fontStyle: "italic"
-                }}>
-                  Opponent choosing...
-                </div>
-              )}
             </div>
           )}
         </div>
+        )}
 
         {/* CHROMATIC UNLOCK COUNTER - Visible during Playing phase until Mage is unlocked */}
         {phase === "Playing" && !mageUnlocked && (
@@ -1557,9 +1428,10 @@ const GameBoard = ({
             gap: "10px"
           }}
         >
-          {turn === side && (phase === "Setup" || phase === "Playing") && (
+          {(phase === "Setup" || phase === "Playing") && (
             <button
               onClick={() => {
+                if (turn !== side) return;
                 if (phase === "Setup") {
                   if (movesThisTurn === 0) {
                     // Block: no piece placed yet
@@ -1583,22 +1455,25 @@ const GameBoard = ({
                   socket.emit("pass_turn_playing", { gameId });
                 }
               }}
-              onMouseOver={(e) => (e.target.style.transform = "scale(1.03)")}
-              onMouseOut={(e) => (e.target.style.transform = "scale(1)")}
+              onMouseOver={(e) => turn === side && (e.target.style.transform = "scale(1.03)")}
+              onMouseOut={(e) => turn === side && (e.target.style.transform = "scale(1)")}
               style={{
                 ...buttonStyle,
-                backgroundColor: passWarningShown ? '#c0392b' : (phase === "Setup" ? "#2ecc71" : "#e67e22"),
-                boxShadow: passWarningShown
+                backgroundColor: turn !== side ? '#7f8c8d' : (passWarningShown ? '#c0392b' : (phase === "Setup" ? "#2ecc71" : "#e67e22")),
+                boxShadow: turn !== side ? "none" : (passWarningShown
                   ? '0 2px 8px rgba(192,57,43,0.5)'
                   : phase === "Setup"
                   ? "0 2px 8px rgba(46, 204, 113, 0.3)"
-                  : "0 2px 8px rgba(230, 126, 34, 0.3)",
+                  : "0 2px 8px rgba(230, 126, 34, 0.3)"),
+                opacity: turn !== side ? 0.35 : 1,
+                cursor: turn !== side ? "not-allowed" : "pointer",
+                pointerEvents: turn !== side ? "none" : "auto",
                 width: "100%",
                 padding: "8px",
                 transition: 'all 0.2s',
               }}
             >
-              {passWarningShown ? '⚠️ Confirm Pass' : 'End Turn'}
+              {turn !== side ? 'Waiting for opponent...' : (passWarningShown ? '⚠️ Confirm Pass' : 'End Turn')}
             </button>
           )}
 
@@ -1618,20 +1493,25 @@ const GameBoard = ({
             Place at least one piece first.
           </div>
 
-          {phase === "Setup" && turn === side && (
+          {phase === "Setup" && (
             <button
-              onClick={() => socket.emit("randomize_setup", { gameId, side })}
-              onMouseOver={(e) => (e.target.style.transform = "scale(1.03)")}
-              onMouseOut={(e) => (e.target.style.transform = "scale(1)")}
+              onClick={() => {
+                if (turn === side) socket.emit("randomize_setup", { gameId, side })
+              }}
+              onMouseOver={(e) => turn === side && (e.target.style.transform = "scale(1.03)")}
+              onMouseOut={(e) => turn === side && (e.target.style.transform = "scale(1)")}
               style={{
                 ...buttonStyle,
-                backgroundColor: "#9b59b6",
-                boxShadow: "0 2px 8px rgba(155, 89, 182, 0.3)",
+                backgroundColor: turn !== side ? "#7f8c8d" : "#9b59b6",
+                boxShadow: turn !== side ? "none" : "0 2px 8px rgba(155, 89, 182, 0.3)",
+                opacity: turn !== side ? 0.35 : 1,
+                cursor: turn !== side ? "not-allowed" : "pointer",
+                pointerEvents: turn !== side ? "none" : "auto",
                 width: "100%",
                 padding: "8px"
               }}
             >
-              Random Setup
+              {turn !== side ? 'Waiting for opponent...' : 'Random Setup'}
             </button>
           )}
 
@@ -1956,27 +1836,7 @@ const GameBoard = ({
         </div>
       )}
 
-      {/* Board name overlay — visible only when debug panel is expanded */}
-      {!isDebugFolded && (
-        <div style={{
-          position: 'fixed',
-          bottom: '12px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          background: 'rgba(0,0,0,0.55)',
-          backdropFilter: 'blur(8px)',
-          border: '1px solid rgba(255,215,0,0.25)',
-          borderRadius: '20px',
-          padding: '5px 18px',
-          fontSize: '12px',
-          color: 'rgba(255,215,0,0.85)',
-          letterSpacing: '0.08em',
-          pointerEvents: 'none',
-          zIndex: 9999,
-        }}>
-          board: {boardName}
-        </div>
-      )}
+
     </div>
   );
 };
@@ -2004,8 +1864,6 @@ const leftHudStyle = {
 
 const rightHudStyle = {
   ...leftHudStyle,
-  width: "180px",
-  minWidth: "180px",
 };
 
 const statusBarStyle = {
@@ -2020,6 +1878,7 @@ const svgStyle = {
   maxHeight: "100vh",
   filter: "drop-shadow(0px 10px 20px rgba(0,0,0,0.5))",
   transformOrigin: "center center",
+  overflow: "visible",
 };
 
 const selectionInfoStyle = {
