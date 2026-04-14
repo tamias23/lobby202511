@@ -1139,11 +1139,23 @@ const GameBoard = ({
             // target polygons (especially important for captures)
             pointerEvents: dragPos ? "none" : "all",
           }}
+          onClick={(e) => {
+            // Capture by click: enemy piece sitting on top of the polygon intercepts
+            // the pointer event, so the polygon's own onClick never fires. Handle it here.
+            if (!allowedToMove && selectedPiece && legalMoves.includes(piece.position)) {
+              handleTargetClick(piece.position);
+            }
+          }}
           onMouseDown={(e) => allowedToMove && handlePieceClick(piece, e)}
           onTouchStart={(e) => {
-            if (!allowedToMove) return;
-            e.preventDefault(); // Prevents synthetic 'mousedown' which was immediately undoing the selection
-            handlePieceClick(piece, e);
+            if (allowedToMove) {
+              e.preventDefault(); // Prevents synthetic 'mousedown' which was immediately undoing the selection
+              handlePieceClick(piece, e);
+            } else if (selectedPiece && legalMoves.includes(piece.position)) {
+              // Capture touch on enemy piece
+              e.preventDefault();
+              handleTargetClick(piece.position);
+            }
           }}
         >
           <circle
