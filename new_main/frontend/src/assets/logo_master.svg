@@ -1,0 +1,22 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- 2x2 Grid using CSS Default Colors -->
+  <rect x="0" y="0" width="512" height="512" fill="orange" />
+  <rect x="512" y="0" width="512" height="512" fill="green" />
+  <rect x="0" y="512" width="512" height="512" fill="blue" />
+  <rect x="512" y="512" width="512" height="512" fill="grey" />
+
+  <!-- Minotaur Icon in the Orange Square (Top-Left) -->
+  <!-- Centered at 256, 256. 
+       Adjusted: 20% smaller (1.8 -> 1.44), moved 20% right (358.4), moved 20% down (358.4) -->
+  <g transform="translate(358.4, 358.4) scale(1.44)">
+    <!-- Large Horns -->
+    <path d="M 0 0 A 10 25 0 0 1 110 110 Z" fill="black" stroke="black" stroke-width="20" transform="rotate(0 0 0)" />
+    <path d="M 0 0 A 10 25 0 0 1 110 110 Z" fill="black" stroke="black" stroke-width="20" transform="rotate(120 0 0)" />
+    <path d="M 0 0 A 10 25 0 0 1 110 110 Z" fill="black" stroke="black" stroke-width="20" transform="rotate(240 0 0)" />
+
+    <!-- Inner Horns (isBlack logic) -->
+    <path d="M 0 0 A 10 25 0 0 1 110 110 Z" fill="black" stroke="white" stroke-width="15" transform="rotate(0 0 0) scale(0.5)" />
+    <path d="M 0 0 A 10 25 0 0 1 110 110 Z" fill="black" stroke="white" stroke-width="15" transform="rotate(120 0 0) scale(0.5)" />
+    <path d="M 0 0 A 10 25 0 0 1 110 110 Z" fill="black" stroke="white" stroke-width="15" transform="rotate(240 0 0) scale(0.5)" />
+  </g>
+</svg>
