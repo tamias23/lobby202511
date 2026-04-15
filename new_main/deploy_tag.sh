@@ -12,6 +12,7 @@ echo "=== Deploy tag: ${TAG} ==="
 
 # cpu-throttling \
 # --no-cpu-throttling \
+# --min-instances 0 \
 # --min-instances 1 \
 
 gcloud run deploy nd6-app \
@@ -19,9 +20,9 @@ gcloud run deploy nd6-app \
     --platform managed \
     --region europe-west1 \
     --allow-unauthenticated \
-    --min-instances 1 \
+    --min-instances 0 \
     --max-instances 1 \
-    --no-cpu-throttling \
+    --cpu-throttling \
     --add-volume=name=dedal-db,type=cloud-storage,bucket=data-bucket-mylittleproject00 \
     --add-volume-mount=volume=dedal-db,mount-path=/mnt/db \
     --env-vars-file backend/backend-config.yaml \
@@ -32,9 +33,9 @@ gcloud run deploy nd6-bot-server \
     --platform managed \
     --region europe-west1 \
     --allow-unauthenticated \
-    --min-instances 1 \
+    --min-instances 0 \
     --max-instances 1 \
-    --no-cpu-throttling \
+    --cpu-throttling \
     --memory 1Gi \
     --cpu 2 \
     --port 8080 \

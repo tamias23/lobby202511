@@ -23,7 +23,9 @@ podman build -t node-docker06:${TAG} .
 podman tag localhost/node-docker06:${TAG} ${REGISTRY}/nodejs6:${TAG}
 podman push ${REGISTRY}/nodejs6:${TAG}
 
+# cpu-throttling \
 # --no-cpu-throttling \
+# --min-instances 0 \
 # --min-instances 1 \
 
 gcloud run deploy nd6-app \
@@ -31,9 +33,9 @@ gcloud run deploy nd6-app \
     --platform managed \
     --region europe-west1 \
     --allow-unauthenticated \
-    --min-instances 0 \
+    --min-instances 1 \
     --max-instances 1 \
-    --cpu-throttling \
+    --no-cpu-throttling \
     --add-volume=name=dedal-db,type=cloud-storage,bucket=data-bucket-mylittleproject00 \
     --add-volume-mount=volume=dedal-db,mount-path=/mnt/db \
     --env-vars-file backend/backend-config.yaml \
@@ -50,9 +52,9 @@ gcloud run deploy nd6-bot-server \
     --platform managed \
     --region europe-west1 \
     --allow-unauthenticated \
-    --min-instances 0 \
+    --min-instances 1 \
     --max-instances 1 \
-    --cpu-throttling \
+    --no-cpu-throttling \
     --memory 1Gi \
     --cpu 2 \
     --port 8080 \
