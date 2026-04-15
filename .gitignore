@@ -1,0 +1,63 @@
+# --- Data and Logs ---
+games/data/*
+!games/data/nt409*
+games/data/rust
+**/mcts_temp/
+rust/mcts_old/
+parquet/
+results/
+err.txt
+out.txt
+output.txt
+utils.txt
+whois.txt
+*.log
+*.xlsx
+# Careful: ignores all text files. Use !filename.txt to keep specific ones.
+*.txt
+
+# --- Dependencies and Build Artifacts ---
+**/node_modules/
+**/target/
+**/build/
+**/.gradle/
+.venv/
+temp/
+__pycache__/
+
+# Frontend/WASM specific
+new_main/frontend/dist/
+new_main/frontend/wasm_pkg/
+new_main/frontend/src/wasm_pkg/
+new_main/frontend/rust-wasm/pkg/
+new_main/backend/rust-napi/pkg/
+new_main/backend/rust-napi/index.linux-x64-gnu.node
+
+# --- Environment and Database ---
+.env
+.env.*
+new_main/backend/.env
+new_main/backend/.env.*
+new_main/backend/db/
+new_main/backend/src/utils/boards/
+new_main/bot-server/models
+
+# --- IDE and Personal Settings ---
+.vscode/
+**/.idea/workspace.xml
+**/.idea/libraries/
+**/.idea/caches/
+new_main/remove_gcp_app.sh
+new_main/launch_gcp_app.sh
+
+# --- Mobile (Capacitor/Android) ---
+new_main/frontend/android/local.properties
+# Ignore the generated web bundle in the Android project
+new_main/frontend/android/app/src/main/assets/public/
+
+# Keep essential Android project files/configs
+!new_main/frontend/android/.idea/runConfigurations.xml
+!new_main/frontend/android/.idea/gradle.xml
+
+# --- Documentation ---
+soleau/
