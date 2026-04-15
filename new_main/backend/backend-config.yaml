@@ -1,0 +1,32 @@
+# Server Configuration
+APP_URL: "https://dedalthegame.com"
+GCS_BUCKET: "data-bucket-mylittleproject00"
+
+# JWT Authentication (HS256)
+JWT_SECRET: "d4e8f1a2b3c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1"
+JWT_EXPIRY_DAYS: "7"
+
+# Email Configuration (Nodemailer)
+EMAIL_SERVICE: "gmail"
+EMAIL_USER: "iiiiiiiiiiii@gmail.com"
+EMAIL_PASS: "iiii iiii iiii iiii"
+
+# Bot Configuration
+BOT_SERVER_URL: "http://localhost:5001"
+BOT_POLL_INTERVAL_MS: "120000"
+BOT_MOVE_DELAY_MS: "500"
+MCTS_DEFAULT_BUDGET_MS: "500"
+
+# Background Bot Matches
+BOT_MATCH_INTERVAL_MS: "10000"
+BOT_MATCH_PROBABILITY: "0.0001"
+
+# Tournament Configuration
+TOURNAMENTS_ENABLED: "true"
+MAX_CONCURRENT_TOURNAMENTS: "20"
+MAX_BOTS_IN_TOURNAMENTS: "30"
+TOURNAMENT_WIN_POINTS: "3"
+TOURNAMENT_DRAW_POINTS: "1"
+TOURNAMENT_LOSS_POINTS: "0"
+TOURNAMENT_MAX_AGE_HOURS: "6"
+TOURNAMENT_OPEN_EXPIRY_HOURS: "2"
