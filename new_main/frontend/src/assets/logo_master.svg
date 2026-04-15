@@ -7,8 +7,8 @@
 
   <!-- Minotaur Icon in the Orange Square (Top-Left) -->
   <!-- Centered at 256, 256. 
-       Adjusted: 20% smaller (1.8 -> 1.44), moved 20% right (358.4), moved 20% down (358.4) -->
-  <g transform="translate(358.4, 358.4) scale(1.44)">
+       Adjusted: Centered, reduced size by an additional 20% (1.44 -> 1.152) -->
+  <g transform="translate(256, 256) scale(1.152)">
     <!-- Large Horns -->
     <path d="M 0 0 A 10 25 0 0 1 110 110 Z" fill="black" stroke="black" stroke-width="20" transform="rotate(0 0 0)" />
     <path d="M 0 0 A 10 25 0 0 1 110 110 Z" fill="black" stroke="black" stroke-width="20" transform="rotate(120 0 0)" />
