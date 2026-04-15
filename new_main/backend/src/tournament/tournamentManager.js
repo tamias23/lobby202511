@@ -10,6 +10,7 @@ const bcrypt = require('bcrypt');
 const { getTournamentsDb, getUsersDb } = require('../db');
 const { swissPairings, roundRobinPairings, knockoutPairings, arenaPairings, knockoutTotalRounds } = require('./pairings');
 const { computeStandings, computeKnockoutBracket } = require('./standings');
+const logger = require('../utils/logger');
 
 // ─── Config (injected at init time from process.env) ────────────────────────
 let CONFIG = {
@@ -80,9 +81,9 @@ async function loadFromDb() {
                 games: rowsToObjects(gRes),
             });
         }
-        console.log(`[Tournament] Loaded ${activeTournaments.size} active tournaments from DB.`);
+        logger.info('Tournament', `Loaded ${activeTournaments.size} active tournament(s) from DB.`);
     } catch (e) {
-        console.error('[Tournament] Failed to load from DB:', e.message);
+        logger.error('Tournament', 'Failed to load from DB:', e.message);
     }
 }
 
@@ -335,7 +336,7 @@ async function startTournament(tournamentId) {
     await db.run(`UPDATE tournaments SET status = 'active', started_at = ?, current_round = 1 WHERE id = ?`,
         [t.started_at, tournamentId]);
 
-    console.log(`[Tournament] ${tournamentId} (${t.format}) STARTED with ${t.current_count} players.`);
+    logger.info('Tournament', `${tournamentId} (${t.format}) STARTED with ${t.current_count} player(s).`);
 
     if (t.format === 'arena') {
         await startArenaRound(tournamentId);
@@ -377,7 +378,7 @@ async function startNextRound(tournamentId) {
     }
 
     if (!pairingsResult || pairingsResult.length === 0) {
-        console.log(`[Tournament] ${tournamentId} round ${t.current_round}: no pairings generated.`);
+        logger.warn('Tournament', `${tournamentId} round ${t.current_round}: no pairings generated.`);
         await completeTournament(tournamentId);
         return;
     }
@@ -451,7 +452,7 @@ async function pairIdleArenaPlayers(tournamentId) {
 // ─── Create a Tournament Game ───────────────────────────────────────────────
 async function createTournamentGame(tournament, whiteId, blackId, timeControl) {
     if (!_createGameFn) {
-        console.error('[Tournament] createGameFn not set!');
+        logger.error('Tournament', 'createGameFn not set!');
         return;
     }
 
@@ -512,10 +513,10 @@ async function createTournamentGame(tournament, whiteId, blackId, timeControl) {
             });
         }
 
-        console.log(`[Tournament] Game ${hash} created: ${whiteId} vs ${blackId} (round ${tournament.current_round})`);
+        logger.info('Tournament', `Game ${hash} created: ${whiteId} vs ${blackId} (round ${tournament.current_round})`);
         return { hash, gameData, gameEntry };
     } catch (e) {
-        console.error(`[Tournament] Failed to create game:`, e.message);
+        logger.error('Tournament', 'Failed to create game:', e.message);
     }
 }
 
@@ -575,7 +576,7 @@ async function onGameComplete(gameHash, winnerSide) {
             }
         }
 
-        console.log(`[Tournament] Game ${gameHash} in tournament ${tid} completed: ${game.result}`);
+        logger.info('Tournament', `Game ${gameHash} in ${tid} completed: result=${game.result}`);
 
         // Check round completion
         if (t.format === 'arena') {
@@ -611,7 +612,7 @@ async function advanceRound(tournamentId) {
     const db = getTournamentsDb();
     await db.run(`UPDATE tournaments SET current_round = ? WHERE id = ?`, [t.current_round, tournamentId]);
 
-    console.log(`[Tournament] ${tournamentId} advancing to round ${t.current_round}/${maxRounds}`);
+    logger.info('Tournament', `${tournamentId} advancing to round ${t.current_round}/${maxRounds}`);
     await startNextRound(tournamentId);
 }
 
@@ -645,7 +646,7 @@ async function completeTournament(tournamentId) {
     } catch (_) {}
 
     const standings = computeStandings(t.participants, t.games, t.format);
-    console.log(`[Tournament] ${tournamentId} COMPLETED. Winner: ${standings[0]?.username || 'N/A'}`);
+    logger.info('Tournament', `${tournamentId} COMPLETED. Winner: ${standings[0]?.username || 'N/A'}`);
 
     broadcastTournamentUpdate(tournamentId);
 
@@ -666,7 +667,7 @@ async function cancelTournament(tournamentId) {
     await db.run(`UPDATE tournaments SET status = 'cancelled' WHERE id = ?`, [tournamentId]);
     activeTournaments.delete(tournamentId);
 
-    console.log(`[Tournament] ${tournamentId} CANCELLED.`);
+    logger.info('Tournament', `${tournamentId} CANCELLED.`);
     if (_ioRef) {
         _ioRef.to(`tournament:${tournamentId}`).emit('tournament_update', { id: tournamentId, status: 'cancelled' });
     }
@@ -696,7 +697,7 @@ async function abortArenaExpiredGames(tournamentId) {
     const pendingGames = t.games.filter(g => !g.result);
 
     if (pendingGames.length > 0) {
-        console.log(`[Tournament] Arena ${tournamentId} expired — aborting ${pendingGames.length} in-progress game(s).`);
+        logger.info('Tournament', `Arena ${tournamentId} expired — aborting ${pendingGames.length} in-progress game(s).`);
     }
 
     for (const game of pendingGames) {
@@ -748,7 +749,7 @@ async function checkArenaExpiry() {
         if (t.arenaEndAt && now >= t.arenaEndAt) {
             // Fire-and-forget; errors are logged inside
             abortArenaExpiredGames(tid).catch(e =>
-                console.error(`[Tournament] checkArenaExpiry error for ${tid}:`, e.message)
+                logger.error('Tournament', `checkArenaExpiry error for ${tid}:`, e.message)
             );
         }
     }
@@ -761,7 +762,7 @@ async function cleanupExpired() {
     for (const [tid, t] of activeTournaments) {
         // Remove if past remove_at
         if (t.remove_at && now > t.remove_at) {
-            console.log(`[Tournament] ${tid} expired (past remove_at). Cancelling.`);
+            logger.info('Tournament', `${tid} expired (past remove_at). Cancelling.`);
             await cancelTournament(tid);
             continue;
         }
@@ -770,7 +771,7 @@ async function cleanupExpired() {
             const openAge = now - t.created_at;
             const maxOpen = CONFIG.OPEN_EXPIRY_HOURS * 60 * 60 * 1000;
             if (openAge > maxOpen) {
-                console.log(`[Tournament] ${tid} open too long (${Math.round(openAge / 60000)}min). Cancelling.`);
+                logger.warn('Tournament', `${tid} open too long (${Math.round(openAge / 60000)}min). Cancelling.`);
                 await cancelTournament(tid);
                 continue;
             }

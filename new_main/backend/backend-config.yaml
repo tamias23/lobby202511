@@ -1,3 +1,8 @@
+# Logging
+# Levels: error | warn | info | debug
+# Use 'debug' for verbose GCP debugging, 'warn' or 'error' for quiet production.
+LOG_LEVEL: "info"
+
 # Server Configuration
 APP_URL: "https://dedalthegame.com"
 GCS_BUCKET: "data-bucket-mylittleproject00"

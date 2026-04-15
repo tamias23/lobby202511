@@ -1,4 +1,5 @@
 require('./utils/configLoader');
+const logger = require('./utils/logger');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -54,7 +55,7 @@ const saveMatchResult = async (gameId, timestamp, whiteName, blackName, whitePla
         try {
             await tournamentManager.onGameComplete(gameId, winner);
         } catch (e) {
-            console.error('[Tournament] onGameComplete error:', e.message);
+            logger.error('Tournament', 'onGameComplete error:', e.message);
         }
     }
 };
@@ -138,8 +139,8 @@ async function fetchAvailableBots() {
             availableBots = models;
 
             if (newBots.length > 0) {
-                console.log(`[Bot] ${newBots.length} new bot models noticed: ${newBots.map(b => b.model_name).join(', ')}`);
-                ensureBotsRegistered(newBots).catch(err => console.error("[Bot] New bot registration failed:", err));
+                logger.info('Bot', `${newBots.length} new bot model(s) noticed: ${newBots.map(b => b.model_name).join(', ')}`);
+                ensureBotsRegistered(newBots).catch(err => logger.error('Bot', 'New bot registration failed:', err));
             }
         } else {
             availableBots = [];
@@ -149,7 +150,7 @@ async function fetchAvailableBots() {
     }
     // Broadcast only when availability changes (server comes up, goes down, or model count changes)
     if (availableBots.length !== prevCount) {
-        console.log(`[Bot] Bot availability changed: ${prevCount} → ${availableBots.length} models`);
+        logger.info('Bot', `Bot availability changed: ${prevCount} → ${availableBots.length} model(s)`);
         if (typeof io !== 'undefined') broadcastLobbyUpdate(io);
     }
     // Always refresh ratings from DB
@@ -192,7 +193,7 @@ async function ensureBotsRegistered(bots) {
             
             const existing = await con.runAndReadAll(`SELECT id FROM users WHERE id = ?`, [botId]);
             if (existing.getRows().length === 0) {
-                console.log(`[Bot] Registering new bot in DB: ${botId}`);
+                logger.info('Bot', `Registering new bot in DB: ${botId}`);
                 await con.run(`
                     INSERT INTO users (id, username, email, role, is_verified, rating)
                     VALUES (?, ?, ?, 'bot', 1, 1500)
@@ -206,7 +207,7 @@ async function ensureBotsRegistered(bots) {
             registeredBotsCache.add(botKey);
         }
     } catch (e) {
-        console.error(`[Bot] Bot registration error:`, e.message);
+        logger.error('Bot', 'Bot registration error:', e.message);
     }
 }
 
@@ -215,7 +216,7 @@ async function ensureBotsRegistered(bots) {
  */
 async function startRandomBotMatch() {
     if (Math.random() > BOT_MATCH_PROBABILITY) {
-        console.log(`[BotMatch] Coin flip (prob ${BOT_MATCH_PROBABILITY}) said NO.`);
+        logger.debug('BotMatch', `Coin flip (prob ${BOT_MATCH_PROBABILITY}) said NO.`);
         return;
     }
     
@@ -223,7 +224,7 @@ async function startRandomBotMatch() {
     const idleBots = availableBots.filter(b => !busyBots.has(getBotKey(b.agent_type, b.model_name)));
     
     if (idleBots.length < 2) {
-        console.log(`[BotMatch] Coin flip YES, but not enough idle bots (${idleBots.length}).`);
+        logger.debug('BotMatch', `Coin flip YES, but not enough idle bots (${idleBots.length}).`);
         return;
     }
     
@@ -241,7 +242,7 @@ async function startRandomBotMatch() {
     const bot2Id = `bot_${bot2.agent_type}_${bot2.model_name}`;
     const bot2Name = makeBotDisplayName(bot2.agent_type, bot2.model_name);
     
-    console.log(`[BotMatch] Coin flip YES! Starting match between ${bot1Name} and ${bot2Name}`);
+    logger.info('BotMatch', `Starting match between ${bot1Name} and ${bot2Name}`);
     
     const whiteBot = { socketId: null, userId: bot1Id, username: bot1Name, role: 'bot' };
     const blackBot = { socketId: null, userId: bot2Id, username: bot2Name, role: 'bot' };
@@ -296,16 +297,16 @@ function releaseBotIfNeeded(game) {
     if (!game) return;
     if (game.whiteBotKey) {
         busyBots.delete(game.whiteBotKey);
-        console.log(`[Bot] Released white bot ${game.whiteBotKey}`);
+        logger.info('Bot', `Released white bot ${game.whiteBotKey}`);
     }
     if (game.blackBotKey) {
         busyBots.delete(game.blackBotKey);
-        console.log(`[Bot] Released black bot ${game.blackBotKey}`);
+        logger.info('Bot', `Released black bot ${game.blackBotKey}`);
     }
     // Backward compatibility for old single-bot games (if any remain in memory)
     if (game.botKey && !game.whiteBotKey && !game.blackBotKey) {
         busyBots.delete(game.botKey);
-        console.log(`[Bot] Released legacy bot ${game.botKey}`);
+        logger.info('Bot', `Released legacy bot ${game.botKey}`);
     }
 }
 
@@ -599,7 +600,7 @@ async function triggerBotMoveIfNeeded(gameId) {
                     reason: response.reason 
                 });
                 saveMatchResult(gameId, freshGame.gameStartTimestamp, freshGame.whiteName, freshGame.blackName, freshGame.white, freshGame.black, freshGame.boardName, winnerSide, freshGame.moves, io)
-                    .catch(err => console.error(`Bot game save error ${gameId}:`, err));
+                    .catch(err => logger.error('Bot', `Game save error for ${gameId}:`, err));
                 releaseBotIfNeeded(freshGame);
                 lobby.activeGames.delete(gameId);
                 broadcastLobbyUpdate(io);
@@ -651,7 +652,7 @@ async function triggerBotMoveIfNeeded(gameId) {
             setImmediate(() => triggerBotMoveIfNeeded(gameId));
         }
     } catch (err) {
-        console.error(`[Bot] Error computing move for game ${gameId}:`, err.message);
+        logger.error('Bot', `Error computing move for game ${gameId}:`, err.message);
         // Notify the human player that the bot had an error
         const g = lobby.activeGames.get(gameId);
         if (g) {
@@ -683,9 +684,9 @@ function loadBoards() {
         if (boardPool.length === 0) {
             throw new Error("No boards found in utils/boards");
         }
-        console.log(`Detected ${boardPool.length} boards for on-demand loading.`);
+        logger.info('Server', `Detected ${boardPool.length} board(s) for on-demand loading.`);
     } catch (e) {
-        console.error("Critical error: No boards detected in utils/boards.", e.message);
+        logger.error('Server', 'Critical: no boards detected in utils/boards.', e.message);
     }
 }
 
@@ -731,7 +732,7 @@ const PORT = process.env.PORT || 4000;
 restoreFromGcs()
     .then(() => initDb())
     .then(async () => {
-    console.log('DuckDB Neo initialized successfully');
+    logger.info('Server', 'DuckDB initialized successfully.');
 
     // Start bot polling NOW that the DB is ready
     fetchAvailableBots();
@@ -762,16 +763,16 @@ restoreFromGcs()
         setInterval(() => tournamentManager.cleanupExpired(), 60 * 1000);
         // Check for arena time-expiry every 5s (prompt game interruption)
         setInterval(() => tournamentManager.checkArenaExpiry(), 5 * 1000);
-        console.log('[Tournament] System initialized.');
+        logger.info('Tournament', 'System initialized.');
     } else {
-        console.log('[Tournament] Tournaments are DISABLED in config.');
+        logger.info('Tournament', 'Tournaments are DISABLED in config.');
     }
 
     // Start GCS persistence sync (no-op locally)
     startGcsSync(getUsersDb, getTournamentsDb, getGamesDb);
 
 }).catch(err => {
-    console.error('Failed to initialize DuckDB Neo:', err);
+    logger.error('Server', 'Failed to initialize DuckDB:', err);
 });
 
 // --- API ROUTES ---
@@ -799,7 +800,7 @@ app.post('/api/replay', (req, res) => {
             colorChosen: result.colorChosen,
         });
     } catch (e) {
-        console.error('Replay error:', e);
+        logger.error('Replay', 'Replay error:', e);
         res.status(500).json({ error: e.message });
     }
 });
@@ -830,7 +831,7 @@ app.post('/api/tutorial/moves', (req, res) => {
         const result = getLegalMovesNapi(req.body);
         res.json(result);
     } catch (e) {
-        console.error('[Tutorial] /api/tutorial/moves error:', e.message);
+        logger.error('Tutorial', '/api/tutorial/moves error:', e.message);
         res.status(400).json({ error: e.name + ': ' + e.message });
     }
 });
@@ -841,7 +842,7 @@ app.post('/api/tutorial/apply', (req, res) => {
         const result = applyMoveNapi(req.body);
         res.json(result);
     } catch (e) {
-        console.error('[Tutorial] /api/tutorial/apply error:', e.message);
+        logger.error('Tutorial', '/api/tutorial/apply error:', e.message);
         res.status(400).json({ error: e.name + ': ' + e.message });
     }
 });
@@ -960,7 +961,7 @@ app.get('/verify-email', async (req, res) => {
         
         res.send('<h1>Email verified successfully! You can now log in to the lobby.</h1>');
     } catch (err) {
-        console.error('Verification error:', err);
+        logger.error('Auth', 'Email verification error:', err);
         res.status(500).send('<h1>Verification failed</h1>');
     }
 });
@@ -1015,7 +1016,7 @@ app.post('/login', async (req, res) => {
             token,
         });
     } catch (err) {
-        console.error('Login error:', err);
+        logger.error('Auth', 'Login error:', err);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -1172,7 +1173,7 @@ setInterval(() => {
             const limit = role === 'guest' ? 5000 : 30000;
 
             if (diff >= limit) {
-                console.log(`Game Over: ${gameId} - ${playerType} abandoned (${role})`);
+                logger.info('Game', `Game Over: ${gameId} - ${playerType} abandoned (${role})`);
                 game.phase = 'GameOver';
                 const winnerSide = playerType === 'white' ? 'black' : 'white';
                 const winnerId = winnerSide === 'white' ? game.white : game.black;
@@ -1184,7 +1185,7 @@ setInterval(() => {
                 });
                 
                 saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, winnerSide, game.moves, io)
-                    .catch(err => console.error(`Failed to save abandoned game ${gameId}:`, err));
+                    .catch(err => logger.error('Game', `Failed to save abandoned game ${gameId}:`, err));
                 
                 releaseBotIfNeeded(game);
                 lobby.activeGames.delete(gameId);
@@ -1204,7 +1205,7 @@ setInterval(() => {
         const currentClock = game.clocks[activeSide] - Math.max(0, elapsedTime - 100);
 
         if (currentClock <= 0) {
-            console.log(`Game Over: ${gameId} - timeout for ${activeSide}`);
+            logger.info('Game', `Game Over: ${gameId} - timeout for ${activeSide}`);
             game.clocks[activeSide] = 0;
             game.phase = 'GameOver';
             const winnerSide = activeSide === 'white' ? 'black' : 'white';
@@ -1212,7 +1213,7 @@ setInterval(() => {
 
             io.to(gameId).emit('game_over', { winnerId, reason: 'timeout' });
             saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, winnerSide, game.moves, io)
-                .catch(err => console.error(`Failed to save timed-out game ${gameId}:`, err));
+                .catch(err => logger.error('Game', `Failed to save timed-out game ${gameId}:`, err));
             
             releaseBotIfNeeded(game);
             lobby.activeGames.delete(gameId);
@@ -1259,7 +1260,7 @@ async function createGame(whitePlayer, blackPlayer, timeControl, boardId) {
     if (boardId) {
         randomBoardFile = boardPool.find(f => f === `${boardId}.json` || f.replace('.json', '') === boardId);
         if (!randomBoardFile) {
-            console.warn(`[createGame] Requested boardId '${boardId}' not found in pool, falling back to random.`);
+            logger.warn('Game', `Requested boardId '${boardId}' not found in pool, falling back to random.`);
             randomBoardFile = boardPool[Math.floor(Math.random() * boardPool.length)];
         }
     } else {
@@ -1271,7 +1272,7 @@ async function createGame(whitePlayer, blackPlayer, timeControl, boardId) {
         const boardPath = path.join(BOARDS_PATH, randomBoardFile);
         boardData = JSON.parse(fs.readFileSync(boardPath, 'utf8'));
     } catch (err) {
-        console.error(`Failed to lazy-load board ${randomBoardFile}:`, err);
+        logger.error('Game', `Failed to lazy-load board ${randomBoardFile}:`, err);
         boardData = { allPolygons: {}, allEdges: {}, pieces: {} };
     }
 
@@ -1283,7 +1284,7 @@ async function createGame(whitePlayer, blackPlayer, timeControl, boardId) {
         });
         initPieces = JSON.parse(response.piecesJson);
     } catch (e) {
-        console.error('Error initializing game via NAPI:', e);
+        logger.error('Game', 'Error initializing game via NAPI:', e);
         initPieces = [];
     }
 
@@ -1353,7 +1354,7 @@ async function createTournamentGame(whitePlayer, blackPlayer, timeControl, board
                 result.gameData.boardName = boardId;
                 const response = initGameStateNapi({ boardJson: JSON.stringify(boardData), randomSetup: false });
                 result.gameData.pieces = JSON.parse(response.piecesJson);
-            } catch (e) { console.error('[Tournament] Fixed board load error:', e.message); }
+            } catch (e) { logger.error('Tournament', 'Fixed board load error:', e.message); }
         } else {
             result = await createGame(whitePlayer, blackPlayer, timeControl);
         }
@@ -1427,12 +1428,13 @@ async function createTournamentGame(whitePlayer, blackPlayer, timeControl, board
         setImmediate(() => triggerBotMoveIfNeeded(hash));
     }
 
-    console.log(`[Tournament] Game ${hash} wired: white=${whitePlayer.userId}${whiteIsBot?' (BOT)':''}, black=${blackPlayer.userId}${blackIsBot?' (BOT)':''}`);
+    logger.info('Game', `Tournament game ${hash} wired: white=${whitePlayer.userId}${whiteIsBot?' (BOT)':''}, black=${blackPlayer.userId}${blackIsBot?' (BOT)':''}`);
+    logger.debug('Socket', `Notifying game room ${hash}`);
     return result;
 }
 
 io.on('connection', (socket) => {
-    console.log('User connected:', socket.id);
+    logger.debug('Socket', `User connected: ${socket.id}`);
     lobby.connectedUsers.add(socket.id);
 
     // Auto-identify user from JWT token in handshake auth
@@ -1443,9 +1445,9 @@ io.on('connection', (socket) => {
             socket.userId = decoded.id;
             socket.username = decoded.username;
             socket.userRole = decoded.role || 'registered';
-            console.log(`Socket ${socket.id} authenticated as ${decoded.username} (${decoded.id})`);
+            logger.debug('Auth', `Socket ${socket.id} authenticated as ${decoded.username} (${decoded.id})`);
         } catch (e) {
-            console.log(`Socket ${socket.id} had invalid/expired JWT, treating as guest.`);
+            logger.debug('Auth', `Socket ${socket.id} had invalid/expired JWT, treating as guest.`);
         }
     }
 
@@ -1458,7 +1460,7 @@ io.on('connection', (socket) => {
         socket.userId = id;
         socket.userRole = userRole;
         socket.emit('assigned_id', { id, role: userRole });
-        console.log(`User ${id} (${userRole}) joined the lobby`);
+        logger.debug('Lobby', `User ${id} (${userRole}) joined the lobby`);
     });
 
     // --- ENTER LOBBY: join room + send full state ---
@@ -1503,7 +1505,7 @@ io.on('connection', (socket) => {
 
         socket.emit('request_created', { requestId });
         broadcastLobbyUpdate(io);
-        console.log(`Game request ${requestId} created by ${effectiveUserId} (${effectiveRole})${boardId ? ` board=${boardId}` : ''}`);
+        logger.debug('Game', `Game request ${requestId} by ${effectiveUserId} (${effectiveRole})${boardId ? ` board=${boardId}` : ''}`);
     });
 
     // --- CANCEL GAME REQUEST ---
@@ -1575,7 +1577,7 @@ io.on('connection', (socket) => {
         });
 
         broadcastLobbyUpdate(io);
-        console.log(`Game created: /games/${hash} — ${whitePlayer.userId} (W) vs ${blackPlayer.userId} (B)`);
+        logger.info('Game', `Created: ${hash} — ${whitePlayer.userId} (W) vs ${blackPlayer.userId} (B)`);
     });
 
     // --- CREATE BOT GAME ---
@@ -1633,7 +1635,7 @@ io.on('connection', (socket) => {
         });
 
         broadcastLobbyUpdate(io);
-        console.log(`Bot game created: /games/${hash} — ${effectiveUserId} (${playerSide}) vs ${botName}`);
+        logger.info('Game', `Bot game created: ${hash} — ${effectiveUserId} (${playerSide}) vs ${botName}`);
 
         // Trigger bot's first move if it's white
         if (gameData.whiteBotConfig) {
@@ -1690,7 +1692,7 @@ io.on('connection', (socket) => {
                     try {
                         await tournamentManager.joinTournament(tournament.id, botId, botName, null, true);
                     } catch (e) {
-                        console.log(`[Tournament] Bot ${botId} could not join: ${e.message}`);
+                        logger.warn('Tournament', `Bot ${botId} could not join: ${e.message}`);
                     }
                 }
             }
@@ -1873,9 +1875,9 @@ io.on('connection', (socket) => {
                 moves: game.moves || [],
                 moves: game.moves || [],
             });
-            console.log(`[Backend] Authoritative color ${color} set for ${game.turn} by ${side} in game ${gameId}. isNewTurn=${game.isNewTurn}`);
+            logger.debug('Move', `Color '${color}' set for ${game.turn} by ${side} in ${gameId}. isNewTurn=${game.isNewTurn}`);
         } catch (error) {
-            console.error('Error selecting color:', error);
+            logger.error('Move', 'Error selecting color:', error);
         }
     });
 
@@ -1883,12 +1885,12 @@ io.on('connection', (socket) => {
     socket.on('randomize_setup', ({ gameId, side }) => {
         const game = lobby.activeGames.get(gameId);
         if (!game || game.phase !== 'Setup') {
-            console.log(`randomize_setup rejected: game=${!!game}, phase=${game?.phase}`);
+            logger.debug('Setup', `randomize_setup rejected: game=${!!game}, phase=${game?.phase}`);
             return;
         }
 
         const oldTurn = game.turn;
-        console.log(`[randomize_setup] gameId=${gameId}, side=${side}, turn=${game.turn}, step=${game.setupStep}`);
+        logger.debug('Setup', `randomize_setup: gameId=${gameId}, side=${side}, turn=${game.turn}, step=${game.setupStep}`);
 
         try {
             const response = randomizeSetupNapi({
@@ -1947,12 +1949,12 @@ io.on('connection', (socket) => {
                 moves: game.moves || [],
                 moves: game.moves || [],
             });
-            console.log(`[randomize_setup] result: turn=${game.turn}, phase=${game.phase}, step=${game.setupStep}`);
+            logger.debug('Setup', `randomize_setup result: turn=${game.turn}, phase=${game.phase}, step=${game.setupStep}`);
 
             // Trigger bot if it's its turn
             setImmediate(() => triggerBotMoveIfNeeded(gameId));
         } catch (e) {
-            console.error('Error in randomize_setup:', e);
+            logger.error('Setup', 'Error in randomize_setup:', e);
         }
     });
 
@@ -2008,12 +2010,12 @@ io.on('connection', (socket) => {
                     moves: game.moves || [],
                 moves: game.moves || [],
                 });
-                console.log(`Setup turn ended in ${gameId}: Now ${game.turn}'s turn`);
+                logger.debug('Setup', `Turn ended in ${gameId}: now ${game.turn}'s turn`);
 
                 // Always try to trigger bot if applicable
                 setImmediate(() => triggerBotMoveIfNeeded(gameId));
             } catch (e) {
-                console.error('Error in end_turn_setup:', e);
+                logger.error('Setup', 'Error in end_turn_setup:', e);
             }
         }
     });
@@ -2062,10 +2064,10 @@ io.on('connection', (socket) => {
                     game.phase = 'GameOver';
                     const winnerId = passingSide === 'white' ? game.black : game.white;
                     const winnerSide = passingSide === 'white' ? 'black' : 'white';
-                    console.log(`Game Over: ${gameId} - ${passingSide} passed 3 times`);
+                    logger.info('Game', `Game Over: ${gameId} - ${passingSide} passed 3 times`);
                     io.to(gameId).emit('game_over', { winnerId, winnerSide, reason: 'pass_limit' });
                     saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, winnerSide, game.moves, io)
-                        .catch(err => console.error(`Failed to save pass-limit game ${gameId}:`, err));
+                        .catch(err => logger.error('Game', `Failed to save pass-limit game ${gameId}:`, err));
                     releaseBotIfNeeded(game);
                     lobby.activeGames.delete(gameId);
                     broadcastLobbyUpdate(io);
@@ -2090,12 +2092,12 @@ io.on('connection', (socket) => {
                     moves: game.moves || [],
                     passCount: game.passCount
                 });
-                console.log(`Playing turn passed in ${gameId}: Now ${game.turn}'s turn (${passingSide} passCount: ${game.passCount[passingSide]})`);
+                logger.debug('Move', `Turn passed in ${gameId}: now ${game.turn}'s turn (${passingSide} passCount: ${game.passCount[passingSide]})`);
 
                 // Always try to trigger bot if applicable
                 setImmediate(() => triggerBotMoveIfNeeded(gameId));
             } catch (e) {
-                console.error('Error in pass_turn_playing:', e);
+                logger.error('Move', 'Error in pass_turn_playing:', e);
             }
         }
     });
@@ -2159,10 +2161,10 @@ io.on('connection', (socket) => {
                 moves:               game.moves || [],
                 passCount:           game.passCount
             });
-            console.log(`[Game] end_heroe_bonus in ${gameId}: turn → ${game.turn}`);
+            logger.debug('Move', `end_heroe_bonus in ${gameId}: turn → ${game.turn}`);
             setImmediate(() => triggerBotMoveIfNeeded(gameId));
         } catch (e) {
-            console.error('Error in end_heroe_bonus:', e);
+            logger.error('Move', 'Error in end_heroe_bonus:', e);
         }
     });
 
@@ -2180,11 +2182,11 @@ io.on('connection', (socket) => {
         const winnerSide = resigningSide === 'white' ? 'black' : 'white';
         const winnerId = winnerSide === 'white' ? game.white : game.black;
 
-        console.log(`Game Over: ${gameId} - ${resigningSide} resigned`);
+        logger.info('Game', `Game Over: ${gameId} - ${resigningSide} resigned`);
         io.to(gameId).emit('game_over', { winnerId, winnerSide, reason: 'resign' });
 
         saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, winnerSide, game.moves, io)
-            .catch(err => console.error(`Failed to save resigned game ${gameId}:`, err));
+            .catch(err => logger.error('Game', `Failed to save resigned game ${gameId}:`, err));
 
         releaseBotIfNeeded(game);
         lobby.activeGames.delete(gameId);
@@ -2234,7 +2236,7 @@ io.on('connection', (socket) => {
                 lockedSequencePiece: game.lockedSequencePiece || null
             });
         } catch (e) {
-            console.error('Error getting legal moves:', e);
+            logger.error('Move', 'Error getting legal moves:', e);
         }
     });
 
@@ -2306,9 +2308,9 @@ io.on('connection', (socket) => {
                     game.setupPlacementsThisTurn = 0;
                     game.lockedSequencePiece = response.lockedSequencePiece;
                     game.heroeTakeCounter = response.heroeTakeCounter;
-                    console.log(`[Setup] Auto end turn after last piece: ${pieceId} → ${targetPoly} | now turn=${game.turn}, step=${game.setupStep}, phase=${game.phase}`);
+                    logger.debug('Setup', `Auto end-turn after last piece: ${pieceId} → ${targetPoly} | turn=${game.turn}, step=${game.setupStep}, phase=${game.phase}`);
                 } else {
-                    console.log(`Setup placement in ${gameId}: ${pieceId} to ${targetPoly} (movesThisTurn=${game.movesThisTurn})`);
+                    logger.debug('Setup', `Piece placement in ${gameId}: ${pieceId} → ${targetPoly} (movesThisTurn=${game.movesThisTurn})`);
                 }
 
                 io.to(gameId).emit('game_update', {
@@ -2405,7 +2407,7 @@ io.on('connection', (socket) => {
                         reason: response.reason 
                     });
                     saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, winnerSide, game.moves, io)
-                        .catch(err => console.error(`Failed to save match result for game "${gameId}":`, err));
+                        .catch(err => logger.error('Game', `Failed to save match result for game "${gameId}":`, err));
                     releaseBotIfNeeded(game);
                     lobby.activeGames.delete(gameId);
                     broadcastLobbyUpdate(io);
@@ -2414,10 +2416,10 @@ io.on('connection', (socket) => {
                     setImmediate(() => triggerBotMoveIfNeeded(gameId));
                 }
 
-                console.log(`Move applied in ${gameId}: ${pieceId} to ${targetPoly}`);
+                logger.debug('Move', `Move applied in ${gameId}: ${pieceId} → ${targetPoly}`);
             }
         } catch (e) {
-            console.error('Error applying move:', e);
+            logger.error('Move', 'Error applying move:', e);
         }
     });
 
@@ -2468,7 +2470,7 @@ io.on('connection', (socket) => {
             // Still broadcast updated user count
             broadcastLobbyUpdate(io);
         }
-        console.log('User disconnected:', socket.id);
+        logger.debug('Socket', `User disconnected: ${socket.id}`);
     });
 });
 
@@ -2483,7 +2485,7 @@ const distPath = possibleDistPaths.find(p => fs.existsSync(p));
 
 if (distPath) {
     app.use(express.static(distPath));
-    console.log('Serving production assets from:', distPath);
+    logger.info('Server', `Serving production assets from: ${distPath}`);
 
     // Single Page Application (SPA) catch-all
     app.get('*', (req, res, next) => {
@@ -2497,9 +2499,10 @@ if (distPath) {
         res.sendFile(path.join(distPath, 'index.html'));
     });
 } else {
-    console.warn('WARNING: Production frontend assets (dist) not found in expected locations.');
+    logger.warn('Server', 'Production frontend assets (dist) not found in expected locations.');
 }
 
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`Backend server running on port ${PORT}`);
+    logger.info('Server', `Backend server running on port ${PORT}`);
+    logger.info('Server', `Log level: ${process.env.LOG_LEVEL || 'info'}`);
 });

@@ -13,6 +13,7 @@
 
 const fs   = require('fs');
 const path = require('path');
+const logger = require('./utils/logger');
 
 const GCS_BUCKET        = process.env.GCS_BUCKET;   // e.g. 'data-bucket-mylittleproject00'
 const DB_PATH           = process.env.DB_PATH;       // e.g. '/tmp/db'
@@ -48,11 +49,11 @@ function timestamp() {
 async function downloadFromGcs(gcsPath, localPath) {
     try {
         await getBucket().file(gcsPath).download({ destination: localPath });
-        console.log(`[GCS] ✓ Restored  gs://${GCS_BUCKET}/${gcsPath}  →  ${localPath}`);
+        logger.info('GCS', `✓ Restored  gs://${GCS_BUCKET}/${gcsPath}  →  ${localPath}`);
         return true;
     } catch (e) {
         if (e.code === 404 || (e.message && e.message.includes('No such object'))) {
-            console.log(`[GCS] No ${gcsPath} in bucket — starting fresh.`);
+            logger.info('GCS', `No ${gcsPath} in bucket — starting fresh.`);
             return false;
         }
         throw e;
@@ -64,7 +65,7 @@ async function downloadFromGcs(gcsPath, localPath) {
  */
 async function uploadToGcs(localPath, gcsPath) {
     await getBucket().upload(localPath, { destination: gcsPath });
-    console.log(`[GCS] ✓ Synced    ${localPath}  →  gs://${GCS_BUCKET}/${gcsPath}`);
+    logger.info('GCS', `✓ Synced    ${localPath}  →  gs://${GCS_BUCKET}/${gcsPath}`);
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -76,16 +77,16 @@ async function uploadToGcs(localPath, gcsPath) {
  */
 async function restoreFromGcs() {
     if (!isGcpMode) {
-        console.log('[GCS] Local mode — skipping GCS restore.');
+        logger.debug('GCS', 'Local mode — skipping GCS restore.');
         return;
     }
-    console.log(`[GCS] Restoring databases from gs://${GCS_BUCKET} → ${DB_PATH}`);
+    logger.info('GCS', `Restoring databases from gs://${GCS_BUCKET} → ${DB_PATH}`);
     fs.mkdirSync(DB_PATH, { recursive: true });
 
     await downloadFromGcs('users.duckdb',       path.join(DB_PATH, 'users.duckdb'));
     await downloadFromGcs('tournaments.duckdb',  path.join(DB_PATH, 'tournaments.duckdb'));
     // games.duckdb always starts fresh — no restore needed
-    console.log('[GCS] Restore complete. games.duckdb starts fresh.');
+    logger.info('GCS', 'Restore complete. games.duckdb starts fresh.');
 }
 
 /**
@@ -96,7 +97,7 @@ async function syncDbFile(lazyDb, fileName) {
         // Flush WAL into the main file before copying
         await lazyDb.run('CHECKPOINT');
     } catch (e) {
-        console.warn(`[GCS] CHECKPOINT failed for ${fileName}:`, e.message);
+        logger.warn('GCS', `CHECKPOINT failed for ${fileName}:`, e.message);
     }
     await uploadToGcs(path.join(DB_PATH, fileName), fileName);
 }
@@ -117,7 +118,7 @@ async function exportGamesParquet(getGamesDb) {
         const count = Number(rows[0][0]);
 
         if (count === 0) {
-            console.log('[GCS] No games to export this cycle.');
+            logger.debug('GCS', 'No games to export this cycle.');
             return;
         }
 
@@ -132,9 +133,9 @@ async function exportGamesParquet(getGamesDb) {
         // Only delete after confirmed upload — keeps games.duckdb lean, no duplicates
         await getGamesDb().run('DELETE FROM games');
 
-        console.log(`[GCS] Exported ${count} game(s) → ${gcsParquet} (cleared from local DB)`);
+        logger.info('GCS', `Exported ${count} game(s) → ${gcsParquet} (cleared from local DB)`);
     } catch (e) {
-        console.error('[GCS] Games Parquet export failed:', e.message);
+        logger.error('GCS', 'Games Parquet export failed:', e.message);
     } finally {
         // Always clean up the local temp file
         fs.unlink(localParquet, () => {});
@@ -145,11 +146,11 @@ async function exportGamesParquet(getGamesDb) {
  * Run one full sync cycle: persist user/tournament DBs and export games.
  */
 async function runSync(getUsersDb, getTournamentsDb, getGamesDb) {
-    console.log('[GCS] Running sync cycle…');
+    logger.info('GCS', 'Running sync cycle…');
     await syncDbFile(getUsersDb(),       'users.duckdb');
     await syncDbFile(getTournamentsDb(), 'tournaments.duckdb');
     await exportGamesParquet(getGamesDb);
-    console.log('[GCS] Sync cycle complete.');
+    logger.info('GCS', 'Sync cycle complete.');
 }
 
 /**
@@ -158,13 +159,13 @@ async function runSync(getUsersDb, getTournamentsDb, getGamesDb) {
  */
 function startGcsSync(getUsersDb, getTournamentsDb, getGamesDb) {
     if (!isGcpMode) {
-        console.log('[GCS] Local mode — GCS sync disabled.');
+        logger.debug('GCS', 'Local mode — GCS sync disabled.');
         return;
     }
-    console.log(`[GCS] Sync scheduled every ${SYNC_INTERVAL_MS / 60000} minutes.`);
+    logger.info('GCS', `Sync scheduled every ${SYNC_INTERVAL_MS / 60000} minutes.`);
     const timer = setInterval(
         () => runSync(getUsersDb, getTournamentsDb, getGamesDb)
-                .catch(e => console.error('[GCS] Sync error:', e.message)),
+                .catch(e => logger.error('GCS', 'Sync error:', e.message)),
         SYNC_INTERVAL_MS
     );
     // Don't prevent clean process exit

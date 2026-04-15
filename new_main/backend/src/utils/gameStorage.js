@@ -1,4 +1,5 @@
 const { getGamesDb, getUsersDb } = require('../db');
+const logger = require('./logger');
 
 // ─── Serial Rating Queue ─────────────────────────────────────────────────────
 //
@@ -134,7 +135,7 @@ const saveMatchResult = async (
         `, [gameId, timestamp, whiteName, blackName,
             whitePlayerId, blackPlayerId, boardId, winner, JSON.stringify(moves)]);
 
-        console.log(`Match ${gameId} stored (winner=${winner}).`);
+        logger.info('Storage', `Match ${gameId} stored (winner=${winner}).`);
 
         // ── 2. Update Glicko-2 ratings (serialised) ──
         const isRegistered = (id) => id && !id.startsWith('guest_');
@@ -174,8 +175,9 @@ const saveMatchResult = async (
                 [newBlack.r, newBlack.rd, newBlack.sigma, blackPlayerId]
             );
 
-            console.log(
-                `Glicko-2: white ${white.r.toFixed(0)}→${newWhite.r.toFixed(0)} ` +
+            logger.info('Rating',
+                `Glicko-2 update for ${gameId}: ` +
+                `white ${white.r.toFixed(0)}→${newWhite.r.toFixed(0)} ` +
                 `(RD ${white.rd.toFixed(0)}→${newWhite.rd.toFixed(0)}), ` +
                 `black ${black.r.toFixed(0)}→${newBlack.r.toFixed(0)} ` +
                 `(RD ${black.rd.toFixed(0)}→${newBlack.rd.toFixed(0)})`
@@ -192,10 +194,10 @@ const saveMatchResult = async (
                     blackRatingOld: Math.round(black.r),
                 });
             }
-        }).catch(err => console.error('Rating update failed:', err));
+        }).catch(err => logger.error('Rating', 'Rating update failed:', err));
 
     } catch (err) {
-        console.error("Error saving match result:", err);
+        logger.error('Storage', 'Error saving match result:', err);
         throw err;
     }
 };

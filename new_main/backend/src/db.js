@@ -1,6 +1,7 @@
 const { DuckDBInstance } = require('@duckdb/node-api');
 const path = require('path');
 const fs = require('fs');
+const logger = require('./utils/logger');
 
 // --- Database Path Resolution ---
 const GCS_MOUNT   = '/mnt/db';
@@ -9,14 +10,14 @@ const ENV_DB_PATH   = process.env.DB_PATH;
 
 function resolveDbDir() {
     if (ENV_DB_PATH) {
-        console.log(`[DB] Using DB_PATH from environment: ${ENV_DB_PATH}`);
+        logger.info('DB', `Using DB_PATH from environment: ${ENV_DB_PATH}`);
         return ENV_DB_PATH;
     }
     if (fs.existsSync(GCS_MOUNT)) {
-        console.log(`[DB] GCS/Persistent Disk mount detected at ${GCS_MOUNT}, using it for database files.`);
+        logger.info('DB', `GCS/Persistent Disk mount detected at ${GCS_MOUNT}, using it for database files.`);
         return GCS_MOUNT;
     }
-    console.log(`[DB] Using local database directory: ${LOCAL_DB_DIR}`);
+    logger.info('DB', `Using local database directory: ${LOCAL_DB_DIR}`);
     return LOCAL_DB_DIR;
 }
 
@@ -30,9 +31,9 @@ const usersDbPath       = path.join(dbDir, 'users.duckdb');
 const gamesDbPath       = path.join(dbDir, 'games.duckdb');
 const tournamentsDbPath = path.join(dbDir, 'tournaments.duckdb');
 
-console.log(`[DB] users.duckdb       → ${usersDbPath}`);
-console.log(`[DB] games.duckdb       → ${gamesDbPath}`);
-console.log(`[DB] tournaments.duckdb → ${tournamentsDbPath}`);
+logger.info('DB', `users.duckdb       → ${usersDbPath}`);
+logger.info('DB', `games.duckdb       → ${gamesDbPath}`);
+logger.info('DB', `tournaments.duckdb → ${tournamentsDbPath}`);
 
 // ─── Lazy Connection Wrapper ────────────────────────────────────────────────
 //
@@ -61,9 +62,9 @@ class LazyDbConnection {
             if (!this._conn) return;  // connection is idle-closed — nothing to flush
             try {
                 await this._conn.run('CHECKPOINT');
-                console.log(`[DB:${this._name}] CHECKPOINT done.`);
+                logger.debug('DB', `[${this._name}] Periodic CHECKPOINT done.`);
             } catch (e) {
-                console.warn(`[DB:${this._name}] CHECKPOINT failed:`, e.message);
+                logger.warn('DB', `[${this._name}] Periodic CHECKPOINT failed:`, e.message);
             }
         }, checkpointMs);
 
@@ -75,11 +76,11 @@ class LazyDbConnection {
     async _ensure() {
         this._resetTimer();
         if (!this._instance) {
-            console.log(`[DB:${this._name}] Creating instance (acquiring lock).`);
+            logger.debug('DB', `[${this._name}] Creating instance (acquiring lock).`);
             this._instance = await DuckDBInstance.create(this._dbPath);
         }
         if (!this._conn) {
-            console.log(`[DB:${this._name}] Opening connection.`);
+            logger.debug('DB', `[${this._name}] Opening connection.`);
             this._conn = await this._instance.connect();
         }
         return this._conn;
@@ -88,15 +89,15 @@ class LazyDbConnection {
     _resetTimer() {
         if (this._timer) clearTimeout(this._timer);
         this._timer = setTimeout(async () => {
-            console.log(`[DB:${this._name}] Idle timeout — flushing WAL and releasing lock.`);
+            logger.debug('DB', `[${this._name}] Idle timeout — flushing WAL and releasing lock.`);
             try {
                 if (this._conn) {
                     await this._conn.run('CHECKPOINT');
-                    console.log(`[DB:${this._name}] Final CHECKPOINT done.`);
+                    logger.debug('DB', `[${this._name}] Final CHECKPOINT done.`);
                     if (this._conn.closeSync) this._conn.closeSync();
                 }
             } catch (e) {
-                console.warn(`[DB:${this._name}] Final CHECKPOINT failed:`, e.message);
+                logger.warn('DB', `[${this._name}] Final CHECKPOINT failed:`, e.message);
                 try { if (this._conn?.closeSync) this._conn.closeSync(); } catch (_) {}
             }
             try { if (this._instance?.closeSync) this._instance.closeSync(); } catch (_) {}
@@ -275,9 +276,9 @@ const initDb = async () => {
         try { if (tournCon.closeSync) tournCon.closeSync(); } catch (_) {}
         try { if (initialTournamentsInstance.closeSync) initialTournamentsInstance.closeSync(); } catch (_) {}
 
-        console.log("DuckDB instances (users, games & tournaments) initialized. Locks released for lazy loading.");
+        logger.info('DB', 'DuckDB instances (users, games & tournaments) initialized. Locks released for lazy loading.');
     } catch (err) {
-        console.error("DuckDB initialization error:", err);
+        logger.error('DB', 'DuckDB initialization error:', err);
         throw err;
     }
 };
