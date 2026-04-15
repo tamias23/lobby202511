@@ -13,6 +13,10 @@ utils.txt
 whois.txt
 *.log
 *.xlsx
+*.onnx
+*.onnx.data
+*.pth
+rust/nets/
 # Careful: ignores all text files. Use !filename.txt to keep specific ones.
 *.txt
 
