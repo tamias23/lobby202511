@@ -614,6 +614,8 @@ const GameBoard = ({
   };
   const navigate = useNavigate();
   const [gameOverInfo, setGameOverInfo] = useState({ winnerId: null, reason: null });
+  // Holds data when the tournament time expired and interrupted this game.
+  const [gameAbortedInfo, setGameAbortedInfo] = useState(null); // null | { tournamentId }
   const [whiteRating, setWhiteRating] = useState(initialWhiteRating || null);
   const [blackRating, setBlackRating] = useState(initialBlackRating || null);
   const [ratingDelta, setRatingDelta] = useState(null); // { whiteOld, whiteNew, blackOld, blackNew }
@@ -815,9 +817,17 @@ const GameBoard = ({
       setGameOverInfo({ winnerId, reason });
     };
 
+    // Sent by the backend when the arena tournament time is up while this game
+    // is still in progress. No result, no rating change.
+    const handleGameAborted = ({ tournamentId: tid }) => {
+      setPhase("GameOver"); // stop clocks and controls
+      setGameAbortedInfo({ tournamentId: tid || tournamentId });
+    };
+
     socket.on("game_update", handleGameUpdate);
     socket.on("legal_moves", handleLegalMoves);
     socket.on("game_over", handleGameOver);
+    socket.on("game_aborted", handleGameAborted);
 
     // Initial eligibility check on mount
     if (wasmReady) {
@@ -830,6 +840,7 @@ const GameBoard = ({
       socket.off("game_update", handleGameUpdate);
       socket.off("legal_moves", handleLegalMoves);
       socket.off("game_over", handleGameOver);
+      socket.off("game_aborted", handleGameAborted);
     };
   }, [gameId]);
 
@@ -1672,8 +1683,62 @@ const GameBoard = ({
         </div>
       </div>
 
+      {/* ── Tournament Game Aborted Overlay ── */}
+      {gameAbortedInfo && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,0.78)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 10000, // above the normal game-over overlay
+        }}>
+          <div style={{
+            background: "var(--card-bg)",
+            border: "1px solid var(--border)",
+            borderRadius: "20px",
+            padding: "40px 48px",
+            textAlign: "center",
+            boxShadow: "0 24px 80px rgba(0,0,0,0.7)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "20px",
+            minWidth: "300px",
+            maxWidth: "420px",
+          }}>
+            <div style={{ fontSize: "48px" }}>⏱️</div>
+            <h2 style={{ margin: 0, color: "var(--text-primary)", fontSize: "22px" }}>
+              Tournament Ended
+            </h2>
+            <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "15px", lineHeight: 1.6 }}>
+              The arena time has expired and this game has been <strong>interrupted</strong>.
+              No result has been recorded and ratings are unchanged.
+            </p>
+            {(gameAbortedInfo.tournamentId) && (
+              <button
+                style={{
+                  padding: "12px 24px",
+                  borderRadius: "10px",
+                  background: "var(--accent)",
+                  color: "#fff",
+                  border: "none",
+                  fontSize: "15px",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                }}
+                onClick={() => navigate(`/tournament/${gameAbortedInfo.tournamentId}`)}
+              >
+                Return to Tournament
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Game Over Overlay ── */}
-      {showGameOverOverlay && (
+      {showGameOverOverlay && !gameAbortedInfo && (
         <div style={{
           position: "fixed",
           inset: 0,

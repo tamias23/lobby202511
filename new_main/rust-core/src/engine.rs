@@ -85,20 +85,24 @@ impl GameState {
                     }
                 }
                 
-                // If a piece is sequence-locked, it is the ONLY one that can move:
+                // Sequence-lock enforcement:
+                // - Hard lock (Soldier/Minotaur chain): the locked piece is the ONLY one that can move.
+                // - Soft lock (Héros bonus, heroe_take_counter > 0): the locked hero MAY move again,
+                //   but other authorised pieces are also eligible — playing one forfeits the bonus.
                 if let Some(ref locked_id) = self.locked_sequence_piece {
-                    // Self-healing: Only enforce lock if it belongs to the current side.
-                    // This prevents stale/corrupt locks (e.g. White piece locked on Black's turn).
                     if let Some(locked_piece) = self.board.pieces.get(locked_id) {
                         if locked_piece.side == self.turn {
                             if locked_id == &p.id {
+                                // The locked piece is always eligible.
                                 can_start = true;
-                            } else {
-                                // If someone else of MY side is locked, this piece cannot start.
+                            } else if self.heroe_take_counter == 0 {
+                                // Hard lock: no other piece may move.
                                 can_start = false;
                             }
+                            // heroe_take_counter > 0 → soft lock: leave can_start as already
+                            // computed by the colour-eligibility check (other pieces may move).
                         }
-                        // If locked_piece is NOT my side, ignore the lock entirely for eligibility.
+                        // If locked_piece is NOT my side, ignore the lock entirely.
                     }
                 }
                 
@@ -311,9 +315,11 @@ pub fn get_legal_moves(state: &GameState, piece_id: &str) -> Vec<String> {
     }
 
     // Sequence locking enforcement
+    // Hard lock (Soldier/Minotaur chain): only the locked piece may move.
+    // Soft lock (Héros bonus, heroe_take_counter > 0): other pieces may also move.
     if let Some(locked_id) = &state.locked_sequence_piece {
-        if locked_id != piece_id {
-            return vec![]; // Frozen mathematically preventing interactions explicitly
+        if locked_id != piece_id && state.heroe_take_counter == 0 {
+            return vec![];
         }
     }
 
@@ -1297,6 +1303,21 @@ pub fn pass_turn(state: &mut GameState) {
     state.color_chosen.clear();
     state.is_new_turn = true;
     state.moves_this_turn = 0; // CRITICAL: Reset move counter!
+    state.piece_move_counts.clear();
+    state.locked_sequence_piece = None;
+    state.heroe_take_counter = 0;
+    state.visited_polygons.clear();
+}
+
+/// Called when the active player voluntarily declines the Héros bonus move.
+/// Ends the turn cleanly WITHOUT incrementing the pass-penalty counter.
+/// Pre-condition: heroe_take_counter >= 1.
+pub fn end_heroe_bonus(state: &mut GameState) {
+    state.turn_counter += 1;
+    state.turn = state.get_enemy_side();
+    state.color_chosen.clear();
+    state.is_new_turn = true;
+    state.moves_this_turn = 0;
     state.piece_move_counts.clear();
     state.locked_sequence_piece = None;
     state.heroe_take_counter = 0;

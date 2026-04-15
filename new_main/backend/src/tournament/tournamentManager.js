@@ -47,10 +47,12 @@ const activeTournaments = new Map();
 // Callbacks set by index.js
 let _createGameFn = null;   // (whitePlayer, blackPlayer, timeControl, boardId?) → { hash, gameData }
 let _ioRef = null;          // socket.io instance
+let _abortGameFn = null;    // (gameHash) → void — cleans up lobby.activeGames + releases bots
 
-function setDependencies(createGameFn, io) {
+function setDependencies(createGameFn, io, abortGameFn) {
     _createGameFn = createGameFn;
     _ioRef = io;
+    _abortGameFn = abortGameFn || null;
 }
 
 // ─── Load from DB on startup ────────────────────────────────────────────────
@@ -671,6 +673,88 @@ async function cancelTournament(tournamentId) {
 }
 
 
+// ─── Arena expiry: abort all still-running games, then complete ──────────────
+
+/**
+ * Called when an arena tournament's time is up.
+ * Any game that still has no result is aborted immediately:
+ *   - result is set to 'aborted' in DB (not null, so it won't be re-paired)
+ *   - NO saveMatchResult call → no game history record, no Glicko-2 change
+ *   - A `game_aborted` event is sent to each game's socket room
+ *   - `_abortGameFn` (injected by index.js) frees bots and removes from lobby
+ * After aborting, completeTournament is called.
+ */
+async function abortArenaExpiredGames(tournamentId) {
+    const t = activeTournaments.get(tournamentId);
+    if (!t || t.status !== 'active' || t.format !== 'arena') return;
+    // Guard: already being processed
+    if (t._arenaAborted) return;
+    t._arenaAborted = true;
+
+    const now = Date.now();
+    const db = getTournamentsDb();
+    const pendingGames = t.games.filter(g => !g.result);
+
+    if (pendingGames.length > 0) {
+        console.log(`[Tournament] Arena ${tournamentId} expired — aborting ${pendingGames.length} in-progress game(s).`);
+    }
+
+    for (const game of pendingGames) {
+        game.result    = 'aborted';
+        game.completed_at = now;
+
+        // Persist 'aborted' result so pairIdleArenaPlayers won't re-pair these players
+        await db.run(
+            `UPDATE tournament_games SET result = 'aborted', completed_at = ? WHERE id = ?`,
+            [now, game.id]
+        );
+
+        // Notify the game room (GameBoard.jsx listens for this)
+        if (_ioRef) {
+            _ioRef.to(game.game_hash).emit('game_aborted', {
+                tournamentId,
+                gameHash: game.game_hash,
+                reason: 'tournament_expired',
+            });
+        }
+
+        // Also notify the tournament room (TournamentRoom.jsx listens for this
+        // to bring back users who are on the game page)
+        if (_ioRef) {
+            _ioRef.to(`tournament:${tournamentId}`).emit('tournament_game_aborted', {
+                tournamentId,
+                gameHash: game.game_hash,
+            });
+        }
+
+        // Release bots / remove from lobby.activeGames (no-op for human games)
+        if (_abortGameFn) {
+            try { _abortGameFn(game.game_hash); } catch (_) {}
+        }
+    }
+
+    // Now complete the tournament (computes standings, broadcasts final update)
+    await completeTournament(tournamentId);
+}
+
+/**
+ * Scans all active arena tournaments and aborts any that have passed arenaEndAt.
+ * Called from index.js every 5 seconds.
+ */
+async function checkArenaExpiry() {
+    const now = Date.now();
+    for (const [tid, t] of activeTournaments) {
+        if (t.format !== 'arena' || t.status !== 'active') continue;
+        if (t.arenaEndAt && now >= t.arenaEndAt) {
+            // Fire-and-forget; errors are logged inside
+            abortArenaExpiredGames(tid).catch(e =>
+                console.error(`[Tournament] checkArenaExpiry error for ${tid}:`, e.message)
+            );
+        }
+    }
+}
+
+
 // ─── Cleanup Expired ────────────────────────────────────────────────────────
 async function cleanupExpired() {
     const now = Date.now();
@@ -828,6 +912,7 @@ module.exports = {
     leaveTournament,
     onGameComplete,
     cleanupExpired,
+    checkArenaExpiry,
     getOpenTournaments,
     getActiveTournamentsList,
     getTournamentById,

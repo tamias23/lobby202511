@@ -13,7 +13,7 @@ const { generateGuestId } = require('./utils/auth');
 const fs = require('fs');
 const path = require('path');
 const { sendVerificationEmail } = require('./utils/email');
-let getLegalMovesNapi, applyMoveNapi, initGameStateNapi, randomizeSetupNapi, endTurnSetupNapi, passTurnPlayingNapi, selectColorNapi, replayToStepNapi;
+let getLegalMovesNapi, applyMoveNapi, initGameStateNapi, randomizeSetupNapi, endTurnSetupNapi, passTurnPlayingNapi, endHeroeBonusNapi, selectColorNapi, replayToStepNapi;
 
 try {
     const napi = require('../rust-napi');
@@ -23,6 +23,7 @@ try {
     randomizeSetupNapi = napi.randomizeSetupNapi;
     endTurnSetupNapi = napi.endTurnSetupNapi;
     passTurnPlayingNapi = napi.passTurnPlayingNapi;
+    endHeroeBonusNapi = napi.endHeroeBonusNapi;
     selectColorNapi = napi.selectColorNapi;
     replayToStepNapi = napi.replayToStepNapi;
 } catch (err) {
@@ -742,10 +743,25 @@ restoreFromGcs()
     // Initialize tournament system
     if (TOURNAMENTS_ENABLED) {
         tournamentManager.initConfig(process.env);
-        tournamentManager.setDependencies(createTournamentGame, io);
+
+        // Abort callback: called by tournamentManager when an arena game is
+        // interrupted due to time expiry.  Mirrors the normal game-over cleanup
+        // but without calling saveMatchResult (no record, no rating change).
+        const abortGameFn = (gameHash) => {
+            const game = lobby.activeGames.get(gameHash);
+            if (!game) return;
+            game.phase = 'GameOver'; // prevent further bot moves or clock ticks
+            releaseBotIfNeeded(game);
+            lobby.activeGames.delete(gameHash);
+            broadcastLobbyUpdate(io);
+        };
+
+        tournamentManager.setDependencies(createTournamentGame, io, abortGameFn);
         await tournamentManager.loadFromDb();
         // Cleanup expired tournaments every 60s
         setInterval(() => tournamentManager.cleanupExpired(), 60 * 1000);
+        // Check for arena time-expiry every 5s (prompt game interruption)
+        setInterval(() => tournamentManager.checkArenaExpiry(), 5 * 1000);
         console.log('[Tournament] System initialized.');
     } else {
         console.log('[Tournament] Tournaments are DISABLED in config.');
@@ -2081,6 +2097,72 @@ io.on('connection', (socket) => {
             } catch (e) {
                 console.error('Error in pass_turn_playing:', e);
             }
+        }
+    });
+
+    // ── Hero bonus voluntary end ──────────────────────────────────────────────
+    // Called when the player clicks "End Turn" while heroe_take_counter > 0.
+    // Ends the turn cleanly without incrementing the 3-pass-loss counter.
+    socket.on('end_heroe_bonus', ({ gameId }) => {
+        const game = lobby.activeGames.get(gameId);
+        if (!game || game.phase === 'GameOver') return;
+        // Guard: only valid during an active hero bonus window.
+        if (!game.heroeTakeCounter || game.heroeTakeCounter < 1) return;
+        try {
+            const response = endHeroeBonusNapi({
+                boardJson:           JSON.stringify(game.board),
+                piecesJson:          JSON.stringify(game.pieces),
+                turn:                game.turn,
+                phase:               game.phase,
+                setupStep:           game.setupStep,
+                colorChosen:         game.colorChosen || {},
+                colorsEverChosen:    game.colorsEverChosen || [],
+                turnCounter:         game.turnCounter || 0,
+                isNewTurn:           game.isNewTurn !== undefined ? game.isNewTurn : true,
+                movesThisTurn:       game.movesThisTurn || 0,
+                lockedSequencePiece: game.lockedSequencePiece || undefined,
+                heroeTakeCounter:    game.heroeTakeCounter || 0,
+                pieceId:    '',
+                targetPoly: ''
+            });
+
+            updateClocks(game, true);
+            // Intentionally NO passCount increment — this is not a pass penalty.
+
+            game.turn                = response.turn;
+            game.phase               = response.phase;
+            game.setupStep           = response.setupStep;
+            game.turnCounter         = response.turnCounter;
+            game.isNewTurn           = response.isNewTurn;
+            game.movesThisTurn       = response.movesThisTurn;
+            game.lockedSequencePiece = response.lockedSequencePiece;
+            game.heroeTakeCounter    = response.heroeTakeCounter;
+            game.colorChosen         = response.colorChosen;
+            game.colorsEverChosen    = response.colorsEverChosen;
+            game.mageUnlocked        = response.mageUnlocked;
+
+            io.to(gameId).emit('game_update', {
+                pieces:              game.pieces,
+                turn:                game.turn,
+                colorChosen:         game.colorChosen,
+                colorsEverChosen:    game.colorsEverChosen,
+                mageUnlocked:        game.mageUnlocked,
+                phase:               game.phase,
+                setupStep:           game.setupStep,
+                turnCounter:         game.turnCounter,
+                isNewTurn:           game.isNewTurn,
+                movesThisTurn:       game.movesThisTurn,
+                lockedSequencePiece: game.lockedSequencePiece || null,
+                heroeTakeCounter:    game.heroeTakeCounter,
+                clocks:              game.clocks,
+                lastTurnTimestamp:   game.lastTurnTimestamp,
+                moves:               game.moves || [],
+                passCount:           game.passCount
+            });
+            console.log(`[Game] end_heroe_bonus in ${gameId}: turn → ${game.turn}`);
+            setImmediate(() => triggerBotMoveIfNeeded(gameId));
+        } catch (e) {
+            console.error('Error in end_heroe_bonus:', e);
         }
     });
 

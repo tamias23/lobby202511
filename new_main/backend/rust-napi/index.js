@@ -310,7 +310,7 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { initGameStateNapi, randomizeSetupNapi, getLegalMovesNapi, endTurnSetupNapi, applyMoveNapi, passTurnPlayingNapi, selectColorNapi, replayToStepNapi } = nativeBinding
+const { initGameStateNapi, randomizeSetupNapi, getLegalMovesNapi, endTurnSetupNapi, applyMoveNapi, passTurnPlayingNapi, endHeroeBonusNapi, selectColorNapi, replayToStepNapi } = nativeBinding
 
 module.exports.initGameStateNapi = initGameStateNapi
 module.exports.randomizeSetupNapi = randomizeSetupNapi
@@ -318,5 +318,6 @@ module.exports.getLegalMovesNapi = getLegalMovesNapi
 module.exports.endTurnSetupNapi = endTurnSetupNapi
 module.exports.applyMoveNapi = applyMoveNapi
 module.exports.passTurnPlayingNapi = passTurnPlayingNapi
+module.exports.endHeroeBonusNapi = endHeroeBonusNapi
 module.exports.selectColorNapi = selectColorNapi
 module.exports.replayToStepNapi = replayToStepNapi

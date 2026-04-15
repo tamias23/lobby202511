@@ -1,6 +1,6 @@
 use napi_derive::napi;
 use rust_core::{GameState, GamePhase, Side, Piece, BoardMap, PieceType};
-use rust_core::engine::{get_legal_moves, apply_move, apply_move_turnover, setup_pieces, setup_random_board, pass_turn, check_setup_step_complete, apply_setup_placement_turnover};
+use rust_core::engine::{get_legal_moves, apply_move, apply_move_turnover, setup_pieces, setup_random_board, pass_turn, end_heroe_bonus, check_setup_step_complete, apply_setup_placement_turnover};
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
@@ -763,6 +763,95 @@ pub fn pass_turn_playing_napi(req: ApplyMoveRequest) -> napi::Result<ApplyMoveRe
     let ever_chosen_vec: Vec<String> = state.colors_ever_chosen.iter().cloned().collect();
 
     Ok(ApplyMoveResponse { 
+        pieces_json: updated_pieces_json,
+        captured: Vec::new(),
+        color_chosen: colors,
+        colors_ever_chosen: ever_chosen_vec,
+        mage_unlocked: mage_unlocked_flag,
+        phase: match state.phase {
+            GamePhase::Setup => "Setup".to_string(),
+            GamePhase::Playing => "Playing".to_string(),
+            GamePhase::GameOver => "GameOver".to_string(),
+        },
+        setup_step: state.setup_step,
+        turn: format!("{:?}", state.turn).to_lowercase(),
+        turn_counter: state.turn_counter,
+        is_new_turn: state.is_new_turn,
+        moves_this_turn: state.moves_this_turn,
+        locked_sequence_piece: state.locked_sequence_piece.clone(),
+        heroe_take_counter: state.heroe_take_counter,
+        winner: state.winner.map(|s| format!("{:?}", s).to_lowercase()),
+        reason: state.reason.clone(),
+    })
+}
+
+/// Voluntarily ends the Héros bonus turn segment without a pass penalty.
+/// The player chose not to use the bonus move; the turn simply passes to the opponent.
+#[napi]
+pub fn end_heroe_bonus_napi(req: ApplyMoveRequest) -> napi::Result<ApplyMoveResponse> {
+    let board: BoardMap = serde_json::from_str(&req.board_json)
+        .map_err(|e| napi::Error::from_reason(format!("Failed to parse board: {}", e)))?;
+
+    let pieces: Vec<Piece> = serde_json::from_str(&req.pieces_json)
+        .map_err(|e| napi::Error::from_reason(format!("Failed to parse pieces: {}", e)))?;
+
+    let mut pieces_map = HashMap::new();
+    for p in pieces {
+        pieces_map.insert(p.id.clone(), p);
+    }
+
+    let mut state = GameState::new(board);
+    state.board.pieces = pieces_map;
+
+    state.occupancy.clear();
+    for (id, p) in state.board.pieces.iter() {
+        if p.position != "returned" && p.position != "graveyard" {
+            state.occupancy.insert(p.position.clone(), id.clone());
+        }
+    }
+
+    state.turn = match req.turn.to_lowercase().as_str() {
+        "white" => Side::White,
+        "black" | "yellow" => Side::Black,
+        _ => Side::White,
+    };
+    state.phase = match req.phase.to_lowercase().as_str() {
+        "setup" => GamePhase::Setup,
+        "playing" => GamePhase::Playing,
+        _ => GamePhase::Setup,
+    };
+    state.setup_step = req.setup_step;
+    state.turn_counter = req.turn_counter;
+    state.is_new_turn = req.is_new_turn;
+    state.moves_this_turn = req.moves_this_turn;
+    state.locked_sequence_piece = req.locked_sequence_piece.clone();
+    state.heroe_take_counter = req.heroe_take_counter;
+    for (s, c) in req.color_chosen.clone() {
+        let side = if s.to_lowercase() == "white" { Side::White } else { Side::Black };
+        state.color_chosen.insert(side, c.to_lowercase());
+    }
+    for c in &req.colors_ever_chosen {
+        state.colors_ever_chosen.insert(c.to_lowercase());
+    }
+
+    // Guard: only valid during an active Héros bonus window.
+    if state.heroe_take_counter == 0 {
+        return Err(napi::Error::from_reason(
+            "end_heroe_bonus called but heroe_take_counter is 0".to_string()
+        ));
+    }
+
+    end_heroe_bonus(&mut state);
+
+    let mage_unlocked_flag = state.is_mage_unlocked();
+    let updated_pieces: Vec<Piece> = state.board.pieces.into_values().collect();
+    let updated_pieces_json = serde_json::to_string(&updated_pieces)
+        .map_err(|e| napi::Error::from_reason(format!("Failed to serialize pieces: {}", e)))?;
+    let colors = state.color_chosen.iter()
+        .map(|(s, c)| (format!("{:?}", s).to_lowercase(), c.clone())).collect();
+    let ever_chosen_vec: Vec<String> = state.colors_ever_chosen.iter().cloned().collect();
+
+    Ok(ApplyMoveResponse {
         pieces_json: updated_pieces_json,
         captured: Vec::new(),
         color_chosen: colors,

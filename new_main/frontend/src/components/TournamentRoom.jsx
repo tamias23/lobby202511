@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useContext, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { SocketContext } from '../App';
 
@@ -11,6 +11,10 @@ export default function TournamentRoom({ user }) {
 
   const [tournament, setTournament] = useState(null);
   const [showQuitConfirm, setShowQuitConfirm] = useState(false);
+  // Tick counter — incremented every 500ms so the arena countdown re-renders
+  // automatically, not just when a socket event arrives.
+  const [, setTick] = useState(0);
+  const tickRef = useRef(null);
 
   // Join tournament room on mount
   useEffect(() => {
@@ -27,16 +31,36 @@ export default function TournamentRoom({ user }) {
         }
       }
     };
+    // If a game we were playing gets aborted because the arena time expired,
+    // navigate back to the tournament room.
+    const onGameAborted = (data) => {
+      if (data.tournamentId === id) {
+        navigate(`/tournament/${id}`);
+      }
+    };
 
     socket.on('tournament_update', onUpdate);
     socket.on('tournament_game_start', onGameStart);
+    socket.on('tournament_game_aborted', onGameAborted);
 
     return () => {
       socket.emit('leave_tournament_room', { tournamentId: id });
       socket.off('tournament_update', onUpdate);
       socket.off('tournament_game_start', onGameStart);
+      socket.off('tournament_game_aborted', onGameAborted);
     };
   }, [socket, id, user, navigate]);
+
+  // 500ms tick interval — keeps the arena countdown running between socket events.
+  useEffect(() => {
+    const isArenaActive =
+      tournament?.format === 'arena' &&
+      tournament?.status === 'active' &&
+      tournament?.arenaEndAt;
+    if (!isArenaActive) return;
+    tickRef.current = setInterval(() => setTick(t => t + 1), 500);
+    return () => clearInterval(tickRef.current);
+  }, [tournament?.format, tournament?.status, tournament?.arenaEndAt]);
 
   const handleQuit = useCallback(() => {
     if (!socket) return;
