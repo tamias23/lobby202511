@@ -550,6 +550,10 @@ const GameBoard = ({
   const [passCount, setPassCount] = useState(initialState.passCount || { white: 0, black: 0 });
   const [passWarningShown, setPassWarningShown] = useState(false);
 
+  // Connection-loss banner
+  const [isSocketDisconnected, setIsSocketDisconnected] = useState(false);
+  const disconnectTimerRef = useRef(null);
+
   // Mobile accessibility: slide-out drawers for HUD panels
   const [isLeftDrawerOpen, setIsLeftDrawerOpen] = useState(false);
   const [isRightDrawerOpen, setIsRightDrawerOpen] = useState(false);
@@ -565,6 +569,39 @@ const GameBoard = ({
     mql.addEventListener("change", handler);
     return () => mql.removeEventListener("change", handler);
   }, []);
+
+  // ── Socket disconnect / reconnect handling ───────────────────────────────
+  // If the WebSocket drops (e.g. Cloud Run load-balancer idle timeout), show a
+  // banner and give the connection 20 seconds to recover. If it doesn't, send
+  // the player back to the lobby (or tournament room) rather than leaving them
+  // stuck on a frozen board.
+  useEffect(() => {
+    const onDisconnect = () => {
+      setIsSocketDisconnected(true);
+      disconnectTimerRef.current = setTimeout(() => {
+        // Still disconnected after 20s → navigate away
+        const dest = tournamentId ? `/tournament/${tournamentId}` : '/';
+        navigate(dest, { replace: true });
+      }, 20000);
+    };
+    const onReconnect = () => {
+      if (disconnectTimerRef.current) {
+        clearTimeout(disconnectTimerRef.current);
+        disconnectTimerRef.current = null;
+      }
+      setIsSocketDisconnected(false);
+      // Re-subscribe to game updates for the current game room.
+      // join_game_room re-sends the full game state so the board catches up.
+      socket.emit('join_game_room', { gameId });
+    };
+    socket.on('disconnect', onDisconnect);
+    socket.on('connect', onReconnect);
+    return () => {
+      socket.off('disconnect', onDisconnect);
+      socket.off('connect', onReconnect);
+      if (disconnectTimerRef.current) clearTimeout(disconnectTimerRef.current);
+    };
+  }, [gameId, tournamentId, navigate]);
 
   // Resolve a logical board color name to the current theme's CSS color
   const getThemeColor = (logicalColor) => {
@@ -829,6 +866,18 @@ const GameBoard = ({
     socket.on("game_over", handleGameOver);
     socket.on("game_aborted", handleGameAborted);
 
+    // When a tournament's next round starts while we're still on this screen
+    // (e.g. on the game-over overlay), navigate automatically to the new game.
+    // Only players (side !== 'spectator') are moved; spectators stay.
+    // join_game_by_hash on the next page uses socket.userId (from JWT) to identify
+    // the player, so no navigation state needs to be passed.
+    const handleTournamentGameStart = (data) => {
+      if (!tournamentId || data.tournamentId !== tournamentId) return;
+      if (side === 'spectator') return;
+      navigate(`/games/${data.gameHash}`, { replace: true });
+    };
+    socket.on('tournament_game_start', handleTournamentGameStart);
+
     // Initial eligibility check on mount
     if (wasmReady) {
       updateEligiblePieces();
@@ -841,6 +890,7 @@ const GameBoard = ({
       socket.off("legal_moves", handleLegalMoves);
       socket.off("game_over", handleGameOver);
       socket.off("game_aborted", handleGameAborted);
+      socket.off('tournament_game_start', handleTournamentGameStart);
     };
   }, [gameId]);
 
@@ -1202,6 +1252,34 @@ const GameBoard = ({
         }
       }}
     >
+      {/* Connection-loss banner */}
+      {isSocketDisconnected && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0,
+          zIndex: 9999,
+          background: 'rgba(220, 38, 38, 0.92)',
+          color: '#fff',
+          textAlign: 'center',
+          padding: '10px 16px',
+          fontSize: '14px',
+          fontWeight: 600,
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '10px',
+        }}>
+          <span style={{ fontSize: '18px' }}>⚠️</span>
+          Connection lost — reconnecting… You will be redirected in 20 s if the connection is not restored.
+          <button
+            onClick={() => navigate(tournamentId ? `/tournament/${tournamentId}` : '/', { replace: true })}
+            style={{ marginLeft: 16, padding: '4px 12px', borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.2)', color: '#fff', cursor: 'pointer', fontWeight: 700 }}
+          >
+            Leave now
+          </button>
+        </div>
+      )}
       {/* Drawer Toggle Buttons (Removed as requested) */}
       <div
         className={`hud-panel hud-panel-left ${isLeftDrawerOpen ? 'drawer-open' : ''}`}

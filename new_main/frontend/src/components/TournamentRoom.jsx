@@ -182,7 +182,11 @@ export default function TournamentRoom({ user }) {
                           {m.black?.is_bot ? '🤖 ' : ''}{m.black?.username || '?'}
                         </div>
                         {m.gameHash && !m.result && (
-                          <button className="tourn-watch-btn" onClick={() => navigate(`/games/${m.gameHash}`)}>Watch</button>
+                          <button className="tourn-watch-btn" onClick={() => navigate(`/games/${m.gameHash}`)}>
+                            {user && (m.white?.user_id === user.id || m.black?.user_id === user.id)
+                              ? '▶ Continue'
+                              : 'Watch'}
+                          </button>
                         )}
                       </div>
                     ))}
@@ -207,7 +211,11 @@ export default function TournamentRoom({ user }) {
                     </span>
                     <span className={`tourn-game-player${g.result === 'black' ? ' tourn-game-player--winner' : ''}`}>{bName}</span>
                     {g.game_hash && !g.result && (
-                      <button className="tourn-watch-btn" onClick={() => navigate(`/games/${g.game_hash}`)}>Watch</button>
+                      <button className="tourn-watch-btn" onClick={() => navigate(`/games/${g.game_hash}`)}>
+                        {user && (g.white_id === user.id || g.black_id === user.id)
+                          ? '▶ Continue'
+                          : 'Watch'}
+                      </button>
                     )}
                   </div>
                 );

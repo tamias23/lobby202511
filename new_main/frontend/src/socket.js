@@ -6,6 +6,9 @@ const URL = import.meta.env.VITE_API_URL || "";
 
 export const socket = io(URL, {
     autoConnect: false,
+    // Prefer native WebSocket; fall back to polling only if WS upgrade fails.
+    // Must match the server-side transports list.
+    transports: ['websocket', 'polling'],
     auth: {
         // JWT token is injected before connect() is called
         token: localStorage.getItem('jwt_token') || null,

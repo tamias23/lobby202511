@@ -420,7 +420,7 @@ async function pairIdleArenaPlayers(tournamentId) {
         return;
     }
 
-    // Find idle players (not in an active game, and have rested 5s since last game)
+    // Find idle players (not in an active game, and have rested ≥10s since last game)
     const busyIds = new Set();
     for (const g of t.games) {
         if (!g.result) {
@@ -430,11 +430,11 @@ async function pairIdleArenaPlayers(tournamentId) {
     }
     const idlePlayers = t.participants.filter(p => {
         if (busyIds.has(p.user_id)) return false;
-        // 5s respite
+        // 10s respite between games (per player)
         const lastGame = [...t.games].reverse().find(
             g => g.result && (g.white_id === p.user_id || g.black_id === p.user_id)
         );
-        if (lastGame && lastGame.completed_at && (now - lastGame.completed_at) < 5000) return false;
+        if (lastGame && lastGame.completed_at && (now - lastGame.completed_at) < 10000) return false;
         return true;
     });
 
@@ -580,13 +580,16 @@ async function onGameComplete(gameHash, winnerSide) {
 
         // Check round completion
         if (t.format === 'arena') {
-            // Arena: try to re-pair immediately
-            setTimeout(() => pairIdleArenaPlayers(tid), 5500); // 5s respite
+            // Arena: re-pair after 10s respite so players have time to return
+            setTimeout(() => pairIdleArenaPlayers(tid), 10000);
         } else {
             const roundGames = t.games.filter(g => g.round === t.current_round);
             const allDone = roundGames.every(g => g.result);
             if (allDone) {
-                await advanceRound(tid);
+                // 10s delay before next round: gives players time to navigate back
+                // to the tournament room so tournament_game_start is received.
+                logger.info('Tournament', `${tid} round ${t.current_round} complete — next round in 10s.`);
+                setTimeout(() => advanceRound(tid), 10000);
             }
         }
 

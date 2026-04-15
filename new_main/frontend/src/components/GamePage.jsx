@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { socket } from '../socket';
 import GameBoard from './GameBoard';
@@ -11,6 +11,8 @@ const GamePage = ({ user }) => {
   const [gameInfo, setGameInfo] = useState(null); // { side, opponent, initialState, spectator }
   const [error, setError]       = useState(null);
   const [loading, setLoading]   = useState(true);
+  // Guard: prevent double-emit of join_game_by_hash when the effect re-runs after user loads.
+  const joinedRef = useRef(false);
 
   useEffect(() => {
     // State may already be passed from lobby navigation
@@ -28,19 +30,29 @@ const GamePage = ({ user }) => {
         tournamentId: stateFromNav.tournamentId || null,
       });
       setLoading(false);
+      joinedRef.current = true;
     } else if (stateFromNav && stateFromNav.spectator) {
       // Came from lobby as spectator
       socket.emit('join_game_by_hash', { hash, spectator: true });
+      joinedRef.current = true;
     } else {
-      // Direct URL navigation — ask server what our role is
-      // Pass tournamentId in state if we came from a tournament room
-      socket.emit('join_game_by_hash', { hash, spectator: false, userId: user?.id || null });
+      // Direct URL navigation (or auto-navigate from tournament room / game-over screen).
+      // Emit join_game_by_hash if not already joined. The server uses socket.userId (from JWT)
+      // as a trusted identity fallback, so this works even when user prop is still null.
+      if (!joinedRef.current) {
+        socket.emit('join_game_by_hash', { hash, spectator: false, userId: user?.id || null });
+        // Lock once we have a confirmed user identity so the effect re-run doesn't double-emit.
+        if (user?.id) joinedRef.current = true;
+      }
     }
 
     const onGameJoined = (data) => {
       if (data.error) {
-        setError(data.error);
-        setLoading(false);
+        // Game not found (deleted, forfeited, or doesn't exist).
+        // Navigate away gracefully rather than showing a dead error page.
+        console.warn('[GamePage] game_joined error:', data.error);
+        const tournId = location.state?.tournamentId || null;
+        navigate(tournId ? `/tournament/${tournId}` : '/', { replace: true });
         return;
       }
       setGameInfo({
@@ -59,11 +71,30 @@ const GamePage = ({ user }) => {
       setLoading(false);
     };
 
+
     socket.on('game_joined', onGameJoined);
     return () => {
       socket.off('game_joined', onGameJoined);
     };
   }, [hash, user]);
+
+  // On reconnect: re-register as a player so the server clears whiteDisconnectedAt
+  // and sends a fresh game state. If the game was forfeited while disconnected,
+  // the server returns an error → navigate away gracefully.
+  useEffect(() => {
+    let isFirstConnect = true; // skip the very first 'connect' (initial connection)
+    const onConnect = () => {
+      if (isFirstConnect) { isFirstConnect = false; return; }
+      // Socket reconnected — re-join the game with full identity
+      joinedRef.current = false;
+      socket.emit('join_game_by_hash', { hash, spectator: false, userId: user?.id || null });
+      if (user?.id) joinedRef.current = true;
+    };
+    socket.on('connect', onConnect);
+    return () => socket.off('connect', onConnect);
+  }, [hash, user]);
+
+
 
   if (loading && !gameInfo) {
     return (

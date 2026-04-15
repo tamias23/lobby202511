@@ -723,7 +723,15 @@ const io = new Server(server, {
     cors: {
         origin: "*", // Adjust for production
         methods: ["GET", "POST"]
-    }
+    },
+    // Send a ping every 10s to keep the Cloud Run load-balancer from dropping
+    // idle WebSocket connections (its default idle timeout is ~30s).
+    pingInterval: 10000,
+    pingTimeout:  25000,
+    // Prefer native WebSocket; fall back to HTTP long-polling only if needed.
+    // This avoids silent fallback to polling on environments where WS upgrades
+    // are slow or unreliable (e.g. Android WebView on some networks).
+    transports: ['websocket', 'polling'],
 });
 
 const PORT = process.env.PORT || 4000;
@@ -1783,15 +1791,20 @@ io.on('connection', (socket) => {
 
         socket.join(hash);
 
-        // Determine if this socket is a player
+        // Determine if this socket is a player.
+        // Priority: client-supplied userId → socket.userId from JWT handshake → socket.id match.
+        // socket.userId is set from the verified JWT at connection time and is always trustworthy,
+        // even when the client's async /api/me fetch hasn't completed (mobile race) or when the
+        // socket has reconnected (new socket.id but same authenticated identity).
+        const effectiveUserId = userId || socket.userId || null;
         let side = 'spectator';
         if (!spectator) {
-            if (userId && userId === game.white) {
+            if (effectiveUserId && effectiveUserId === game.white) {
                 side = 'white';
                 game.whiteSocketId = socket.id;
                 game.whiteDisconnectedAt = null;
             }
-            else if (userId && userId === game.black) {
+            else if (effectiveUserId && effectiveUserId === game.black) {
                 side = 'black';
                 game.blackSocketId = socket.id;
                 game.blackDisconnectedAt = null;
@@ -1805,6 +1818,7 @@ io.on('connection', (socket) => {
                 game.blackDisconnectedAt = null;
             }
         }
+        logger.debug('Socket', `join_game_by_hash ${hash}: effectiveUserId=${effectiveUserId}, side=${side}`);
 
         socket.emit('game_joined', {
             hash,
