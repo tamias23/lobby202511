@@ -35,3 +35,10 @@ TOURNAMENT_DRAW_POINTS: "1"
 TOURNAMENT_LOSS_POINTS: "0"
 TOURNAMENT_MAX_AGE_HOURS: "6"
 TOURNAMENT_OPEN_EXPIRY_HOURS: "2"
+
+# Valkey (Redis-compatible) backplane for multi-instance scaling.
+# Set VALKEY_ENABLED to "true" when a Valkey/Redis instance is available.
+# With "false" the server runs in single-instance mode (no retries, no adapter).
+VALKEY_ENABLED: "true"
+VALKEY_HOST: "127.0.0.1"
+VALKEY_PORT: "6379"

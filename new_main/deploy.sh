@@ -27,6 +27,7 @@ podman push ${REGISTRY}/nodejs6:${TAG}
 # --no-cpu-throttling \
 # --min-instances 0 \
 # --min-instances 1 \
+# --session-affinity \
 
 gcloud run deploy nd6-app \
     --image ${REGISTRY}/nodejs6:${TAG} \
@@ -35,10 +36,12 @@ gcloud run deploy nd6-app \
     --allow-unauthenticated \
     --timeout=3600 \
     --min-instances 1 \
-    --max-instances 1 \
+    --max-instances 3 \
     --no-cpu-throttling \
     --concurrency 800 \
-    --session-affinity \
+    --network default \
+    --subnet default \
+    --vpc-egress all-traffic \
     --add-volume=name=dedal-db,type=cloud-storage,bucket=data-bucket-mylittleproject00 \
     --add-volume-mount=volume=dedal-db,mount-path=/mnt/db \
     --env-vars-file backend/backend-config.yaml \
@@ -54,7 +57,7 @@ gcloud run deploy nd6-bot-server \
     --image ${REGISTRY}/bot-server:${TAG} \
     --platform managed \
     --region europe-west1 \
-    --allow-unauthenticated \
+    --ingress internal \
     --timeout=3600 \
     --min-instances 1 \
     --max-instances 1 \
@@ -73,7 +76,19 @@ echo "Bot Server deployed at: ${BOT_URL}"
 
 gcloud run services update nd6-app \
     --region europe-west1 \
-    --update-env-vars "BOT_SERVER_URL=${BOT_URL},DB_PATH=/tmp/db"
+    --update-env-vars "BOT_SERVER_URL=${BOT_URL}"
+# --update-env-vars "BOT_SERVER_URL=${BOT_URL},DB_PATH=/tmp/db"
+
+sleep 5
+
+# --- VALKEY (optional) ---
+# If Memorystore for Valkey is provisioned, pass its IP:
+VALKEY_IP=$(gcloud memorystore instances describe nd6-backplane \
+    --location=europe-west1 \
+    --format='value(endpoints[0].connections[0].pscAutoConnection.ipAddress)')
+gcloud run services update nd6-app \
+    --region europe-west1 \
+    --update-env-vars "VALKEY_HOST=${VALKEY_IP},VALKEY_PORT=6379"
 
 echo "=== Deploy complete: tag ${TAG} ==="
 

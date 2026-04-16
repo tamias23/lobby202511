@@ -1,4 +1,4 @@
-import React, { useState, useEffect, createContext } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { socket, setSocketToken } from './socket';
 import LobbyPage from './components/LobbyPage';
@@ -12,8 +12,7 @@ import TutorialPage from './components/TutorialPage';
 import TournamentCreate from './components/TournamentCreate';
 import TournamentRoom from './components/TournamentRoom';
 
-// Socket context so tournament pages can access the socket without prop drilling
-export const SocketContext = createContext(null);
+import { SocketContext } from './SocketContext';
 
 function App() {
   const [user, setUser] = useState(null);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { SocketContext } from '../App';
+import { SocketContext } from '../SocketContext';
 
 const FORMAT_INFO = {
   swiss:       { label: 'Swiss', emoji: '🏔️', desc: 'Players are paired by score each round. Everyone plays every round.', minP: 6, maxP: 200, durationType: 'rounds', defaultDur: 6 },

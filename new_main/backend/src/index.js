@@ -14,6 +14,8 @@ const { generateGuestId } = require('./utils/auth');
 const fs = require('fs');
 const path = require('path');
 const { sendVerificationEmail } = require('./utils/email');
+const valkeyAdapter = require('./valkeyAdapter');
+const valkeySync = require('./valkeySync');
 let getLegalMovesNapi, applyMoveNapi, initGameStateNapi, randomizeSetupNapi, endTurnSetupNapi, passTurnPlayingNapi, endHeroeBonusNapi, selectColorNapi, replayToStepNapi;
 
 try {
@@ -372,6 +374,9 @@ async function triggerBotMoveIfNeeded(gameId) {
     const game = lobby.activeGames.get(gameId);
     if (!game || game.phase === 'GameOver') return;
 
+    // Only the owner instance triggers bot moves to prevent duplicates
+    if (game.ownerInstanceId && game.ownerInstanceId !== valkeySync.getInstanceId()) return;
+
     const currentTurn = game.turn;
     const botConfig = currentTurn === 'white' ? game.whiteBotConfig : game.blackBotConfig;
 
@@ -425,6 +430,7 @@ async function triggerBotMoveIfNeeded(gameId) {
 
                 }
                 // Continue placing pieces (small delay so the human sees each one)
+                valkeySync.syncGameUpdated(gameId, currentGame);
                 setTimeout(() => triggerBotMoveIfNeeded(gameId), BOT_MOVE_DELAY_MS);
                 return;
 
@@ -479,6 +485,7 @@ async function triggerBotMoveIfNeeded(gameId) {
 
                 // If still the bot's turn (more setup steps or just transitioned to Playing)
                 // If the next turn is a bot's turn, trigger it
+                valkeySync.syncGameUpdated(gameId, currentGame);
                 setImmediate(() => triggerBotMoveIfNeeded(gameId));
                 return;
             }
@@ -541,6 +548,7 @@ async function triggerBotMoveIfNeeded(gameId) {
                         moves: freshGame.moves || [],
             });
             // Bot may need to make more moves in same turn
+            valkeySync.syncGameUpdated(gameId, freshGame);
             setTimeout(() => triggerBotMoveIfNeeded(gameId), BOT_MOVE_DELAY_MS);
 
         } else if (botMove.action === 'move' && botMove.piece && botMove.target) {
@@ -603,9 +611,11 @@ async function triggerBotMoveIfNeeded(gameId) {
                     .catch(err => logger.error('Bot', `Game save error for ${gameId}:`, err));
                 releaseBotIfNeeded(freshGame);
                 lobby.activeGames.delete(gameId);
+                valkeySync.syncGameDeleted(gameId);
                 broadcastLobbyUpdate(io);
             } else {
                 // Bot might need to continue its turn (chaining)
+                valkeySync.syncGameUpdated(gameId, freshGame);
                 setTimeout(() => triggerBotMoveIfNeeded(gameId), BOT_MOVE_DELAY_MS);
             }
 
@@ -649,6 +659,7 @@ async function triggerBotMoveIfNeeded(gameId) {
                         moves: freshGame.moves || [],
             });
             // Bot ended turn by passing — trigger next bot move if applicable
+            valkeySync.syncGameUpdated(gameId, freshGame);
             setImmediate(() => triggerBotMoveIfNeeded(gameId));
         }
     } catch (err) {
@@ -692,6 +703,13 @@ function loadBoards() {
 
 loadBoards();
 
+/** Load board JSON from disk by name (used by valkeySync for remote game reconstruction). */
+function loadBoardByName(boardName) {
+    const boardFile = boardPool.find(f => f === `${boardName}.json` || f.replace('.json', '') === boardName);
+    if (!boardFile) throw new Error(`Board not found: ${boardName}`);
+    return JSON.parse(fs.readFileSync(path.join(BOARDS_PATH, boardFile), 'utf8'));
+}
+
 const app = express();
 const cors = require('cors');
 app.use(cors({
@@ -733,6 +751,12 @@ const io = new Server(server, {
     // are slow or unreliable (e.g. Android WebView on some networks).
     transports: ['websocket', 'polling'],
 });
+
+// --- VALKEY BACKPLANE ---
+// Attach the Valkey adapter (Socket.IO Streams + pub/sub for state sync).
+// If Valkey is unreachable, the server works in single-instance mode.
+valkeyAdapter.init(io);
+// valkeySync.init() is called below, after the lobby object is declared.
 
 const PORT = process.env.PORT || 4000;
 
@@ -1077,6 +1101,9 @@ const lobby = {
     connectedUsers: new Set(), // set of socket IDs
 };
 
+// Initialize Valkey state sync (needs lobby reference)
+valkeySync.init(lobby, loadBoardByName);
+
 function buildLobbyStats() {
     // Count unique users, not socket connections
     // Authenticated users with multiple tabs are counted once
@@ -1157,7 +1184,12 @@ setInterval(() => {
     const now = Date.now();
     const thirtyMin = 30 * 60 * 1000;
     const before = lobby.gameRequests.length;
+    const expired = lobby.gameRequests.filter(r => (now - r.createdAt) >= thirtyMin);
     lobby.gameRequests = lobby.gameRequests.filter(r => (now - r.createdAt) < thirtyMin);
+    // Sync each expired request removal
+    for (const r of expired) {
+        valkeySync.syncRequestRemoved(r.requestId);
+    }
     if (lobby.gameRequests.length !== before) {
         broadcastLobbyUpdate(io);
     }
@@ -1168,6 +1200,9 @@ setInterval(() => {
     const now = Date.now();
     for (const [gameId, game] of lobby.activeGames) {
         if (game.phase === 'GameOver') continue;
+
+        // Only the owner instance runs timeout checks to prevent duplicate game-over events
+        if (game.ownerInstanceId && game.ownerInstanceId !== valkeySync.getInstanceId()) continue;
 
         // --- DISCONNECTION HANDLING ---
         // Guest: Remove after 5s
@@ -1197,6 +1232,7 @@ setInterval(() => {
                 
                 releaseBotIfNeeded(game);
                 lobby.activeGames.delete(gameId);
+                valkeySync.syncGameDeleted(gameId);
                 broadcastLobbyUpdate(io);
                 return true;
             }
@@ -1225,6 +1261,7 @@ setInterval(() => {
             
             releaseBotIfNeeded(game);
             lobby.activeGames.delete(gameId);
+            valkeySync.syncGameDeleted(gameId);
             broadcastLobbyUpdate(io);
         }
     }
@@ -1333,6 +1370,7 @@ async function createGame(whitePlayer, blackPlayer, timeControl, boardId) {
         blackRating: null,
         whiteDisconnectedAt: null,
         blackDisconnectedAt: null,
+        ownerInstanceId: valkeySync.getInstanceId(),
     };
 
     // Fetch ratings from DB (non-blocking for guests)
@@ -1344,6 +1382,7 @@ async function createGame(whitePlayer, blackPlayer, timeControl, boardId) {
     gameData.blackRating = bRating;
 
     lobby.activeGames.set(hash, gameData);
+    valkeySync.syncGameCreated(hash, gameData);
     return { hash, gameData };
 }
 
@@ -1512,6 +1551,7 @@ io.on('connection', (socket) => {
         });
 
         socket.emit('request_created', { requestId });
+        valkeySync.syncRequestCreated(lobby.gameRequests[lobby.gameRequests.length - 1]);
         broadcastLobbyUpdate(io);
         logger.debug('Game', `Game request ${requestId} by ${effectiveUserId} (${effectiveRole})${boardId ? ` board=${boardId}` : ''}`);
     });
@@ -1521,6 +1561,7 @@ io.on('connection', (socket) => {
         lobby.gameRequests = lobby.gameRequests.filter(
             r => !(r.requestId === requestId && r.socketId === socket.id)
         );
+        valkeySync.syncRequestRemoved(requestId);
         broadcastLobbyUpdate(io);
     });
 
@@ -1546,8 +1587,16 @@ io.on('connection', (socket) => {
             return;
         }
 
+        // Distributed lock: prevent two instances from accepting the same request
+        const gotLock = await valkeySync.tryLockRequest(requestId);
+        if (!gotLock) {
+            socket.emit('request_error', { message: 'Request no longer available.' });
+            return;
+        }
+
         // Remove the request
         lobby.gameRequests.splice(reqIndex, 1);
+        valkeySync.syncRequestRemoved(requestId);
 
         const effectiveUserId = userId || socket.userId || generateGuestId();
         const effectiveUsername = username || effectiveUserId;
@@ -1820,6 +1869,11 @@ io.on('connection', (socket) => {
         }
         logger.debug('Socket', `join_game_by_hash ${hash}: effectiveUserId=${effectiveUserId}, side=${side}`);
 
+        // Sync reconnection to other instances
+        if (side === 'white' || side === 'black') {
+            valkeySync.syncReconnect(hash, side);
+        }
+
         socket.emit('game_joined', {
             hash,
             side,
@@ -1890,6 +1944,7 @@ io.on('connection', (socket) => {
                 moves: game.moves || [],
             });
             logger.debug('Move', `Color '${color}' set for ${game.turn} by ${side} in ${gameId}. isNewTurn=${game.isNewTurn}`);
+            valkeySync.syncGameUpdated(gameId, game);
         } catch (error) {
             logger.error('Move', 'Error selecting color:', error);
         }
@@ -1964,6 +2019,7 @@ io.on('connection', (socket) => {
                 moves: game.moves || [],
             });
             logger.debug('Setup', `randomize_setup result: turn=${game.turn}, phase=${game.phase}, step=${game.setupStep}`);
+            valkeySync.syncGameUpdated(gameId, game);
 
             // Trigger bot if it's its turn
             setImmediate(() => triggerBotMoveIfNeeded(gameId));
@@ -2025,6 +2081,7 @@ io.on('connection', (socket) => {
                 moves: game.moves || [],
                 });
                 logger.debug('Setup', `Turn ended in ${gameId}: now ${game.turn}'s turn`);
+                valkeySync.syncGameUpdated(gameId, game);
 
                 // Always try to trigger bot if applicable
                 setImmediate(() => triggerBotMoveIfNeeded(gameId));
@@ -2084,6 +2141,7 @@ io.on('connection', (socket) => {
                         .catch(err => logger.error('Game', `Failed to save pass-limit game ${gameId}:`, err));
                     releaseBotIfNeeded(game);
                     lobby.activeGames.delete(gameId);
+                    valkeySync.syncGameDeleted(gameId);
                     broadcastLobbyUpdate(io);
                     return;
                 }
@@ -2107,6 +2165,7 @@ io.on('connection', (socket) => {
                     passCount: game.passCount
                 });
                 logger.debug('Move', `Turn passed in ${gameId}: now ${game.turn}'s turn (${passingSide} passCount: ${game.passCount[passingSide]})`);
+                valkeySync.syncGameUpdated(gameId, game);
 
                 // Always try to trigger bot if applicable
                 setImmediate(() => triggerBotMoveIfNeeded(gameId));
@@ -2176,6 +2235,7 @@ io.on('connection', (socket) => {
                 passCount:           game.passCount
             });
             logger.debug('Move', `end_heroe_bonus in ${gameId}: turn → ${game.turn}`);
+            valkeySync.syncGameUpdated(gameId, game);
             setImmediate(() => triggerBotMoveIfNeeded(gameId));
         } catch (e) {
             logger.error('Move', 'Error in end_heroe_bonus:', e);
@@ -2204,6 +2264,7 @@ io.on('connection', (socket) => {
 
         releaseBotIfNeeded(game);
         lobby.activeGames.delete(gameId);
+        valkeySync.syncGameDeleted(gameId);
         broadcastLobbyUpdate(io);
     });
 
@@ -2345,6 +2406,7 @@ io.on('connection', (socket) => {
                 });
 
                 // Always try to trigger bot if applicable
+                valkeySync.syncGameUpdated(gameId, game);
                 setImmediate(() => triggerBotMoveIfNeeded(gameId));
 
             } else {
@@ -2424,9 +2486,11 @@ io.on('connection', (socket) => {
                         .catch(err => logger.error('Game', `Failed to save match result for game "${gameId}":`, err));
                     releaseBotIfNeeded(game);
                     lobby.activeGames.delete(gameId);
+                    valkeySync.syncGameDeleted(gameId);
                     broadcastLobbyUpdate(io);
                 } else {
                     // Try to trigger bot if applicable
+                    valkeySync.syncGameUpdated(gameId, game);
                     setImmediate(() => triggerBotMoveIfNeeded(gameId));
                 }
 
@@ -2467,17 +2531,23 @@ io.on('connection', (socket) => {
         lobby.connectedUsers.delete(socket.id);
         
         // Mark players as disconnected in active games
-        for (const game of lobby.activeGames.values()) {
+        for (const [gameId, game] of lobby.activeGames) {
             if (game.whiteSocketId === socket.id) {
                 game.whiteDisconnectedAt = Date.now();
+                valkeySync.syncDisconnect(gameId, 'white', game.whiteDisconnectedAt);
             } else if (game.blackSocketId === socket.id) {
                 game.blackDisconnectedAt = Date.now();
+                valkeySync.syncDisconnect(gameId, 'black', game.blackDisconnectedAt);
             }
         }
 
         // Remove any open game request from this socket
         const before = lobby.gameRequests.length;
+        const removedRequests = lobby.gameRequests.filter(r => r.socketId === socket.id);
         lobby.gameRequests = lobby.gameRequests.filter(r => r.socketId !== socket.id);
+        for (const r of removedRequests) {
+            valkeySync.syncRequestRemoved(r.requestId);
+        }
         if (lobby.gameRequests.length !== before) {
             broadcastLobbyUpdate(io);
         } else {

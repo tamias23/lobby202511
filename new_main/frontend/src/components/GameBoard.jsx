@@ -570,6 +570,9 @@ const GameBoard = ({
     return () => mql.removeEventListener("change", handler);
   }, []);
 
+  // ── Navigation ─────────────────────────────────────────────────────────────
+  const navigate = useNavigate();
+
   // ── Socket disconnect / reconnect handling ───────────────────────────────
   // If the WebSocket drops (e.g. Cloud Run load-balancer idle timeout), show a
   // banner and give the connection 20 seconds to recover. If it doesn't, send
@@ -649,7 +652,6 @@ const GameBoard = ({
     }
     return name;
   };
-  const navigate = useNavigate();
   const [gameOverInfo, setGameOverInfo] = useState({ winnerId: null, reason: null });
   // Holds data when the tournament time expired and interrupted this game.
   const [gameAbortedInfo, setGameAbortedInfo] = useState(null); // null | { tournamentId }

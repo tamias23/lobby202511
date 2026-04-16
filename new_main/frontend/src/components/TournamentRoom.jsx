@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useContext, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { SocketContext } from '../App';
+import { SocketContext } from '../SocketContext';
 
 const FORMAT_LABELS = { swiss: '🏔️ Swiss', arena: '⚔️ Arena', knockout: '🥊 Knockout', round_robin: '🔄 Round Robin' };
 

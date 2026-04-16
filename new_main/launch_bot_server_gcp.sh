@@ -20,7 +20,7 @@ gcloud run deploy "${SERVICE_NAME}" \
     --image "${IMAGE}" \
     --platform managed \
     --region "${REGION}" \
-    --allow-unauthenticated \
+    --ingress internal \
     --min-instances 0 \
     --memory 1Gi \
     --cpu 2 \

@@ -9,6 +9,12 @@
 #   1. Builds the frontend static assets (relative-URL mode, no VITE_API_URL baked in)
 #   2. Starts Bot Server on port 5001
 #   3. Starts Game Server on port 4000 (which also serves the built frontend)
+#
+# Valkey: Set VALKEY_ENABLED=true before running this script to enable
+# the Valkey backplane for multi-instance sync testing.
+# Example: VALKEY_ENABLED=true ./launch_back_and_front_and_bot.sh
+# Requires a Valkey/Redis instance: podman run -d -p 6379:6379 valkey/valkey
+# Without VALKEY_ENABLED=true, the server runs in single-instance mode.
 
 set -e
 
@@ -56,7 +62,7 @@ done
 # --- 3. Start Game Server (also serves the built frontend on port 4000) ---
 echo "==> Starting Game Server on port 4000..."
 cd "${SCRIPT_DIR}"
-BOT_SERVER_URL=http://localhost:5001 node backend/src/index.js &
+BOT_SERVER_URL=http://localhost:5001 VALKEY_ENABLED=${VALKEY_ENABLED:-true} node backend/src/index.js &
 GAME_PID=$!
 
 echo ""
