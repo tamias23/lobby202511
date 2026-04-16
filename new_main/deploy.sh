@@ -33,9 +33,12 @@ gcloud run deploy nd6-app \
     --platform managed \
     --region europe-west1 \
     --allow-unauthenticated \
+    --timeout=3600 \
     --min-instances 1 \
     --max-instances 1 \
     --no-cpu-throttling \
+    --concurrency 800 \
+    --session-affinity \
     --add-volume=name=dedal-db,type=cloud-storage,bucket=data-bucket-mylittleproject00 \
     --add-volume-mount=volume=dedal-db,mount-path=/mnt/db \
     --env-vars-file backend/backend-config.yaml \
@@ -52,6 +55,7 @@ gcloud run deploy nd6-bot-server \
     --platform managed \
     --region europe-west1 \
     --allow-unauthenticated \
+    --timeout=3600 \
     --min-instances 1 \
     --max-instances 1 \
     --no-cpu-throttling \

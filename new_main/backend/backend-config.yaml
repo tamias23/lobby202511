@@ -1,7 +1,7 @@
 # Logging
 # Levels: error | warn | info | debug
 # Use 'debug' for verbose GCP debugging, 'warn' or 'error' for quiet production.
-LOG_LEVEL: "info"
+LOG_LEVEL: "debug"
 
 # Server Configuration
 APP_URL: "https://dedalthegame.com"
@@ -23,7 +23,7 @@ BOT_MOVE_DELAY_MS: "500"
 MCTS_DEFAULT_BUDGET_MS: "500"
 
 # Background Bot Matches
-BOT_MATCH_INTERVAL_MS: "10000"
+BOT_MATCH_INTERVAL_MS: "3600000"
 BOT_MATCH_PROBABILITY: "0.0001"
 
 # Tournament Configuration
