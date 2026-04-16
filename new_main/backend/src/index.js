@@ -2590,3 +2590,4 @@ server.listen(PORT, '0.0.0.0', () => {
     logger.info('Server', `Backend server running on port ${PORT}`);
     logger.info('Server', `Log level: ${process.env.LOG_LEVEL || 'info'}`);
 });
+module.exports = { sanitizeBigInt, makeBotDisplayName };

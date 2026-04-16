@@ -4,7 +4,7 @@
   "main": "src/index.js",
   "scripts": {
     "dev": "node src/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "jest",
     "build:napi": "cd rust-napi && npx napi build --release --platform"
   },
   "keywords": [],
@@ -24,11 +24,13 @@
     "nodemailer": "^8.0.5",
     "redis": "^5.12.1",
     "socket.io": "^4.8.1",
-    "socket.io-client": "^4.8.1",
     "uuid": "^9.0.1"
   },
   "devDependencies": {
-    "@napi-rs/cli": "^2.18.4"
+    "@napi-rs/cli": "^2.18.4",
+    "jest": "^30.3.0",
+    "socket.io-client": "^4.8.3",
+    "supertest": "^7.2.2"
   },
   "description": ""
 }

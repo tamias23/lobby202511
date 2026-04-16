@@ -10,6 +10,14 @@ echo "=== Deploy tag: ${TAG} ==="
 #     --location=europe-west1 \
 #     --uniform-bucket-level-access
 
+# gcloud memorystore instances create nd6-backplane \
+#     --location=europe-west1 \
+#     --node-type=shared-core-nano \
+#     --shard-count=1 \
+#     --replica-count=0 \
+#     --engine-version=VALKEY_9_0 \
+#     --endpoints='[{"connections": [{"pscAutoConnection": {"network": "projects/mylittleproject00/global/networks/default", "projectId": "mylittleproject00"}}]}]'
+    
 podman image prune
 
 cd /home/mat/Bureau/lobby202511/rust && cargo build --release --bin rust 2>&1

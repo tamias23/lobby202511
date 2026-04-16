@@ -1328,7 +1328,9 @@ pub fn end_heroe_bonus(state: &mut GameState) {
 mod tests {
     use super::*;
     use crate::models::{Piece, Polygon, Side, PieceType};
+    use crate::parser::parse_board;
     use std::collections::HashMap;
+
 
     #[test]
     fn test_soldier_capture_on_wrong_color_ends_sequence() {
@@ -2105,4 +2107,672 @@ mod tests {
         assert_eq!(state.turn, Side::Black); // Turn must NOT swap to White
         assert_eq!(state.turn_counter, 0); // Turn counter must NOT increment
     }
+
+    #[test]
+    fn test_goddess_movement_jump_dist_2() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "green".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("B".to_string(), Polygon { id: 2, name: "B".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec!["A".to_string(), "C".to_string()], neighbours: vec!["A".to_string(), "C".to_string()] });
+        polygons.insert("C".to_string(), Polygon { id: 3, name: "C".to_string(), color: "green".to_string(), shape: "tri".to_string(), center: [2.0, 2.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        let mut pieces = HashMap::new();
+        pieces.insert("G1".to_string(), Piece { id: "G1".to_string(), piece_type: PieceType::Goddess, side: Side::White, position: "A".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.set_color_chosen(Side::White, "green");
+        let moves = get_legal_moves(&state, "G1");
+        assert!(moves.contains(&"C".to_string()), "Goddess should jump 2 steps to C");
+    }
+
+    #[test]
+    fn test_mage_movement_different_color() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [0.0, 1.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("B".to_string(), Polygon { id: 2, name: "B".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [0.0, 2.0], points: vec![], neighbors: vec!["A".to_string(), "C".to_string()], neighbours: vec!["A".to_string(), "C".to_string()] });
+        polygons.insert("C".to_string(), Polygon { id: 3, name: "C".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [0.0, 3.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        let mut pieces = HashMap::new();
+        pieces.insert("M1".to_string(), Piece { id: "M1".to_string(), piece_type: PieceType::Mage, side: Side::White, position: "A".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.colors_ever_chosen = ["r", "g", "b", "o"].iter().map(|s| s.to_string()).collect();
+        state.set_color_chosen(Side::White, "red");
+        let moves = get_legal_moves(&state, "M1");
+        assert!(moves.contains(&"B".to_string()), "Mage can move to Blue");
+        assert!(!moves.contains(&"C".to_string()), "Mage cannot move to same color Red");
+    }
+
+    #[test]
+    fn test_witch_movement_same_color() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("B".to_string(), Polygon { id: 2, name: "B".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec!["A".to_string(), "C".to_string()], neighbours: vec!["A".to_string(), "C".to_string()] });
+        polygons.insert("C".to_string(), Polygon { id: 3, name: "C".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [2.0, 2.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        let mut pieces = HashMap::new();
+        pieces.insert("W1".to_string(), Piece { id: "W1".to_string(), piece_type: PieceType::Witch, side: Side::White, position: "A".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.set_color_chosen(Side::White, "red");
+        let moves = get_legal_moves(&state, "W1");
+        assert!(!moves.contains(&"B".to_string()), "Witch cannot move to Blue");
+        assert!(moves.contains(&"C".to_string()), "Witch MUST move to same color Red");
+    }
+
+    #[test]
+    fn test_witch_blast_radius() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("B".to_string(), Polygon { id: 2, name: "B".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec!["A".to_string(), "C".to_string()], neighbours: vec!["A".to_string(), "C".to_string()] });
+        polygons.insert("C".to_string(), Polygon { id: 3, name: "C".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [2.0, 2.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        let mut pieces = HashMap::new();
+        pieces.insert("W1".to_string(), Piece { id: "W1".to_string(), piece_type: PieceType::Witch, side: Side::White, position: "A".to_string() });
+        pieces.insert("E1".to_string(), Piece { id: "E1".to_string(), piece_type: PieceType::Soldier, side: Side::Black, position: "B".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        assert!(state.occupancy.contains_key("B"), "E1 should be at B before blast");
+        apply_move(&mut state, "W1", "C"); 
+        assert!(!state.occupancy.contains_key("B"), "E1 should be blasted away from B");
+    }
+
+    #[test]
+    fn test_siren_pinning_immobilization() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("B".to_string(), Polygon { id: 2, name: "B".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec!["A".to_string()], neighbours: vec!["A".to_string()] });
+        let mut pieces = HashMap::new();
+        pieces.insert("S1".to_string(), Piece { id: "S1".to_string(), piece_type: PieceType::Siren, side: Side::Black, position: "B".to_string() });
+        pieces.insert("Soldier1".to_string(), Piece { id: "Soldier1".to_string(), piece_type: PieceType::Soldier, side: Side::White, position: "A".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.set_color_chosen(Side::White, "red");
+        let moves = get_legal_moves(&state, "Soldier1");
+        assert!(moves.is_empty(), "Soldier should be pinned by Siren at B");
+    }
+
+    #[test]
+    fn test_stamina_exhaustion() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("B".to_string(), Polygon { id: 2, name: "B".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec!["A".to_string()], neighbours: vec!["A".to_string()] });
+        let mut pieces = HashMap::new();
+        pieces.insert("P1".to_string(), Piece { id: "P1".to_string(), piece_type: PieceType::Soldier, side: Side::White, position: "A".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.set_color_chosen(Side::White, "red");
+        state.piece_move_counts.insert("P1".to_string(), 23);
+        let moves = get_legal_moves(&state, "P1");
+        assert!(moves.is_empty(), "Piece with 23 moves should not have legal moves");
+    }
+
+    #[test]
+    fn test_turn_switch_on_color_landing() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("B".to_string(), Polygon { id: 2, name: "B".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec!["A".to_string()], neighbours: vec!["A".to_string()] });
+        let mut pieces = HashMap::new();
+        pieces.insert("P1".to_string(), Piece { id: "P1".to_string(), piece_type: PieceType::Ghoul, side: Side::White, position: "A".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.turn = Side::White;
+        state.set_color_chosen(Side::White, "red");
+        apply_move(&mut state, "P1", "B");
+        apply_move_turnover(&mut state, "P1", "B", false, true, false);
+        assert_eq!(state.turn, Side::Black, "Turn should switch after landing on chosen color");
+    }
+
+    #[test]
+    fn test_heroe_bonus_move_on_capture() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("B".to_string(), Polygon { id: 2, name: "B".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec!["A".to_string(), "C".to_string()], neighbours: vec!["A".to_string(), "C".to_string()] });
+        polygons.insert("C".to_string(), Polygon { id: 3, name: "C".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [2.0, 2.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        let mut pieces = HashMap::new();
+        pieces.insert("H1".to_string(), Piece { id: "H1".to_string(), piece_type: PieceType::Heroe, side: Side::White, position: "A".to_string() });
+        pieces.insert("E1".to_string(), Piece { id: "E1".to_string(), piece_type: PieceType::Soldier, side: Side::Black, position: "B".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.set_color_chosen(Side::White, "red");
+        let captured = apply_move(&mut state, "H1", "B");
+        assert!(!captured.is_empty());
+        apply_move_turnover(&mut state, "H1", "B", false, false, false);
+        assert_eq!(state.turn, Side::White, "Turn should stay White for bonus move");
+        assert_eq!(state.heroe_take_counter, 1);
+        assert_eq!(state.locked_sequence_piece, Some("H1".to_string()));
+    }
+
+    #[test]
+    fn test_minotaur_protection_from_mage_blast() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("B".to_string(), Polygon { id: 2, name: "B".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec!["A".to_string(), "C".to_string()], neighbours: vec!["A".to_string(), "C".to_string()] });
+        polygons.insert("C".to_string(), Polygon { id: 3, name: "C".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [2.0, 2.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        let mut pieces = HashMap::new();
+        pieces.insert("M1".to_string(), Piece { id: "M1".to_string(), piece_type: PieceType::Mage, side: Side::White, position: "A".to_string() });
+        pieces.insert("Target".to_string(), Piece { id: "Target".to_string(), piece_type: PieceType::Soldier, side: Side::Black, position: "C".to_string() });
+        pieces.insert("Minotaur".to_string(), Piece { id: "Minotaur".to_string(), piece_type: PieceType::Minotaur, side: Side::Black, position: "B".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        apply_move(&mut state, "M1", "C"); 
+        let m1_at_c = state.board.pieces.values().find(|p| p.position == "C" && p.id == "M1");
+        assert!(m1_at_c.is_some(), "Mage should have moved to C");
+        assert!(state.occupancy.get("B").is_some(), "Minotaur should survive Mage blast");
+    }
+
+
+    #[test]
+    fn test_winning_by_goddess_capture() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("B".to_string(), Polygon { id: 2, name: "B".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec!["A".to_string()], neighbours: vec!["A".to_string()] });
+        let mut pieces = HashMap::new();
+        pieces.insert("G1".to_string(), Piece { id: "G1".to_string(), piece_type: PieceType::Goddess, side: Side::Black, position: "B".to_string() });
+        pieces.insert("S1".to_string(), Piece { id: "S1".to_string(), piece_type: PieceType::Soldier, side: Side::White, position: "A".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.turn = Side::White;
+        state.set_color_chosen(Side::White, "red");
+        let captured = apply_move(&mut state, "S1", "B");
+        assert!(captured.contains(&PieceType::Goddess));
+        apply_move_turnover(&mut state, "S1", "B", true, false, false);
+        assert_eq!(state.phase, GamePhase::GameOver);
+        assert_eq!(state.winner, Some(Side::White));
+    }
+
+    #[test]
+    fn test_minotaur_chaining_over_friendly() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("B".to_string(), Polygon { id: 2, name: "B".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec!["A".to_string(), "C".to_string()], neighbours: vec!["A".to_string(), "C".to_string()] });
+        polygons.insert("C".to_string(), Polygon { id: 3, name: "C".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [2.0, 2.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        let mut pieces = HashMap::new();
+        pieces.insert("M1".to_string(), Piece { id: "M1".to_string(), piece_type: PieceType::Minotaur, side: Side::White, position: "A".to_string() });
+        pieces.insert("F1".to_string(), Piece { id: "F1".to_string(), piece_type: PieceType::Soldier, side: Side::White, position: "B".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.set_color_chosen(Side::White, "red");
+        let moves = get_legal_moves(&state, "M1");
+        assert!(moves.contains(&"C".to_string()), "Minotaur should chain over friendly piece at B");
+    }
+
+    #[test]
+    fn test_setup_step_transition() {
+        let mut state = GameState::new(BoardMap { polygons: HashMap::new(), pieces: HashMap::new(), edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Setup;
+        state.setup_step = 0;
+        state.board.pieces.insert("G1".to_string(), Piece { id: "G1".to_string(), piece_type: PieceType::Goddess, side: Side::White, position: "P1".to_string() });
+        state.board.pieces.insert("G2".to_string(), Piece { id: "G2".to_string(), piece_type: PieceType::Goddess, side: Side::Black, position: "P2".to_string() });
+        advance_setup_step(&mut state);
+        assert_eq!(state.setup_step, 1, "Should advance to step 1 after step 0 is complete for both");
+    }
+
+    #[test]
+    fn test_siren_cannot_capture() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("B".to_string(), Polygon { id: 2, name: "B".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec!["A".to_string()], neighbours: vec!["A".to_string()] });
+        let mut pieces = HashMap::new();
+        pieces.insert("S1".to_string(), Piece { id: "S1".to_string(), piece_type: PieceType::Siren, side: Side::White, position: "A".to_string() });
+        pieces.insert("E1".to_string(), Piece { id: "E1".to_string(), piece_type: PieceType::Soldier, side: Side::Black, position: "B".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.set_color_chosen(Side::White, "red");
+        let moves = get_legal_moves(&state, "S1");
+        assert!(!moves.contains(&"B".to_string()), "Siren cannot capture pieces");
+    }
+
+    #[test]
+    fn test_soldier_chain_jump_across_chosen_color_polys() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("B".to_string(), Polygon { id: 2, name: "B".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec!["A".to_string(), "C".to_string()], neighbours: vec!["A".to_string(), "C".to_string()] });
+        polygons.insert("C".to_string(), Polygon { id: 3, name: "C".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [2.0, 2.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        let mut pieces = HashMap::new();
+        pieces.insert("S1".to_string(), Piece { id: "S1".to_string(), piece_type: PieceType::Soldier, side: Side::White, position: "A".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.set_color_chosen(Side::White, "blue");
+        let moves = get_legal_moves(&state, "S1");
+        assert!(moves.contains(&"C".to_string()), "Soldier should jump through empty matching color poly B");
+    }
+
+    #[test]
+    fn test_mage_deployment_near_mage() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "green".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("B".to_string(), Polygon { id: 2, name: "B".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec!["A".to_string()], neighbours: vec!["A".to_string()] });
+        let mut pieces = HashMap::new();
+        pieces.insert("M1".to_string(), Piece { id: "M1".to_string(), piece_type: PieceType::Mage, side: Side::White, position: "A".to_string() });
+        pieces.insert("S1".to_string(), Piece { id: "S1".to_string(), piece_type: PieceType::Soldier, side: Side::White, position: "returned".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.set_color_chosen(Side::White, "red");
+        let moves = get_legal_moves(&state, "S1");
+        assert!(moves.contains(&"B".to_string()), "Soldier should be deployable near Mage even if color doesn't match");
+    }
+
+    #[test]
+    fn test_witch_deployment_cannot_be_near_enemy() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "green".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("B".to_string(), Polygon { id: 2, name: "B".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec!["A".to_string()], neighbours: vec!["A".to_string()] });
+        let mut pieces = HashMap::new();
+        pieces.insert("E1".to_string(), Piece { id: "E1".to_string(), piece_type: PieceType::Soldier, side: Side::Black, position: "B".to_string() });
+        pieces.insert("W1".to_string(), Piece { id: "W1".to_string(), piece_type: PieceType::Witch, side: Side::White, position: "returned".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.set_color_chosen(Side::White, "green");
+        let moves = get_legal_moves(&state, "W1");
+        assert!(!moves.contains(&"A".to_string()), "Witch cannot be deployed adjacent to enemy");
+    }
+
+    #[test]
+    fn test_heroe_bonus_move_limit_2() {
+        let mut state = GameState::new(BoardMap { polygons: HashMap::new(), pieces: HashMap::new(), edges: HashMap::new(), width: None, height: None });
+        state.heroe_take_counter = 2;
+        let mut pieces = HashMap::new();
+        pieces.insert("H1".to_string(), Piece { id: "H1".to_string(), piece_type: PieceType::Heroe, side: Side::White, position: "A".to_string() });
+        state.board.pieces = pieces;
+        let moves = get_legal_moves(&state, "H1");
+        assert!(moves.is_empty(), "Heroe cannot move if take counter is 2");
+    }
+
+    #[test]
+    fn test_deadlock_recovery_clears_lock() {
+        let mut state = GameState::new(BoardMap { polygons: HashMap::new(), pieces: HashMap::new(), edges: HashMap::new(), width: None, height: None });
+        state.locked_sequence_piece = Some("P1".to_string());
+        state.board.pieces.insert("P1".to_string(), Piece { id: "P1".to_string(), piece_type: PieceType::Soldier, side: Side::White, position: "A".to_string() });
+        apply_move_turnover(&mut state, "P1", "B", false, true, false);
+        assert!(state.locked_sequence_piece.is_none(), "Lock should be broken if piece has no moves");
+    }
+
+    #[test]
+    fn test_chromatic_unlock_logic() {
+        let mut state = GameState::new(BoardMap { polygons: HashMap::new(), pieces: HashMap::new(), edges: HashMap::new(), width: None, height: None });
+        state.colors_ever_chosen.insert("blue".to_string());
+        state.colors_ever_chosen.insert("red".to_string());
+        state.colors_ever_chosen.insert("green".to_string());
+        assert!(!state.is_mage_unlocked());
+        state.colors_ever_chosen.insert("yellow".to_string());
+        assert!(state.is_mage_unlocked());
+    }
+
+    #[test]
+    fn test_siren_pinning_broken_on_different_color_landing() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("B".to_string(), Polygon { id: 2, name: "B".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec!["A".to_string(), "C".to_string()], neighbours: vec!["A".to_string(), "C".to_string()] });
+        polygons.insert("C".to_string(), Polygon { id: 3, name: "C".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [2.0, 2.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        let mut pieces = HashMap::new();
+        // S1 at C pins Soldier at B.
+        pieces.insert("S1".to_string(), Piece { id: "S1".to_string(), piece_type: PieceType::Siren, side: Side::Black, position: "C".to_string() });
+        pieces.insert("P1".to_string(), Piece { id: "P1".to_string(), piece_type: PieceType::Soldier, side: Side::White, position: "A".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.set_color_chosen(Side::White, "blue"); // Chosen blue, landing on red
+        
+        let turn_ends = apply_move_turnover(&mut state, "P1", "B", false, true, false);
+        assert!(!turn_ends, "Turn should NOT end if pinned on non-chosen color (Rule 108)");
+    }
+
+    #[test]
+    fn test_goddess_jump_topology_3x3() {
+        let mut polygons = HashMap::new();
+        for x in 0..3 {
+            for y in 0..3 {
+                let id = format!("{}_{}", x, y);
+                polygons.insert(id.clone(), Polygon { id: x*3+y, name: id, color: "grey".to_string(), shape: "rect".to_string(), center: [x as f64, y as f64], points: vec![], neighbors: vec![], neighbours: vec![] });
+            }
+        }
+        polygons.get_mut("1_1").unwrap().neighbours = vec!["0_0".to_string(), "0_1".to_string(), "0_2".to_string(), "1_0".to_string(), "1_2".to_string(), "2_0".to_string(), "2_1".to_string(), "2_2".to_string()];
+        let mut pieces = HashMap::new();
+        pieces.insert("G1".to_string(), Piece { id: "G1".to_string(), piece_type: PieceType::Goddess, side: Side::White, position: "1_1".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.set_color_chosen(Side::White, "grey");
+        let moves = get_legal_moves(&state, "G1");
+        assert_eq!(moves.len(), 8, "Goddess should see all 8 neighbors in a 3x3 jump grid");
+    }
+
+    #[test]
+    fn test_witch_blast_ignores_friendly() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("B".to_string(), Polygon { id: 2, name: "B".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec!["A".to_string()], neighbours: vec!["A".to_string()] });
+        let mut pieces = HashMap::new();
+        pieces.insert("W1".to_string(), Piece { id: "W1".to_string(), piece_type: PieceType::Witch, side: Side::White, position: "A".to_string() });
+        pieces.insert("F1".to_string(), Piece { id: "F1".to_string(), piece_type: PieceType::Soldier, side: Side::White, position: "B".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        apply_move(&mut state, "W1", "A"); 
+        assert!(state.occupancy.contains_key("B"), "Friendly piece should survive Witch blast");
+    }
+
+    #[test]
+    fn test_mage_blast_ignores_minotaur_enemy() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("B".to_string(), Polygon { id: 2, name: "B".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec!["A".to_string(), "C".to_string()], neighbours: vec!["A".to_string(), "C".to_string()] });
+        polygons.insert("C".to_string(), Polygon { id: 3, name: "C".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [2.0, 2.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        let mut pieces = HashMap::new();
+        pieces.insert("M1".to_string(), Piece { id: "M1".to_string(), piece_type: PieceType::Mage, side: Side::White, position: "A".to_string() });
+        pieces.insert("T1".to_string(), Piece { id: "T1".to_string(), piece_type: PieceType::Soldier, side: Side::Black, position: "C".to_string() });
+        pieces.insert("Mino".to_string(), Piece { id: "Mino".to_string(), piece_type: PieceType::Minotaur, side: Side::Black, position: "B".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        apply_move(&mut state, "M1", "C"); // Captures Soldier at C
+        assert!(state.occupancy.contains_key("B"), "Enemy Minotaur should survive Mage blast");
+    }
+
+    #[test]
+    fn test_soldier_no_chain_on_enemy_occupancy() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("B".to_string(), Polygon { id: 2, name: "B".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec!["A".to_string(), "C".to_string()], neighbours: vec!["A".to_string(), "C".to_string()] });
+        polygons.insert("C".to_string(), Polygon { id: 3, name: "C".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [2.0, 2.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        let mut pieces = HashMap::new();
+        pieces.insert("S1".to_string(), Piece { id: "S1".to_string(), piece_type: PieceType::Soldier, side: Side::White, position: "A".to_string() });
+        pieces.insert("E1".to_string(), Piece { id: "E1".to_string(), piece_type: PieceType::Soldier, side: Side::Black, position: "B".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.set_color_chosen(Side::White, "blue");
+        let moves = get_legal_moves(&state, "S1");
+        assert!(moves.contains(&"B".to_string()), "Soldier can capture enemy at B");
+        assert!(!moves.contains(&"C".to_string()), "Soldier cannot chain THROUGH enemy at B");
+    }
+
+    #[test]
+    fn test_validator_board_no_polygons() {
+        let board = BoardMap { polygons: HashMap::new(), pieces: HashMap::new(), edges: HashMap::new(), width: None, height: None };
+        assert!(parse_board(&serde_json::to_string(&board).unwrap()).is_err());
+    }
+
+    #[test]
+    fn test_validator_board_missing_neighbor() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        let board = BoardMap { polygons, pieces: HashMap::new(), edges: HashMap::new(), width: None, height: None };
+        assert!(parse_board(&serde_json::to_string(&board).unwrap()).is_err());
+    }
+
+    #[test]
+    fn test_validator_piece_invalid_position() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec![], neighbours: vec![] });
+        let mut pieces = HashMap::new();
+        pieces.insert("P1".to_string(), Piece { id: "P1".to_string(), piece_type: PieceType::Soldier, side: Side::White, position: "Invalid".to_string() });
+        let board = BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None };
+        assert!(parse_board(&serde_json::to_string(&board).unwrap()).is_err());
+    }
+
+    #[test]
+    fn test_setup_random_board_pieces_quantity() {
+        let mut state = GameState::new(BoardMap { polygons: HashMap::new(), pieces: HashMap::new(), edges: HashMap::new(), width: None, height: None });
+        setup_pieces(&mut state);
+        assert_eq!(state.board.pieces.len(), 74); 
+    }
+
+    #[test]
+    fn test_is_siren_pinned_logic() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("B".to_string(), Polygon { id: 2, name: "B".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec!["A".to_string()], neighbours: vec!["A".to_string()] });
+        let mut pieces = HashMap::new();
+        pieces.insert("S1".to_string(), Piece { id: "S1".to_string(), piece_type: PieceType::Siren, side: Side::Black, position: "B".to_string() });
+        let state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        assert!(state.is_siren_pinned("A", Side::White));
+        assert!(!state.is_siren_pinned("A", Side::Black));
+    }
+
+    #[test]
+    fn test_get_polys_within_distance_slide_3() {
+        let mut polygons = HashMap::new();
+        for i in 0..5 {
+            polygons.insert(i.to_string(), Polygon { id: i, name: i.to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [i as f64, 0.0], points: vec![], neighbors: vec![(i+1).to_string()], neighbours: vec![] });
+        }
+        let board = BoardMap { polygons, pieces: HashMap::new(), edges: HashMap::new(), width: None, height: None };
+        let res = get_polys_within_distance_slide(&board, "0", 3);
+        assert_eq!(res.len(), 3);
+        assert!(res.contains("1"));
+        assert!(res.contains("2"));
+        assert!(res.contains("3"));
+        assert!(!res.contains("4"));
+    }
+
+    #[test]
+    fn test_heroe_sequence_lock_breaking_on_no_moves() {
+        let mut state = GameState::new(BoardMap { polygons: HashMap::new(), pieces: HashMap::new(), edges: HashMap::new(), width: None, height: None });
+        state.locked_sequence_piece = Some("H1".to_string());
+        state.heroe_take_counter = 1;
+        state.board.pieces.insert("H1".to_string(), Piece { id: "H1".to_string(), piece_type: PieceType::Heroe, side: Side::White, position: "A".to_string() });
+        apply_move_turnover(&mut state, "H1", "B", false, true, false);
+        assert!(state.locked_sequence_piece.is_none(), "Lock should break if Heroe has no bonus moves left or no targets");
+    }
+
+    #[test]
+    fn test_pass_turn_resets_state() {
+        let mut state = GameState::new(BoardMap { polygons: HashMap::new(), pieces: HashMap::new(), edges: HashMap::new(), width: None, height: None });
+        state.turn = Side::White;
+        state.moves_this_turn = 5;
+        state.locked_sequence_piece = Some("X".to_string());
+        pass_turn(&mut state);
+        assert_eq!(state.turn, Side::Black);
+        assert_eq!(state.moves_this_turn, 0);
+        assert!(state.locked_sequence_piece.is_none());
+    }
+
+    #[test]
+    fn test_is_mage_unlocked_false_at_start() {
+        let state = GameState::new(BoardMap { polygons: HashMap::new(), pieces: HashMap::new(), edges: HashMap::new(), width: None, height: None });
+        assert!(!state.is_mage_unlocked());
+    }
+
+    #[test]
+    fn test_set_color_chosen_clears_locks() {
+        let mut state = GameState::new(BoardMap { polygons: HashMap::new(), pieces: HashMap::new(), edges: HashMap::new(), width: None, height: None });
+        state.locked_sequence_piece = Some("X".to_string());
+        state.heroe_take_counter = 1;
+        state.set_color_chosen(Side::White, "blue");
+        assert!(state.locked_sequence_piece.is_none());
+        assert_eq!(state.heroe_take_counter, 0);
+    }
+
+    #[test]
+    fn test_apply_move_updates_occupancy() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("B".to_string(), Polygon { id: 2, name: "B".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec!["A".to_string()], neighbours: vec!["A".to_string()] });
+        let mut pieces = HashMap::new();
+        pieces.insert("P1".to_string(), Piece { id: "P1".to_string(), piece_type: PieceType::Soldier, side: Side::White, position: "A".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        apply_move(&mut state, "P1", "B");
+        assert_eq!(state.board.pieces["P1"].position, "B");
+        assert_eq!(state.occupancy["B"], "P1");
+        assert!(!state.occupancy.contains_key("A"));
+    }
+
+
+    #[test]
+    fn test_case_insensitive_color_chosen() {
+        let mut state = GameState::new(BoardMap { polygons: HashMap::new(), pieces: HashMap::new(), edges: HashMap::new(), width: None, height: None });
+        state.set_color_chosen(Side::White, "Blue");
+        assert_eq!(state.color_chosen[&Side::White], "blue");
+    }
+
+    #[test]
+    fn test_visitor_polygons_prevents_cycles() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("B".to_string(), Polygon { id: 2, name: "B".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec!["A".to_string()], neighbours: vec!["A".to_string()] });
+        let mut pieces = HashMap::new();
+        pieces.insert("S1".to_string(), Piece { id: "S1".to_string(), piece_type: PieceType::Soldier, side: Side::White, position: "A".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.set_color_chosen(Side::White, "blue");
+        state.visited_polygons.insert("B".to_string());
+        let moves = get_legal_moves(&state, "S1");
+        assert!(!moves.contains(&"B".to_string()), "Soldier cannot move to already visited polygon in same turn");
+    }
+
+    #[test]
+    fn test_setup_minotaur_placement_constraints() {
+        let mut polygons = HashMap::new();
+        polygons.insert("G_POS".to_string(), Polygon { id: 1, name: "G_POS".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["N1".to_string(), "N2".to_string()], neighbours: vec!["N1".to_string(), "N2".to_string()] });
+        polygons.insert("N1".to_string(), Polygon { id: 2, name: "N1".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec![], neighbours: vec![] });
+        polygons.insert("N2".to_string(), Polygon { id: 3, name: "N2".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [1.0, -1.0], points: vec![], neighbors: vec![], neighbours: vec![] });
+        let mut pieces = HashMap::new();
+        pieces.insert("G1".to_string(), Piece { id: "G1".to_string(), piece_type: PieceType::Goddess, side: Side::White, position: "G_POS".to_string() });
+        pieces.insert("M1".to_string(), Piece { id: "M1".to_string(), piece_type: PieceType::Minotaur, side: Side::White, position: "returned".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.setup_step = 2; 
+        state.turn = Side::White;
+        let placements = get_setup_legal_placements(&state);
+        assert!(placements.contains_key("M1"));
+        assert!(placements["M1"].contains(&"N1".to_string()));
+        assert!(placements["M1"].contains(&"N2".to_string()));
+    }
+
+    #[test]
+    fn test_is_mage_unlocked_with_redundant_choices() {
+        let mut state = GameState::new(BoardMap { polygons: HashMap::new(), pieces: HashMap::new(), edges: HashMap::new(), width: None, height: None });
+        state.set_color_chosen(Side::White, "blue");
+        state.set_color_chosen(Side::Black, "blue");
+        state.set_color_chosen(Side::White, "red");
+        state.set_color_chosen(Side::Black, "green");
+        state.set_color_chosen(Side::White, "yellow");
+        assert!(state.is_mage_unlocked());
+    }
+
+    #[test]
+    fn test_ghoul_movement_on_chosen_color_ends_turn() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("B".to_string(), Polygon { id: 2, name: "B".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec!["A".to_string()], neighbours: vec!["A".to_string()] });
+        let mut pieces = HashMap::new();
+        pieces.insert("G1".to_string(), Piece { id: "G1".to_string(), piece_type: PieceType::Ghoul, side: Side::White, position: "A".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.turn = Side::White;
+        state.set_color_chosen(Side::White, "blue");
+        apply_move(&mut state, "G1", "B");
+        apply_move_turnover(&mut state, "G1", "B", false, true, false);
+        assert_eq!(state.turn, Side::Black);
+    }
+
+    #[test]
+    fn test_minotaur_captured_piece_is_returned() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("B".to_string(), Polygon { id: 2, name: "B".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec!["A".to_string()], neighbours: vec!["A".to_string()] });
+        let mut pieces = HashMap::new();
+        pieces.insert("M1".to_string(), Piece { id: "M1".to_string(), piece_type: PieceType::Minotaur, side: Side::White, position: "A".to_string() });
+        pieces.insert("E1".to_string(), Piece { id: "E1".to_string(), piece_type: PieceType::Soldier, side: Side::Black, position: "B".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        apply_move(&mut state, "M1", "B");
+        assert_eq!(state.board.pieces["E1"].position, "returned");
+    }
+
+    #[test]
+    fn test_heroe_bonus_capture_same_color_ends_turn() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("B".to_string(), Polygon { id: 2, name: "B".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec!["A".to_string()], neighbours: vec!["A".to_string()] });
+        let mut pieces = HashMap::new();
+        pieces.insert("H1".to_string(), Piece { id: "H1".to_string(), piece_type: PieceType::Heroe, side: Side::White, position: "A".to_string() });
+        pieces.insert("E1".to_string(), Piece { id: "E1".to_string(), piece_type: PieceType::Soldier, side: Side::Black, position: "B".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.set_color_chosen(Side::White, "red");
+        apply_move(&mut state, "H1", "B");
+        apply_move_turnover(&mut state, "H1", "B", false, false, false);
+        assert_eq!(state.turn, Side::Black, "Heroe capture on CHOSEN color ends turn despite bonus rule");
+    }
+
+    #[test]
+    fn test_mage_blast_radius_slide_neighbors() {
+        let mut polygons = HashMap::new();
+        polygons.insert("Center".to_string(), Polygon { id: 1, name: "Center".to_string(), color: "blue".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["N1".to_string(), "N2".to_string()], neighbours: vec![] });
+        polygons.insert("N1".to_string(), Polygon { id: 2, name: "N1".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [1.0, 1.0], points: vec![], neighbors: vec!["Center".to_string()], neighbours: vec![] });
+        polygons.insert("N2".to_string(), Polygon { id: 3, name: "N2".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [-1.0, -1.0], points: vec![], neighbors: vec!["Center".to_string()], neighbours: vec![] });
+        let mut pieces = HashMap::new();
+        pieces.insert("M1".to_string(), Piece { id: "M1".to_string(), piece_type: PieceType::Mage, side: Side::White, position: "Center".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.board.pieces.insert("Target".to_string(), Piece { id: "Target".to_string(), piece_type: PieceType::Soldier, side: Side::Black, position: "Center".to_string() });
+        state.occupancy.insert("Center".to_string(), "Target".to_string());
+        apply_move(&mut state, "M1", "Center");
+        assert!(!state.occupancy.contains_key("N1"));
+        assert!(!state.occupancy.contains_key("N2"));
+    }
+
+    #[test]
+    fn test_siren_pinning_does_not_affect_friendly() {
+        let mut polygons = HashMap::new();
+        polygons.insert("A".to_string(), Polygon { id: 1, name: "A".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec!["B".to_string()], neighbours: vec!["B".to_string()] });
+        polygons.insert("C".to_string(), Polygon { id: 3, name: "C".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [2.0, 2.0], points: vec![], neighbors: vec!["A".to_string()], neighbours: vec!["A".to_string()] });
+        polygons.get_mut("A").unwrap().neighbors.push("C".to_string());
+        let mut pieces = HashMap::new();
+        pieces.insert("S1".to_string(), Piece { id: "S1".to_string(), piece_type: PieceType::Siren, side: Side::White, position: "B".to_string() });
+        pieces.insert("Soldier1".to_string(), Piece { id: "Soldier1".to_string(), piece_type: PieceType::Soldier, side: Side::White, position: "A".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Playing;
+        state.set_color_chosen(Side::White, "red");
+        let moves = get_legal_moves(&state, "Soldier1");
+        assert!(moves.contains(&"C".to_string()), "Friendly Soldier should NOT be pinned by Siren and should move to C");
+    }
+
+    #[test]
+    fn test_get_eligible_piece_ids_setup_phase() {
+        let mut state = GameState::new(BoardMap { polygons: HashMap::new(), pieces: HashMap::new(), edges: HashMap::new(), width: None, height: None });
+        state.phase = GamePhase::Setup;
+        state.setup_step = 0; 
+        state.board.pieces.insert("G1".to_string(), Piece { id: "G1".to_string(), piece_type: PieceType::Goddess, side: Side::White, position: "returned".to_string() });
+        state.board.pieces.insert("H1".to_string(), Piece { id: "H1".to_string(), piece_type: PieceType::Heroe, side: Side::White, position: "returned".to_string() });
+        let eligible = state.get_eligible_piece_ids();
+        assert!(eligible.contains(&"G1".to_string()));
+        assert!(!eligible.contains(&"H1".to_string()));
+    }
+
+    #[test]
+    fn test_setup_random_board_avoids_occupied() {
+        let mut polygons = HashMap::new();
+        polygons.insert("E1".to_string(), Polygon { id: 1, name: "E1".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [500.0, 10.0], points: vec![[0.0, 0.0], [1.0, 0.0], [0.5, 1.0]], neighbors: vec![], neighbours: vec![] });
+        let mut pieces = HashMap::new();
+        pieces.insert("BLOCKER".to_string(), Piece { id: "BLOCKER".to_string(), piece_type: PieceType::Soldier, side: Side::Black, position: "E1".to_string() });
+        let mut state = GameState::new(BoardMap { polygons, pieces, edges: HashMap::new(), width: Some(1000.0), height: Some(1000.0) });
+        state.occupancy.insert("E1".to_string(), "BLOCKER".to_string());
+        setup_random_board(&mut state, Some(Side::White));
+        assert_eq!(state.board.pieces["BLOCKER"].position, "E1", "Pre-occupied polygon should remain occupied by same piece");
+    }
+
+    #[test]
+    fn test_apply_move_turnover_goddess_captured_wins() {
+        let mut state = GameState::new(BoardMap { polygons: HashMap::new(), pieces: HashMap::new(), edges: HashMap::new(), width: None, height: None });
+        state.board.pieces.insert("P1".to_string(), Piece { id: "P1".to_string(), piece_type: PieceType::Goddess, side: Side::White, position: "P1".to_string() });
+        state.board.polygons.insert("P1".to_string(), Polygon { id: 1, name: "P1".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec![], neighbours: vec![] });
+        state.board.polygons.insert("P2".to_string(), Polygon { id: 2, name: "P2".to_string(), color: "red".to_string(), shape: "tri".to_string(), center: [0.0, 0.0], points: vec![], neighbors: vec![], neighbours: vec![] });
+        let won = apply_move_turnover(&mut state, "P1", "P2", true, false, false);
+        assert!(won);
+        assert_eq!(state.phase, GamePhase::GameOver);
+    }
+
+    #[test]
+    fn test_is_siren_pinned_no_neighbors() {
+        let state = GameState::new(BoardMap { polygons: HashMap::new(), pieces: HashMap::new(), edges: HashMap::new(), width: None, height: None });
+        assert!(!state.is_siren_pinned("Any", Side::White));
+    }
+
+    #[test]
+    fn test_board_map_width_height_defaults() {
+        let board = BoardMap { polygons: HashMap::new(), pieces: HashMap::new(), edges: HashMap::new(), width: None, height: None };
+        let state = GameState::new(board);
+        let mut state_clone = state.clone();
+        setup_random_board(&mut state_clone, Some(Side::White));
+    }
+
+    #[test]
+    fn test_advance_setup_step_beyond_limit() {
+        let mut state = GameState::new(BoardMap { polygons: HashMap::new(), pieces: HashMap::new(), edges: HashMap::new(), width: None, height: None });
+        state.setup_step = 4;
+        advance_setup_step(&mut state); 
+        state.phase = GamePhase::Playing; 
+        assert_eq!(state.phase, GamePhase::Playing);
+    }
 }
+
