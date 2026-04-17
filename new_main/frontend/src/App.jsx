@@ -4,6 +4,7 @@ import { socket, setSocketToken } from './socket';
 import LobbyPage from './components/LobbyPage';
 import AuthHeader from './components/AuthHeader';
 import GamePage from './components/GamePage';
+import GameBoard from './components/GameBoard';
 import LoginForm from './components/LoginForm';
 import RegistrationForm from './components/RegistrationForm';
 import BubbleBackground from './components/BubbleBackground';
@@ -79,6 +80,18 @@ function App() {
     socket.on('rating_updated', onRatingUpdated);
     return () => socket.off('rating_updated', onRatingUpdated);
   }, []);
+
+  // Kicked when another session logs in with the same account
+  useEffect(() => {
+    const onSessionConflict = ({ message }) => {
+      setUser(null);
+      localStorage.removeItem('jwt_token');
+      setSocketToken(null);
+      navigate('/', { state: { notification: message, notifType: 'error' } });
+    };
+    socket.on('session_conflict', onSessionConflict);
+    return () => socket.off('session_conflict', onSessionConflict);
+  }, [navigate]);
 
   const handleLoginSuccess = (userData) => {
     setUser(userData);

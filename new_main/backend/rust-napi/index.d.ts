@@ -141,6 +141,11 @@ export interface EndTurnSetupRequest {
 export declare function endTurnSetupNapi(req: EndTurnSetupRequest): ApplyMoveResponse
 export declare function applyMoveNapi(req: ApplyMoveRequest): ApplyMoveResponse
 export declare function passTurnPlayingNapi(req: ApplyMoveRequest): ApplyMoveResponse
+/**
+ * Voluntarily ends the Héros bonus turn segment without a pass penalty.
+ * The player chose not to use the bonus move; the turn simply passes to the opponent.
+ */
+export declare function endHeroeBonusNapi(req: ApplyMoveRequest): ApplyMoveResponse
 export declare function selectColorNapi(req: SelectColorRequest): ApplyMoveResponse
 export interface ReplayRequest {
   boardJson: string

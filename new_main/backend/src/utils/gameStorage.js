@@ -124,16 +124,19 @@ function glicko2Update(r, rd, sigma, rJ, rdJ, score) {
  */
 const saveMatchResult = async (
     gameId, timestamp, whiteName, blackName,
-    whitePlayerId, blackPlayerId, boardId, winner, moves, io
+    whitePlayerId, blackPlayerId, boardId, winner, moves, io,
+    tournamentId = null, tournamentRoundInfo = null
 ) => {
     try {
         // ── 1. Persist game record (direct, no queue needed) ──
         await getGamesDb().run(`
             INSERT INTO games (game_id, timestamp, white_name, black_name,
-                white_player_id, black_player_id, board_id, winner, moves)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                white_player_id, black_player_id, board_id, winner, moves,
+                tournament_id, tournament_round_info)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [gameId, timestamp, whiteName, blackName,
-            whitePlayerId, blackPlayerId, boardId, winner, JSON.stringify(moves)]);
+            whitePlayerId, blackPlayerId, boardId, winner, JSON.stringify(moves),
+            tournamentId, tournamentRoundInfo]);
 
         logger.info('Storage', `Match ${gameId} stored (winner=${winner}).`);
 

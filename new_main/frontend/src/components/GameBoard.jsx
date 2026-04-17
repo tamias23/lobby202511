@@ -1,8 +1,15 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { socket } from "../socket";
 import init, { get_legal_moves_wasm, get_eligible_pieces_wasm } from "../wasm_pkg/frontend_wasm";
 import Clock from "./Clock";
+import GridLayout, { noCompactor } from 'react-grid-layout';
+import 'react-grid-layout/css/styles.css';
+import 'react-resizable/css/styles.css';
+import {
+  DEFAULT_LANDSCAPE, DEFAULT_PORTRAIT,
+  loadLayout, saveLayout, clearLayout,
+} from '../layouts/defaultLayout';
 
 // ── Board Color Themes ─────────────────────────────────────────────────────────
 // 'default' = original CSS named colors (orange, green, blue, grey) — as shipped
@@ -509,6 +516,27 @@ const GameBoard = ({
   blackRating: initialBlackRating,
   tournamentId,
 }) => {
+  const [tournamentData, setTournamentData] = useState(null);
+
+  // Subscribe to Tournament Room if in a tournament game
+  useEffect(() => {
+    if (!socket || !tournamentId) return;
+    
+    socket.emit('enter_tournament_room', { tournamentId });
+    
+    const onTournUpdate = (data) => {
+      if (data.id === tournamentId || !data.id) {
+        setTournamentData(data);
+      }
+    };
+    
+    socket.on('tournament_update', onTournUpdate);
+    return () => {
+      socket.emit('leave_tournament_room', { tournamentId });
+      socket.off('tournament_update', onTournUpdate);
+    };
+  }, [socket, tournamentId]);
+
   const [wasmReady, setWasmReady] = useState(false);
   const [pieces, setPieces] = useState(initialState.pieces);
   const [turn, setTurn] = useState(initialState.turn);
@@ -570,6 +598,60 @@ const GameBoard = ({
     return () => mql.removeEventListener("change", handler);
   }, []);
 
+  // Ref to the outer game-board-container div — used by the ResizeObserver
+  // that drives GridLayout's width + rowHeight computation.
+  const containerRef = useRef(null);
+
+  // ── Dashboard layout (react-grid-layout) ────────────────────────────────
+  // Each panel (board, info, actions, color, mage, tournament, spectator) is a
+  // draggable + resizable grid item.  Layout is persisted per orientation.
+  const [layout, setLayout] = useState(() =>
+    loadLayout(isPortrait) || (isPortrait ? DEFAULT_PORTRAIT : DEFAULT_LANDSCAPE)
+  );
+
+  // When orientation changes, swap to the saved layout for that orientation.
+  useEffect(() => {
+    setLayout(loadLayout(isPortrait) || (isPortrait ? DEFAULT_PORTRAIT : DEFAULT_LANDSCAPE));
+  }, [isPortrait]);
+
+  // Container dimensions — needed to drive GridLayout width + dynamic rowHeight.
+  const [containerSize, setContainerSize] = useState({
+    width:  window.innerWidth,
+    height: window.innerHeight,
+  });
+  // Track the container's actual rendered size via ResizeObserver.
+  // The container has overflow:hidden + flex:1, so its height is fixed by
+  // the parent .game-page-wrapper and cannot grow from grid content.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      const { width, height } = entries[0].contentRect;
+      setContainerSize({ width, height });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Row height: 24 grid rows fill the viewport. Finer rows = finer resize control.
+  // On a 900px screen: rowHeight ≈ (900-12-150)/24 ≈ 30px
+  const GRID_ROWS   = 24;
+  const GRID_MARGIN = 6;
+  const GRID_PAD    = 6;
+  const rowHeight = Math.max(20, Math.floor(
+    (containerSize.height - 2 * GRID_PAD - (GRID_ROWS + 1) * GRID_MARGIN) / GRID_ROWS
+  ));
+
+  const handleLayoutChange = useCallback((newLayout) => {
+    setLayout(newLayout);
+    saveLayout(newLayout, isPortrait);
+  }, [isPortrait]);
+
+  const resetLayout = useCallback(() => {
+    clearLayout(isPortrait);
+    setLayout(isPortrait ? DEFAULT_PORTRAIT : DEFAULT_LANDSCAPE);
+  }, [isPortrait]);
+
   // ── Navigation ─────────────────────────────────────────────────────────────
   const navigate = useNavigate();
 
@@ -628,11 +710,12 @@ const GameBoard = ({
         maxY = Math.max(maxY, p[1]);
       });
     });
-    const pad = 20;
-    const topPad = isPortrait ? 40 : pad; // Tighter bounds now that overflow is visible (pieces can bleed over the header)
-    const vbX = minX - pad;
+    const padX = 60; // wide enough to include off-board piece clusters at x≈-33 (white) and x≈443 (black)
+    const pad = 20;  // vertical padding
+    const topPad = isPortrait ? 40 : pad;
+    const vbX = minX - padX;
     const vbY = minY - topPad;
-    const vbW = (maxX - minX) + pad * 2;
+    const vbW = (maxX - minX) + padX * 2;
     const vbH = (maxY - minY) + pad + topPad;
     return {
       boardCenter: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 },
@@ -893,6 +976,7 @@ const GameBoard = ({
       socket.off("game_over", handleGameOver);
       socket.off("game_aborted", handleGameAborted);
       socket.off('tournament_game_start', handleTournamentGameStart);
+      socket.emit("leave_game_room", { gameId });
     };
   }, [gameId]);
 
@@ -1115,6 +1199,24 @@ const GameBoard = ({
     // Track total returned per side for single-column stacking
     const returnedCounters = { white: 0, black: 0 };
 
+    // Pre-count off-board pieces per side so we can compute dynamic spacing.
+    // Only relevant for landscape — portrait uses a fixed grid.
+    const offBoardSideCounts = { white: 0, black: 0 };
+    if (!isPortrait) {
+      sortedPieces.forEach(p => {
+        if (p.position === 'returned' || p.position === 'graveyard') {
+          const s = p.side || (p.color === 'white' ? 'white' : 'black');
+          offBoardSideCounts[s]++;
+        }
+      });
+    }
+    // Available SVG height for the column (from startY=60 down to ~y=410).
+    const AVAIL_H = 350;
+    const MIN_STEP = 7.2;  // tight stacking (many pieces off-board)
+    const MAX_STEP = 28;   // comfortable spacing (few pieces off-board)
+    const getDynStep = (total) =>
+      total <= 0 ? MAX_STEP : Math.min(MAX_STEP, Math.max(MIN_STEP, AVAIL_H / total));
+
     return sortedPieces.map((piece) => {
       let cx = 0,
         cy = 0;
@@ -1142,11 +1244,11 @@ const GameBoard = ({
             cy = -5 + row * rowStep;
           }
         } else {
-          // Landscape: Zig-zag column stacking
-          const verticalStep = 7.2; // 6 * 1.2
-          const horizontalShift = 13; // half of 26 for total swing of 26
-          const isRight = count % 2 === 0;
-          const xOffset = isRight ? horizontalShift : -horizontalShift;
+          // Landscape: dynamic vertical spacing — pieces spread out as more are placed on the board.
+          const verticalStep = getDynStep(offBoardSideCounts[actualPieceSide]);
+          // Zig-zag only when pieces are tightly packed; at larger steps a straight column looks cleaner.
+          const horizontalShift = verticalStep < 16 ? 13 : 0;
+          const xOffset = horizontalShift > 0 ? (count % 2 === 0 ? horizontalShift : -horizontalShift) : 0;
 
           if (actualPieceSide === "white") {
             cx = -20 + xOffset;
@@ -1243,773 +1345,328 @@ const GameBoard = ({
   };
 
   return (
-    <div 
-      className="game-board-container" 
-      style={boardContainerStyle}
-      onClick={(e) => {
-        // Deselect if clicking the general game container (outside HUDs/SVGs)
-        if (e.target.classList.contains('game-board-container')) {
-          setSelectedPiece(null);
-          setLegalMoves([]);
-        }
-      }}
+    <div
+      ref={containerRef}
+      className="game-board-container"
     >
+      {/* ── Fixed overlays (outside GridLayout so CSS transforms don't trap them) ── */}
+
       {/* Connection-loss banner */}
       {isSocketDisconnected && (
         <div style={{
-          position: 'fixed',
-          top: 0, left: 0, right: 0,
-          zIndex: 9999,
-          background: 'rgba(220, 38, 38, 0.92)',
-          color: '#fff',
-          textAlign: 'center',
-          padding: '10px 16px',
-          fontSize: '14px',
-          fontWeight: 600,
-          backdropFilter: 'blur(8px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '10px',
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
+          background: 'rgba(220,38,38,0.92)', color: '#fff',
+          textAlign: 'center', padding: '10px 16px', fontSize: '14px',
+          fontWeight: 600, backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
         }}>
-          <span style={{ fontSize: '18px' }}>⚠️</span>
-          Connection lost — reconnecting… You will be redirected in 20 s if the connection is not restored.
+          <span style={{ fontSize: '18px' }}>&#9888;&#65039;</span>
+          Connection lost — reconnecting… You will be redirected in 20 s if not restored.
           <button
             onClick={() => navigate(tournamentId ? `/tournament/${tournamentId}` : '/', { replace: true })}
             style={{ marginLeft: 16, padding: '4px 12px', borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.2)', color: '#fff', cursor: 'pointer', fontWeight: 700 }}
-          >
-            Leave now
-          </button>
+          >Leave now</button>
         </div>
       )}
-      {/* Drawer Toggle Buttons (Removed as requested) */}
-      <div
-        className={`hud-panel hud-panel-left ${isLeftDrawerOpen ? 'drawer-open' : ''}`}
-        style={{ pointerEvents: "all" }}
-      >
 
-        {/* GAME INFO PANEL — merged with Clock */}
-        <div
-          className="glass-panel"
-          style={{ 
-            ...leftHudStyle, 
-            width: "100%", 
-            alignItems: "stretch",
-            position: "relative",
-            zIndex: 1,
-            overflow: "hidden"
-          }}
-        >
-          {/* Phase + Turn + Move counters — side by side */}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-around",
-              marginBottom: "12px",
-              fontSize: "13px",
-              paddingBottom: "10px",
-              borderBottom: "1px solid rgba(255,255,255,0.1)",
-            }}
-          >
-            <div style={{ textAlign: "center" }}>
-              <div style={{ opacity: 0.7, fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Phase</div>
-              <div style={{ fontWeight: "bold", fontSize: "14px", color: phase === "Setup" ? "#9b59b6" : phase === "Playing" ? "#2ecc71" : "#e74c3c" }}>
-                {phase}
-              </div>
-            </div>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ opacity: 0.7, fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Turn</div>
-              <div style={{ fontWeight: "bold", fontSize: "16px" }}>
-                {turnCounter || Math.floor((gameMoves?.length || 0) / 2) + 1}
-              </div>
-            </div>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ opacity: 0.7, fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Move</div>
-              <div style={{ fontWeight: "bold", fontSize: "16px" }}>
-                {gameMoves?.length || 0}
-              </div>
-            </div>
-          </div>
-
-          {/* Clocks */}
-          <Clock
-            clocks={clocks}
-            lastTurnTimestamp={lastTurnTimestamp}
-            turn={turn}
-            side={side}
-            phase={phase}
-            whiteName={formatUsername(whiteName, whiteRole)}
-            blackName={formatUsername(blackName, blackRole)}
-            whiteRating={whiteRating}
-            blackRating={blackRating}
-            whiteRole={whiteRole}
-            blackRole={blackRole}
-          />
-        </div>
-
-        {/* SPECTATOR INFO PANEL */}
-        {spectatorMode && (
-          <div
-            className="glass-panel"
-            style={{
-              marginTop: "10px",
-              padding: "14px",
-              width: "100%",
-              boxSizing: "border-box",
-              textAlign: "center",
-              border: "1px solid rgba(70, 176, 212, 0.3)",
-              background: "rgba(70, 176, 212, 0.06)",
-            }}
-          >
-            <div style={{ fontSize: "18px", marginBottom: "6px" }}>👁</div>
-            <div style={{ fontSize: "12px", fontWeight: "700", color: "#46b0d4", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "4px" }}>
-              Spectating
-            </div>
-            <div style={{ fontSize: "11px", opacity: 0.6, lineHeight: 1.4 }}>
-              You are watching this match live.
-            </div>
-          </div>
-        )}
-      </div>{/* end left hud-panel */}
-
-      {/* CENTER - Game Board */}
-      <div className="game-board-wrapper" style={{ position: 'relative', flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', minWidth: 0, minHeight: 0 }}>
-        <svg
-          ref={svgRef}
-          className="game-board-svg"
-          viewBox={boardViewBox}
-          preserveAspectRatio="xMidYMin meet"
-          style={svgStyle}
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              // Close drawers on mobile if clicking the empty background
-              setIsLeftDrawerOpen(false);
-              setIsRightDrawerOpen(false);
-              // Deselect piece if clicking background
-              setSelectedPiece(null);
-              setLegalMoves([]);
-            }
-          }}
-          onMouseMove={handleGlobalMouseMove}
-          onMouseUp={handleGlobalMouseUp}
-          onMouseLeave={handleGlobalMouseUp}
-          onTouchEnd={handleTouchEnd}
-        >
-          {renderBoard()}
-        </svg>
-
-        {selectedPiece && (
-          <div style={selectionInfoStyle}>
-            Selected: <strong>{selectedPiece.type}</strong>
-          </div>
-        )}
-      </div>
-
-      <div 
-        className={`hud-panel hud-panel-right ${isRightDrawerOpen ? 'drawer-open' : ''}`} 
-        style={{ pointerEvents: "all" }}
-      >
-
-        {phase === "Playing" && (
-        <div className="glass-panel" style={{ ...rightHudStyle, width: '100%' }}>
-          {true && (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "8px",
-                width: "100%",
-                padding: "8px 0",
-              }}
-            >
-              <span
-                style={{
-                  fontWeight: "bold",
-                  color: "#f1c40f",
-                  fontSize: "13px",
-                  textAlign: "center",
-                  height: "18px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {turn === side 
-                  ? (colorChosen[side] ? "Your Color:" : "Choose Color:") 
-                  : (colorChosen[turn] ? "Opponent Color:" : "Opponent Deciding...")}
-              </span>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "center",
-                  gap: "15px",
-                  height: isPortrait ? "45px" : "95px", // Strictly locked height prevents the board from jumping!
-                  alignItems: "center",
-                  flexWrap: isPortrait ? "nowrap" : "wrap",
-                }}
-              >
-                {(colorChosen[turn] ? [colorChosen[turn]] : ["grey", "green", "blue", "orange"]).map((color) => (
-                  <div
-                    key={color}
-                    onClick={() =>
-                      turn === side &&
-                      !colorChosen[side] &&
-                      socket.emit("color_selected", { gameId, color, side })
-                    }
-                    style={{
-                      width: "40px",
-                      height: "40px",
-                      backgroundColor: color,
-                      borderRadius: "50%",
-                      cursor: (turn === side && !colorChosen[side]) ? "pointer" : "default",
-                      border: `2px solid ${turn === side || colorChosen[turn] ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.2)"}`,
-                      transition: "all 0.2s ease",
-                      opacity: (turn === side || colorChosen[turn]) ? 1 : 0.4,
-                      boxShadow: (turn === side || colorChosen[turn]) ? `0 0 15px ${color}` : "none",
-                    }}
-                    onMouseOver={(e) =>
-                      turn === side &&
-                      !colorChosen[side] &&
-                      (e.target.style.transform = "scale(1.15)")
-                    }
-                    onMouseOut={(e) =>
-                      (e.target.style.transform = "scale(1)")
-                    }
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-        )}
-
-        {/* CHROMATIC UNLOCK COUNTER - Visible during Playing phase until Mage is unlocked */}
-        {phase === "Playing" && !mageUnlocked && (
-          <div className="glass-panel" style={{ width: '100%', padding: '14px 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', border: '1px solid rgba(255,165,0,0.25)' }}>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#f97316', letterSpacing: '0.05em', textTransform: 'uppercase', textAlign: 'center' }}>
-              🔒 Mage Locked
-            </div>
-            <div style={{ fontSize: '10px', opacity: 0.55, textAlign: 'center', lineHeight: 1.4 }}>
-              Choose all 4 colors to unlock
-            </div>
-            <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-              {['grey', 'green', 'blue', 'orange'].map((color) => {
-                const seen = colorsEverChosen.includes(color);
-                return (
-                  <div
-                    key={color}
-                    title={color}
-                    style={{
-                      width: '22px',
-                      height: '22px',
-                      borderRadius: '50%',
-                      backgroundColor: color === 'grey' ? '#9ca3af' : color,
-                      opacity: seen ? 1 : 0.2,
-                      boxShadow: seen ? `0 0 10px ${color === 'grey' ? '#9ca3af' : color}` : 'none',
-                      transition: 'all 0.4s ease',
-                      border: seen ? '2px solid rgba(255,255,255,0.8)' : '2px solid rgba(255,255,255,0.15)',
-                    }}
-                  />
-                );
-              })}
-            </div>
-            <div style={{ fontSize: '10px', opacity: 0.45, marginTop: '2px' }}>
-              {colorsEverChosen.length} / 4 seen
-            </div>
-          </div>
-        )}
-
-        {/* ACTIONS PANEL - (Now on Right, below Color) */}
-        <div 
-          className="glass-panel" 
-          style={{ 
-            ...rightHudStyle, 
-            width: '100%', 
-            padding: "15px 12px",
-            display: "flex",
-            flexDirection: "column",
-            gap: "10px"
-          }}
-        >
-          {(phase === "Setup" || phase === "Playing") && (
-            <button
-              onClick={() => {
-                if (turn !== side) return;
-                if (phase === "Setup") {
-                  if (movesThisTurn === 0) {
-                    // Block: no piece placed yet
-                    const el = document.getElementById('pass-warning-toast');
-                    if (el) { el.style.opacity = '1'; setTimeout(() => { if(el) el.style.opacity = '0'; }, 2500); }
-                    return;
-                  }
-                  socket.emit("end_turn_setup", { gameId });
-                } else {
-                  // Warn on 2nd pass (about to hit the 3-pass limit)
-                  const myPassCount = passCount[side] || 0;
-                  if (myPassCount === 2) {
-                    if (!passWarningShown) {
-                      setPassWarningShown(true);
-                      return; // first click shows the warning
-                    }
-                    setPassWarningShown(false);
-                  } else {
-                    setPassWarningShown(false);
-                  }
-                  socket.emit("pass_turn_playing", { gameId });
-                }
-              }}
-              onMouseOver={(e) => turn === side && (e.target.style.transform = "scale(1.03)")}
-              onMouseOut={(e) => turn === side && (e.target.style.transform = "scale(1)")}
-              style={{
-                ...buttonStyle,
-                backgroundColor: turn !== side ? '#7f8c8d' : (passWarningShown ? '#c0392b' : (phase === "Setup" ? "#2ecc71" : "#e67e22")),
-                boxShadow: turn !== side ? "none" : (passWarningShown
-                  ? '0 2px 8px rgba(192,57,43,0.5)'
-                  : phase === "Setup"
-                  ? "0 2px 8px rgba(46, 204, 113, 0.3)"
-                  : "0 2px 8px rgba(230, 126, 34, 0.3)"),
-                opacity: turn !== side ? 0.35 : 1,
-                cursor: turn !== side ? "not-allowed" : "pointer",
-                pointerEvents: turn !== side ? "none" : "auto",
-                width: "100%",
-                padding: "8px",
-                transition: 'all 0.2s',
-              }}
-            >
-              {turn !== side ? 'Waiting for opponent...' : (passWarningShown ? '⚠️ Confirm Pass' : 'End Turn')}
-            </button>
-          )}
-
-          {/* Pass warning toast (setup: no piece placed) */}
-          <div
-            id="pass-warning-toast"
-            style={{
-              fontSize: '11px',
-              color: '#e74c3c',
-              textAlign: 'center',
-              opacity: 0,
-              transition: 'opacity 0.3s',
-              pointerEvents: 'none',
-              lineHeight: 1.4,
-            }}
-          >
-            Place at least one piece first.
-          </div>
-
-          {phase === "Setup" && (
-            <button
-              onClick={() => {
-                if (turn === side) socket.emit("randomize_setup", { gameId, side })
-              }}
-              onMouseOver={(e) => turn === side && (e.target.style.transform = "scale(1.03)")}
-              onMouseOut={(e) => turn === side && (e.target.style.transform = "scale(1)")}
-              style={{
-                ...buttonStyle,
-                backgroundColor: turn !== side ? "#7f8c8d" : "#9b59b6",
-                boxShadow: turn !== side ? "none" : "0 2px 8px rgba(155, 89, 182, 0.3)",
-                opacity: turn !== side ? 0.35 : 1,
-                cursor: turn !== side ? "not-allowed" : "pointer",
-                pointerEvents: turn !== side ? "none" : "auto",
-                width: "100%",
-                padding: "8px"
-              }}
-            >
-              {turn !== side ? 'Waiting for opponent...' : 'Random Setup'}
-            </button>
-          )}
-
-          <button
-            onClick={() => setIsFlipped(!isFlipped)}
-            onMouseOver={(e) => (e.target.style.transform = "scale(1.03)")}
-            onMouseOut={(e) => (e.target.style.transform = "scale(1)")}
-            style={{
-              ...buttonStyle,
-              backgroundColor: "#34495e",
-              boxShadow: "0 2px 8px rgba(52, 73, 94, 0.3)",
-              width: "100%",
-              padding: "8px"
-            }}
-          >
-            Flip Board
-          </button>
-
-          {/* Resign button — only for active players during a live game */}
-          {!spectatorMode && phase !== 'GameOver' && (
-            resignConfirm ? (
-              <div style={{ display: 'flex', gap: '6px', width: '100%' }}>
-                <button
-                  onClick={() => {
-                    socket.emit('resign', { gameId });
-                    setResignConfirm(false);
-                  }}
-                  style={{
-                    ...buttonStyle,
-                    flex: 1,
-                    backgroundColor: '#c0392b',
-                    boxShadow: '0 2px 8px rgba(192,57,43,0.4)',
-                    padding: '8px 4px',
-                    fontSize: '12px',
-                  }}
-                >
-                  Yes, resign
-                </button>
-                <button
-                  onClick={() => setResignConfirm(false)}
-                  style={{
-                    ...buttonStyle,
-                    flex: 1,
-                    backgroundColor: '#2c3e50',
-                    boxShadow: '0 2px 8px rgba(44,62,80,0.3)',
-                    padding: '8px 4px',
-                    fontSize: '12px',
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setResignConfirm(true)}
-                onMouseOver={(e) => (e.target.style.transform = 'scale(1.03)')}
-                onMouseOut={(e) => (e.target.style.transform = 'scale(1)')}
-                style={{
-                  ...buttonStyle,
-                  backgroundColor: '#922b21',
-                  boxShadow: '0 2px 8px rgba(146,43,33,0.3)',
-                  width: '100%',
-                  padding: '8px',
-                }}
-              >
-                Resign
-              </button>
-            )
-          )}
-
-          {/* ── Settings Panel ── */}
-          <button
-            onClick={() => setShowSettings(s => !s)}
-            style={{
-              ...buttonStyle,
-              backgroundColor: showSettings ? "#1a252f" : "#2c3e50",
-              boxShadow: "0 2px 8px rgba(44,62,80,0.4)",
-              width: "100%",
-              padding: "8px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "6px",
-            }}
-          >
-            <span style={{ fontSize: "14px" }}>⚙️</span>
-            <span>Settings</span>
-            <span style={{ marginLeft: "auto", fontSize: "10px", opacity: 0.6 }}>{showSettings ? "▲" : "▼"}</span>
-          </button>
-
-          {showSettings && (
-            <div style={{
-              background: "rgba(0,0,0,0.35)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: "10px",
-              padding: "12px 10px",
-              display: "flex",
-              flexDirection: "column",
-              gap: "8px",
-              animation: "fadeIn 0.2s ease",
-            }}>
-              <div style={{ fontSize: "10px", fontWeight: "700", color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "2px" }}>
-                Board Colors
-              </div>
-              {Object.entries(THEME_LABELS).map(([key, label]) => {
-                const palette = COLOR_THEMES[key];
-                const isActive = colorTheme === key;
-                return (
-                  <button
-                    key={key}
-                    onClick={() => setColorTheme(key)}
-                    style={{
-                      background: isActive ? "rgba(255,255,255,0.12)" : "transparent",
-                      border: isActive ? "1px solid rgba(255,255,255,0.35)" : "1px solid rgba(255,255,255,0.08)",
-                      borderRadius: "8px",
-                      padding: "7px 10px",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                      width: "100%",
-                      transition: "all 0.15s",
-                    }}
-                  >
-                    {/* 4-swatch mini preview */}
-                    <span style={{ display: "flex", gap: "3px", flexShrink: 0 }}>
-                      {['orange','green','blue','grey'].map(c => (
-                        <span key={c} style={{
-                          width: "10px", height: "10px",
-                          borderRadius: "3px",
-                          background: palette[c],
-                          border: "1px solid rgba(0,0,0,0.3)",
-                          display: "inline-block",
-                        }} />
-                      ))}
-                    </span>
-                    <span style={{ fontSize: "11px", color: isActive ? "#fff" : "rgba(255,255,255,0.6)", fontWeight: isActive ? "700" : "400" }}>
-                      {label}
-                    </span>
-                    {isActive && <span style={{ marginLeft: "auto", fontSize: "10px", color: "#2ecc71" }}>✓</span>}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── Tournament Game Aborted Overlay ── */}
+      {/* Tournament Game Aborted Overlay */}
       {gameAbortedInfo && (
-        <div style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(0,0,0,0.78)",
-          backdropFilter: "blur(8px)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 10000, // above the normal game-over overlay
-        }}>
-          <div style={{
-            background: "var(--card-bg)",
-            border: "1px solid var(--border)",
-            borderRadius: "20px",
-            padding: "40px 48px",
-            textAlign: "center",
-            boxShadow: "0 24px 80px rgba(0,0,0,0.7)",
-            display: "flex",
-            flexDirection: "column",
-            gap: "20px",
-            minWidth: "300px",
-            maxWidth: "420px",
-          }}>
-            <div style={{ fontSize: "48px" }}>⏱️</div>
-            <h2 style={{ margin: 0, color: "var(--text-primary)", fontSize: "22px" }}>
-              Tournament Ended
-            </h2>
-            <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "15px", lineHeight: 1.6 }}>
-              The arena time has expired and this game has been <strong>interrupted</strong>.
-              No result has been recorded and ratings are unchanged.
-            </p>
-            {(gameAbortedInfo.tournamentId) && (
-              <button
-                style={{
-                  padding: "12px 24px",
-                  borderRadius: "10px",
-                  background: "var(--accent)",
-                  color: "#fff",
-                  border: "none",
-                  fontSize: "15px",
-                  fontWeight: "600",
-                  cursor: "pointer",
-                }}
-                onClick={() => navigate(`/tournament/${gameAbortedInfo.tournamentId}`)}
-              >
-                Return to Tournament
-              </button>
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.78)', backdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:10000 }}>
+          <div style={{ background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'20px', padding:'40px 48px', textAlign:'center', boxShadow:'0 24px 80px rgba(0,0,0,0.7)', display:'flex', flexDirection:'column', gap:'20px', minWidth:'300px', maxWidth:'420px' }}>
+            <div style={{ fontSize:'48px' }}>&#9201;&#65039;</div>
+            <h2 style={{ margin:0, color:'var(--text-primary)', fontSize:'22px' }}>Tournament Ended</h2>
+            <p style={{ margin:0, color:'var(--text-muted)', fontSize:'15px', lineHeight:1.6 }}>The arena time has expired and this game has been <strong>interrupted</strong>. No result has been recorded and ratings are unchanged.</p>
+            {gameAbortedInfo.tournamentId && (
+              <button style={{ padding:'12px 24px', borderRadius:'10px', background:'var(--accent)', color:'#fff', border:'none', fontSize:'15px', fontWeight:'600', cursor:'pointer' }}
+                onClick={() => navigate(`/tournament/${gameAbortedInfo.tournamentId}`)}>Return to Tournament</button>
             )}
           </div>
         </div>
       )}
 
-      {/* ── Game Over Overlay ── */}
+      {/* Game Over Overlay */}
       {showGameOverOverlay && !gameAbortedInfo && (
-        <div style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(0,0,0,0.72)",
-          backdropFilter: "blur(6px)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 9999,
-        }}>
-          <div style={{
-            background: "var(--card-bg)",
-            border: "1px solid var(--border)",
-            borderRadius: "20px",
-            padding: "40px 48px",
-            textAlign: "center",
-            boxShadow: "0 24px 80px rgba(0,0,0,0.6)",
-            display: "flex",
-            flexDirection: "column",
-            gap: "20px",
-            minWidth: "280px",
-          }}>
-            <div style={{ fontSize: "18px", fontWeight: "800", color: "var(--text-main)", fontFamily: "'Outfit', sans-serif" }}>
-              Game Over
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.72)', backdropFilter:'blur(6px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:9999 }}>
+          <div style={{ background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'20px', padding:'40px 48px', textAlign:'center', boxShadow:'0 24px 80px rgba(0,0,0,0.6)', display:'flex', flexDirection:'column', gap:'20px', minWidth:'280px' }}>
+            <div style={{ fontSize:'18px', fontWeight:'800', color:'var(--text-main)', fontFamily:"'Outfit',sans-serif" }}>Game Over</div>
+            <div style={{ fontSize:'13px', color:'var(--text-muted)', lineHeight:1.6 }}>
+              {gameOverInfo.reason==='timeout' ? 'Time ran out.'
+                : gameOverInfo.reason==='goddess_captured' ? 'Goddess captured.'
+                : gameOverInfo.reason==='abandoned' ? 'Opponent disconnected.'
+                : gameOverInfo.reason==='resign' ? 'A player resigned.'
+                : gameOverInfo.reason==='pass_limit' ? 'Passed 3 times in a row.' : null}
+              <br /><span style={{ color:'var(--text-main)', fontWeight:'600' }}>Winner: {gameOverInfo.winnerId}</span>
             </div>
-            <div style={{ fontSize: "13px", color: "var(--text-muted)", lineHeight: 1.6 }}>
-              {gameOverInfo.reason === "timeout"
-                ? "Time ran out."
-                : gameOverInfo.reason === "goddess_captured"
-                ? "Goddess captured."
-                : gameOverInfo.reason === "abandoned"
-                ? "Opponent disconnected."
-                : gameOverInfo.reason === "resign"
-                ? "A player resigned."
-                : gameOverInfo.reason === "pass_limit"
-                ? "Passed 3 times in a row."
-                : null}
-              <br />
-              <span style={{ color: "var(--text-main)", fontWeight: "600" }}>
-                Winner: {gameOverInfo.winnerId}
-              </span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {/* ── Rating changes ── */}
-              {ratingDelta && (
-                <div style={{
-                  background: 'var(--bg)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '12px',
-                  padding: '12px 16px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '6px',
-                  fontSize: '13px',
-                  fontFamily: "'Outfit', sans-serif",
-                }}>
-                  {[
-                    { label: whiteName || 'White', old: ratingDelta.whiteOld, nw: ratingDelta.whiteNew },
-                    { label: blackName || 'Black', old: ratingDelta.blackOld, nw: ratingDelta.blackNew },
-                  ].map(({ label, old: o, nw }) => {
-                    if (o == null || nw == null) return null;
-                    const diff = Math.round(nw) - Math.round(o);
-                    const sign = diff >= 0 ? '+' : '';
-                    const color = diff > 0 ? '#4caf82' : diff < 0 ? '#e05c5c' : 'var(--text-muted)';
-                    return (
-                      <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>{label}</span>
-                        <span style={{ color: 'var(--text-main)', letterSpacing: '0.02em' }}>
-                          {Math.round(o)}
-                          <span style={{ color: 'var(--text-muted)', margin: '0 4px' }}>→</span>
-                          {Math.round(nw)}
-                          <span style={{ color, fontWeight: 700, marginLeft: '6px' }}>({sign}{diff})</span>
-                        </span>
-                      </div>
-                    );
-                  })}
+            {ratingDelta && (
+              <div style={{ background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'12px', padding:'12px 16px', display:'flex', flexDirection:'column', gap:'6px', fontSize:'13px', fontFamily:"'Outfit',sans-serif" }}>
+                {[{label:whiteName||'White',old:ratingDelta.whiteOld,nw:ratingDelta.whiteNew},{label:blackName||'Black',old:ratingDelta.blackOld,nw:ratingDelta.blackNew}].map(({label,old:o,nw})=>{
+                  if(o==null||nw==null)return null;
+                  const diff=Math.round(nw)-Math.round(o);const sign=diff>=0?'+':'';
+                  const color=diff>0?'#4caf82':diff<0?'#e05c5c':'var(--text-muted)';
+                  return(<div key={label} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'8px'}}><span style={{color:'var(--text-muted)',fontWeight:600}}>{label}</span><span style={{color:'var(--text-main)',letterSpacing:'0.02em'}}>{Math.round(o)}<span style={{color:'var(--text-muted)',margin:'0 4px'}}>&rarr;</span>{Math.round(nw)}<span style={{color,fontWeight:700,marginLeft:'6px'}}>({sign}{diff})</span></span></div>);
+                })}
+              </div>
+            )}
+            <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+              {tournamentId ? (
+                <div style={{ display:'flex', gap:'8px' }}>
+                  <button onClick={() => navigate(`/tournament/${tournamentId}`)} style={{ flex:2, padding:'11px 18px', background:'linear-gradient(135deg,#46b0d4,#f27813)', color:'#fff', border:'none', borderRadius:'25px', fontSize:'14px', fontWeight:'700', cursor:'pointer', fontFamily:"'Outfit',sans-serif", letterSpacing:'0.03em', boxShadow:'0 4px 16px rgba(70,176,212,0.35)', transition:'transform 0.15s,box-shadow 0.15s' }} onMouseEnter={e=>{e.currentTarget.style.transform='scale(1.04)'}} onMouseLeave={e=>{e.currentTarget.style.transform='scale(1)'}}>Back to Tournament</button>
+                  <button onClick={() => navigate('/')} style={{ flex:1, padding:'11px 12px', background:'rgba(255,255,255,0.05)', color:'var(--text-muted)', border:'1px solid var(--border)', borderRadius:'25px', fontSize:'13px', fontWeight:'600', cursor:'pointer', fontFamily:"'Outfit',sans-serif", transition:'transform 0.15s' }} onMouseEnter={e=>{e.currentTarget.style.transform='scale(1.04)'}} onMouseLeave={e=>{e.currentTarget.style.transform='scale(1)'}}>Lobby</button>
                 </div>
+              ) : (
+                <button onClick={() => navigate('/')} style={{ padding:'11px 28px', background:'linear-gradient(135deg,#46b0d4,#f27813)', color:'#fff', border:'none', borderRadius:'25px', fontSize:'14px', fontWeight:'700', cursor:'pointer', fontFamily:"'Outfit',sans-serif", letterSpacing:'0.03em', boxShadow:'0 4px 16px rgba(70,176,212,0.35)', transition:'transform 0.15s,box-shadow 0.15s' }} onMouseEnter={e=>{e.currentTarget.style.transform='scale(1.04)'}} onMouseLeave={e=>{e.currentTarget.style.transform='scale(1)'}}>Back to Lobby</button>
               )}
-
-              <button
-                onClick={() => tournamentId ? navigate(`/tournament/${tournamentId}`) : navigate("/")}
-                style={{
-                  padding: "11px 28px",
-                  background: "linear-gradient(135deg, #46b0d4, #f27813)",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "25px",
-                  fontSize: "14px",
-                  fontWeight: "700",
-                  cursor: "pointer",
-                  fontFamily: "'Outfit', sans-serif",
-                  letterSpacing: "0.03em",
-                  boxShadow: "0 4px 16px rgba(70,176,212,0.35)",
-                  transition: "transform 0.15s, box-shadow 0.15s",
-                }}
-                onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.04)"; }}
-                onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; }}
-              >
-                {tournamentId ? '🏆 Back to Tournament' : 'Back to Lobby'}
-              </button>
-              <button
-                onClick={() => {
-                  const record = {
-                    version: 3,
-                    board_id: boardName,
-                    whiteName: whiteName || 'White',
-                    blackName: blackName || 'Black',
-                    winner: gameOverInfo.winnerId,
-                    reason: gameOverInfo.reason,
-                    timeControl: initialState.timeControl || null,
-                    board,
-                    moves: gameMoves,
-                  };
-                  navigate('/analysis', { state: { record } });
-                }}
-                style={{
-                  padding: "11px 28px",
-                  background: "rgba(70,176,212,0.15)",
-                  color: "#46b0d4",
-                  border: "1px solid rgba(70,176,212,0.4)",
-                  borderRadius: "25px",
-                  fontSize: "14px",
-                  fontWeight: "700",
-                  cursor: "pointer",
-                  fontFamily: "'Outfit', sans-serif",
-                  transition: "transform 0.15s",
-                }}
-                onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.04)"; }}
-                onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; }}
-              >
-                🔍 Review Game
-              </button>
-              <button
-                onClick={() => {
-                  const record = {
-                    version: 3,
-                    board_id: boardName,
-                    whiteName: whiteName || 'White',
-                    blackName: blackName || 'Black',
-                    winner: gameOverInfo.winnerId,
-                    reason: gameOverInfo.reason,
-                    timeControl: initialState.timeControl || null,
-                    moves: gameMoves,
-                  };
-                  const blob = new Blob([JSON.stringify(record, null, 2)], { type: 'application/json' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = `dedal_${boardName}_${Date.now()}.json`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                }}
-                style={{
-                  padding: "11px 28px",
-                  background: "rgba(255,255,255,0.05)",
-                  color: "var(--text-muted)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "25px",
-                  fontSize: "14px",
-                  fontWeight: "600",
-                  cursor: "pointer",
-                  fontFamily: "'Outfit', sans-serif",
-                  transition: "transform 0.15s",
-                }}
-                onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.04)"; }}
-                onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; }}
-              >
-                ⬇ Download JSON
-              </button>
+              <button onClick={() => navigate(`/review?gameId=${gameId}`)} style={{ padding:'11px 28px', background:'rgba(70,176,212,0.12)', color:'var(--primary)', border:'1px solid rgba(70,176,212,0.3)', borderRadius:'25px', fontSize:'14px', fontWeight:'600', cursor:'pointer', fontFamily:"'Outfit',sans-serif", transition:'transform 0.15s' }} onMouseEnter={e=>{e.currentTarget.style.transform='scale(1.04)'}} onMouseLeave={e=>{e.currentTarget.style.transform='scale(1)'}}>&#128269; Review Game</button>
+              <button onClick={() => { const record={version:3,board_id:boardName,whiteName:whiteName||'White',blackName:blackName||'Black',winner:gameOverInfo.winnerId,reason:gameOverInfo.reason,timeControl:initialState.timeControl||null,moves:gameMoves}; const blob=new Blob([JSON.stringify(record,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`dedal_${boardName}_${Date.now()}.json`; a.click(); URL.revokeObjectURL(url); }} style={{ padding:'11px 28px', background:'rgba(255,255,255,0.05)', color:'var(--text-muted)', border:'1px solid var(--border)', borderRadius:'25px', fontSize:'14px', fontWeight:'600', cursor:'pointer', fontFamily:"'Outfit',sans-serif", transition:'transform 0.15s' }} onMouseEnter={e=>{e.currentTarget.style.transform='scale(1.04)'}} onMouseLeave={e=>{e.currentTarget.style.transform='scale(1)'}}>&darr; Download JSON</button>
             </div>
           </div>
         </div>
       )}
 
 
+      {/* ── Floating Reset-Layout button — always accessible outside the grid ── */}
+      <button
+        onClick={resetLayout}
+        title="Reset panel layout to defaults"
+        style={{
+          position: 'absolute', top: 6, right: 6, zIndex: 9000,
+          width: 26, height: 26, borderRadius: 7,
+          border: '1px solid rgba(255,255,255,0.18)',
+          background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)',
+          color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: 15,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          transition: 'color 0.2s, border-color 0.2s',
+          lineHeight: 1,
+        }}
+        onMouseEnter={e => { e.currentTarget.style.color='#fff'; e.currentTarget.style.borderColor='rgba(255,255,255,0.5)'; }}
+        onMouseLeave={e => { e.currentTarget.style.color='rgba(255,255,255,0.5)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.18)'; }}
+      >&#8635;</button>
+
+      {/* ── Dashboard Grid ── */}
+      <GridLayout
+        className="game-layout"
+        layout={layout}
+        gridConfig={{
+          cols: 24,
+          rowHeight: rowHeight,
+          margin: [GRID_MARGIN, GRID_MARGIN],
+          containerPadding: [GRID_PAD, GRID_PAD]
+        }}
+        dragConfig={{ enable: true, handle: '.panel-drag-handle' }}
+        resizeConfig={{ enable: true, handles: ['ne'] }}
+        width={containerSize.width}
+        onLayoutChange={handleLayoutChange}
+        compactor={{ ...noCompactor, preventCollision: true }}
+        maxRows={99}
+        useCSSTransforms={true}
+      >
+
+        {/* ── BOARD PANEL ── */}
+        <div key="board" className="rgl-panel board-panel">
+          <div className="panel-drag-handle">&#8942; Board</div>
+          <div className="panel-content board-content">
+            <svg
+              ref={svgRef}
+              className="game-board-svg"
+              viewBox={boardViewBox}
+              preserveAspectRatio="xMidYMid meet"
+              style={svgStyle}
+              onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                  setIsLeftDrawerOpen(false);
+                  setIsRightDrawerOpen(false);
+                  setSelectedPiece(null);
+                  setLegalMoves([]);
+                }
+              }}
+              onMouseMove={handleGlobalMouseMove}
+              onMouseUp={handleGlobalMouseUp}
+              onMouseLeave={handleGlobalMouseUp}
+              onTouchEnd={handleTouchEnd}
+              onMouseDown={e => e.stopPropagation()}
+              onTouchStart={e => e.stopPropagation()}
+            >
+              {renderBoard()}
+            </svg>
+            {selectedPiece && (
+              <div style={selectionInfoStyle}>
+                Selected: <strong>{selectedPiece.type}</strong>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── INFO PANEL (phase, turn, clocks, player names/ELO) ── */}
+        <div key="info" className="rgl-panel">
+          <div className="panel-drag-handle">&#8942; Info</div>
+          <div className="panel-content">
+            <div className="glass-panel" style={{ ...leftHudStyle, width:'100%', alignItems:'stretch', position:'relative', zIndex:1, overflow:'hidden' }}>
+              {/* Phase / Turn / Move counters */}
+              <div style={{ display:'flex', justifyContent:'space-around', marginBottom:'12px', fontSize:'13px', paddingBottom:'10px', borderBottom:'1px solid rgba(255,255,255,0.1)' }}>
+                <div style={{ textAlign:'center' }}>
+                  <div style={{ opacity:0.7, fontSize:'10px', textTransform:'uppercase', letterSpacing:'0.05em' }}>Phase</div>
+                  <div style={{ fontWeight:'bold', fontSize:'14px', color: phase==='Setup'?'#9b59b6': phase==='Playing'?'#2ecc71':'#e74c3c' }}>{phase}</div>
+                </div>
+                <div style={{ textAlign:'center' }}>
+                  <div style={{ opacity:0.7, fontSize:'10px', textTransform:'uppercase', letterSpacing:'0.05em' }}>Turn</div>
+                  <div style={{ fontWeight:'bold', fontSize:'16px' }}>{turnCounter||Math.floor((gameMoves?.length||0)/2)+1}</div>
+                </div>
+                <div style={{ textAlign:'center' }}>
+                  <div style={{ opacity:0.7, fontSize:'10px', textTransform:'uppercase', letterSpacing:'0.05em' }}>Move</div>
+                  <div style={{ fontWeight:'bold', fontSize:'16px' }}>{gameMoves?.length||0}</div>
+                </div>
+              </div>
+              {/* Clocks */}
+              <Clock
+                clocks={clocks} lastTurnTimestamp={lastTurnTimestamp}
+                turn={turn} side={side} phase={phase}
+                whiteName={formatUsername(whiteName, whiteRole)}
+                blackName={formatUsername(blackName, blackRole)}
+                whiteRating={whiteRating} blackRating={blackRating}
+                whiteRole={whiteRole} blackRole={blackRole}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* ── ACTIONS PANEL (End Turn, Flip, Resign, Settings) ── */}
+        <div key="actions" className="rgl-panel">
+          <div className="panel-drag-handle">&#8942; Actions</div>
+          <div className="panel-content">
+            <div className="glass-panel" style={{ ...rightHudStyle, width:'100%', padding:'15px 12px', display:'flex', flexDirection:'column', gap:'10px' }}>
+              {(phase === 'Setup' || phase === 'Playing') && (
+                <button
+                  onClick={() => {
+                    if (turn !== side) return;
+                    if (phase === 'Setup') {
+                      if (movesThisTurn === 0) { const el=document.getElementById('pass-warning-toast'); if(el){el.style.opacity='1';setTimeout(()=>{if(el)el.style.opacity='0';},2500);} return; }
+                      socket.emit('end_turn_setup', { gameId });
+                    } else {
+                      const myPassCount = passCount[side]||0;
+                      if(myPassCount===2){if(!passWarningShown){setPassWarningShown(true);return;}setPassWarningShown(false);}else{setPassWarningShown(false);}
+                      socket.emit('pass_turn_playing', { gameId });
+                    }
+                  }}
+                  onMouseOver={e=>turn===side&&(e.target.style.transform='scale(1.03)')}
+                  onMouseOut={e=>turn===side&&(e.target.style.transform='scale(1)')}
+                  style={{ ...buttonStyle, backgroundColor:turn!==side?'#7f8c8d':(passWarningShown?'#c0392b':(phase==='Setup'?'#2ecc71':'#e67e22')), boxShadow:turn!==side?'none':(passWarningShown?'0 2px 8px rgba(192,57,43,0.5)':phase==='Setup'?'0 2px 8px rgba(46,204,113,0.3)':'0 2px 8px rgba(230,126,34,0.3)'), opacity:turn!==side?0.35:1, cursor:turn!==side?'not-allowed':'pointer', pointerEvents:turn!==side?'none':'auto', width:'100%', padding:'8px', transition:'all 0.2s' }}
+                >{turn!==side?'Waiting for opponent…':(passWarningShown?'&#9888;&#65039; Confirm Pass':'End Turn')}</button>
+              )}
+              <div id="pass-warning-toast" style={{ fontSize:'11px', color:'#e74c3c', textAlign:'center', opacity:0, transition:'opacity 0.3s', pointerEvents:'none', lineHeight:1.4 }}>Place at least one piece first.</div>
+              {phase === 'Setup' && (
+                <button
+                  onClick={() => { if(turn===side)socket.emit('randomize_setup',{gameId,side}); }}
+                  onMouseOver={e=>turn===side&&(e.target.style.transform='scale(1.03)')}
+                  onMouseOut={e=>turn===side&&(e.target.style.transform='scale(1)')}
+                  style={{ ...buttonStyle, backgroundColor:turn!==side?'#7f8c8d':'#9b59b6', boxShadow:turn!==side?'none':'0 2px 8px rgba(155,89,182,0.3)', opacity:turn!==side?0.35:1, cursor:turn!==side?'not-allowed':'pointer', pointerEvents:turn!==side?'none':'auto', width:'100%', padding:'8px' }}
+                >{turn!==side?'Waiting for opponent…':'Random Setup'}</button>
+              )}
+              <button onClick={() => setIsFlipped(!isFlipped)} onMouseOver={e=>(e.target.style.transform='scale(1.03)')} onMouseOut={e=>(e.target.style.transform='scale(1)')} style={{ ...buttonStyle, backgroundColor:'#34495e', boxShadow:'0 2px 8px rgba(52,73,94,0.3)', width:'100%', padding:'8px' }}>Flip Board</button>
+              {!spectatorMode && phase!=='GameOver' && (
+                resignConfirm ? (
+                  <div style={{ display:'flex', gap:'6px', width:'100%' }}>
+                    <button onClick={() => { socket.emit('resign',{gameId}); setResignConfirm(false); }} style={{ ...buttonStyle, flex:1, backgroundColor:'#c0392b', boxShadow:'0 2px 8px rgba(192,57,43,0.4)', padding:'8px 4px', fontSize:'12px' }}>Yes, resign</button>
+                    <button onClick={() => setResignConfirm(false)} style={{ ...buttonStyle, flex:1, backgroundColor:'#2c3e50', boxShadow:'0 2px 8px rgba(44,62,80,0.3)', padding:'8px 4px', fontSize:'12px' }}>Cancel</button>
+                  </div>
+                ) : (
+                  <button onClick={() => setResignConfirm(true)} onMouseOver={e=>(e.target.style.transform='scale(1.03)')} onMouseOut={e=>(e.target.style.transform='scale(1)')} style={{ ...buttonStyle, backgroundColor:'#922b21', boxShadow:'0 2px 8px rgba(146,43,33,0.3)', width:'100%', padding:'8px' }}>Resign</button>
+                )
+              )}
+              {/* Settings accordion */}
+              <button onClick={() => setShowSettings(s=>!s)} style={{ ...buttonStyle, backgroundColor:showSettings?'#1a252f':'#2c3e50', boxShadow:'0 2px 8px rgba(44,62,80,0.4)', width:'100%', padding:'8px', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px' }}>
+                <span style={{ fontSize:'14px' }}>&#9881;&#65039;</span><span>Settings</span><span style={{ marginLeft:'auto', fontSize:'10px', opacity:0.6 }}>{showSettings?'&#9650;':'&#9660;'}</span>
+              </button>
+              {showSettings && (
+                <div style={{ background:'rgba(0,0,0,0.35)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'10px', padding:'12px 10px', display:'flex', flexDirection:'column', gap:'8px', animation:'fadeIn 0.2s ease' }}>
+                  <div style={{ fontSize:'10px', fontWeight:'700', color:'rgba(255,255,255,0.5)', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:'2px' }}>Board Colors</div>
+                  {Object.entries(THEME_LABELS).map(([key,label]) => {
+                    const palette=COLOR_THEMES[key]; const isActive=colorTheme===key;
+                    return (
+                      <button key={key} onClick={() => setColorTheme(key)} style={{ background:isActive?'rgba(255,255,255,0.12)':'transparent', border:isActive?'1px solid rgba(255,255,255,0.35)':'1px solid rgba(255,255,255,0.08)', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', display:'flex', alignItems:'center', gap:'8px', width:'100%', transition:'all 0.15s' }}>
+                        <span style={{ display:'flex', gap:'3px', flexShrink:0 }}>{['orange','green','blue','grey'].map(c=>(<span key={c} style={{ width:'10px', height:'10px', borderRadius:'3px', background:palette[c], border:'1px solid rgba(0,0,0,0.3)', display:'inline-block' }}/>))}</span>
+                        <span style={{ fontSize:'11px', color:isActive?'#fff':'rgba(255,255,255,0.6)', fontWeight:isActive?'700':'400' }}>{label}</span>
+                        {isActive && <span style={{ marginLeft:'auto', fontSize:'10px', color:'#2ecc71' }}>&#10003;</span>}
+                      </button>
+                    );
+                  })}
+                  {/* Reset Layout button */}
+                  <div style={{ marginTop:'6px', paddingTop:'8px', borderTop:'1px solid rgba(255,255,255,0.08)' }}>
+                    <div style={{ fontSize:'10px', fontWeight:'700', color:'rgba(255,255,255,0.5)', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:'6px' }}>Layout</div>
+                    <button onClick={resetLayout} style={{ ...buttonStyle, background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.15)', fontSize:'11px', padding:'6px 10px', width:'100%', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px' }}>
+                      &#128260; Reset Layout
+                    </button>
+                  </div>
+                </div>
+              )}
+              {/* ── COLOR PICKER (Playing phase, inline in Actions) ── */}
+              {phase === 'Playing' && (
+                <div style={{ marginTop:'12px', paddingTop:'12px', borderTop:'1px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ fontSize:'10px', fontWeight:700, color:'rgba(255,255,255,0.45)', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'10px', textAlign:'center' }}>
+                    {turn===side ? (colorChosen[side] ? '&#9670; Your Color' : 'Choose Color') : (colorChosen[turn] ? 'Opponent Color' : 'Opponent Deciding…')}
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'center', gap:'12px', alignItems:'center', flexWrap:'wrap' }}>
+                    {(colorChosen[turn] ? [colorChosen[turn]] : ['grey','green','blue','orange']).map(color => (
+                      <div key={color}
+                        onClick={() => turn===side && !colorChosen[side] && socket.emit('color_selected',{gameId,color,side})}
+                        style={{ width:'44px', height:'44px', backgroundColor:color, borderRadius:'50%', cursor:(turn===side&&!colorChosen[side])?'pointer':'default', border:`3px solid ${turn===side||colorChosen[turn]?'rgba(255,255,255,0.85)':'rgba(255,255,255,0.2)'}`, opacity:(turn===side||colorChosen[turn])?1:0.4, boxShadow:(turn===side||colorChosen[turn])?`0 0 16px ${color}`:'none', transition:'all 0.2s ease' }}
+                        onMouseOver={e => turn===side && !colorChosen[side] && (e.target.style.transform='scale(1.18)')}
+                        onMouseOut={e => (e.target.style.transform='scale(1)')}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── MAGE LOCKED (Playing phase + not unlocked, inline in Actions) ── */}
+              {phase === 'Playing' && !mageUnlocked && (
+                <div style={{ marginTop:'12px', paddingTop:'12px', borderTop:'1px solid rgba(255,165,0,0.2)', display:'flex', flexDirection:'column', alignItems:'center', gap:'8px' }}>
+                  <div style={{ fontSize:'11px', fontWeight:700, color:'#f97316', letterSpacing:'0.05em', textTransform:'uppercase' }}>&#128274; Mage Locked</div>
+                  <div style={{ fontSize:'10px', opacity:0.5, textAlign:'center', lineHeight:1.4 }}>Choose all 4 colors</div>
+                  <div style={{ display:'flex', gap:'8px' }}>
+                    {['grey','green','blue','orange'].map(color => {
+                      const seen = colorsEverChosen.includes(color);
+                      return (
+                        <div key={color} title={color} style={{ width:'26px', height:'26px', borderRadius:'50%', backgroundColor:color==='grey'?'#9ca3af':color, opacity:seen?1:0.18, boxShadow:seen?`0 0 10px ${color==='grey'?'#9ca3af':color}`:'none', transition:'all 0.4s ease', border:seen?'2px solid rgba(255,255,255,0.85)':'2px solid rgba(255,255,255,0.12)' }}/>
+                      );
+                    })}
+                  </div>
+                  <div style={{ fontSize:'10px', opacity:0.45 }}>{colorsEverChosen.length} / 4 seen</div>
+                </div>
+              )}
+
+            </div>
+          </div>
+        </div>
+
+        {/* ── TOURNAMENT PANEL (conditionally shown) ── */}
+        {tournamentData && (
+          <div key="tournament" className="rgl-panel">
+            <div className="panel-drag-handle">&#8942; Tournament Info</div>
+            <div className="panel-content">
+              <div className="glass-panel" style={{ padding:'12px', borderRadius:'12px', border:'1px solid rgba(70,176,212,0.2)' }}>
+                {spectatorMode && (
+                  <div style={{ fontSize:'11px', color:'#46b0d4', fontWeight:800, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'4px' }}>
+                    &#128065; Spectating Live
+                  </div>
+                )}
+                <div style={{ fontSize:'11px', color:'var(--primary)', fontWeight:800, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'8px' }}>
+                  &#127942; {tournamentData.name||'Tournament'}
+                </div>
+                <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+                  {(tournamentData.standings||[]).slice(0,5).map((s,idx)=>{
+                    const isMe=s.username===playerName;
+                    const isOpponent=(side==='white'?blackName:whiteName)===s.username;
+                    return(<div key={s.user_id} style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', color:isMe?'var(--primary)':'var(--text-main)', fontWeight:(isMe||isOpponent)?700:400 }}><span>{idx+1}. {s.username}</span><span>{s.score}</span></div>);
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </GridLayout>
     </div>
   );
 };
-
-const boardContainerStyle = {
-  display: "flex",
-  flexDirection: "row",
-  justifyContent: "space-between",
-  alignItems: "stretch",
-  width: "100%",
-  height: "100%",
-  padding: "4px",
-  boxSizing: "border-box",
-  gap: "8px",
-};
-
 const leftHudStyle = {
   display: "flex",
   flexDirection: "column",

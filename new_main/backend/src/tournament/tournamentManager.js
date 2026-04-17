@@ -7,7 +7,7 @@
 
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcrypt');
-const { getTournamentsDb, getUsersDb } = require('../db');
+const { getTournamentsDb, getUsersDb, getTournamentGamesDb, rowsToObjects } = require('../db');
 const { swissPairings, roundRobinPairings, knockoutPairings, arenaPairings, knockoutTotalRounds } = require('./pairings');
 const { computeStandings, computeKnockoutBracket } = require('./standings');
 const logger = require('../utils/logger');
@@ -35,11 +35,24 @@ function initConfig(env) {
 
 // ─── Format limits ──────────────────────────────────────────────────────────
 const FORMAT_LIMITS = {
-    swiss:       { min: 6, max: 200 },
-    arena:       { min: 6, max: 200 },
-    knockout:    { min: 2, max: 64 },
-    round_robin: { min: 2, max: 10 },
+    swiss: { min: 4, max: 100 },
+    arena: { min: 4, max: 200 },
+    knockout: { min: 4, max: 128 },
+    round_robin: { min: 2, max: 20 }
 };
+
+// ─── Funny Name Generator ──────────────────────────────────────────────────
+function generateFunnyTournamentName() {
+    const adjectives = ['Majestic', 'Cursed', 'Eternal', 'Rapid', 'Sly', 'Golden', 'Shadow', 'Arcane', 'Furious', 'Elite', 'Radiant', 'Abyssal', 'Cosmic', 'Stealthy'];
+    const nouns = ['Minotaur', 'Triskelion', 'Polygon', 'Labyrinth', 'Goddess', 'Warrior', 'Sage', 'Relic', 'Citadel', 'Oracle', 'Monolith', 'Phantasm', 'Nexus', 'Zenith'];
+    const suffixes = ['Clash', 'Open', 'Championship', 'War', 'Trials', 'Invitational', 'Showdown', 'Masters', 'League', 'Saga', 'Gauntlet', 'Ascension', 'Frenzy', 'Duels'];
+    
+    const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
+    const noun = nouns[Math.floor(Math.random() * nouns.length)];
+    const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
+    
+    return `${adj} ${noun} ${suffix}`;
+}
 
 // ─── In-memory state ────────────────────────────────────────────────────────
 // Map<tournamentId, { ...dbRow, participants: [], games: [], arenaTimeout?, ... }>
@@ -153,6 +166,8 @@ async function createTournament(opts) {
         completed_at: null,
         remove_at: now + CONFIG.MAX_AGE_HOURS * 60 * 60 * 1000,
         current_round: 0,
+        name: opts.name || generateFunnyTournamentName(),
+        creator_username: opts.creatorUsername || opts.creatorId,
         participants: [],
         games: [],
     };
@@ -163,8 +178,8 @@ async function createTournament(opts) {
         INSERT INTO tournaments (id, creator_id, status, format, password_hash, has_password,
             max_participants, current_count, time_control_minutes, time_control_increment,
             board_id, rating_min, rating_max, duration_value, invited_bots, creator_plays,
-            launch_mode, launch_at, created_at, started_at, completed_at, remove_at, current_round)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            launch_mode, launch_at, created_at, started_at, completed_at, remove_at, current_round, name, creator_username)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
         tournament.id, tournament.creator_id, tournament.status, tournament.format,
         tournament.password_hash, tournament.has_password,
@@ -174,7 +189,7 @@ async function createTournament(opts) {
         tournament.duration_value, tournament.invited_bots, tournament.creator_plays,
         tournament.launch_mode, tournament.launch_at,
         tournament.created_at, tournament.started_at, tournament.completed_at,
-        tournament.remove_at, tournament.current_round,
+        tournament.remove_at, tournament.current_round, tournament.name, tournament.creator_username,
     ]);
 
     activeTournaments.set(id, tournament);
@@ -472,14 +487,27 @@ async function createTournamentGame(tournament, whiteId, blackId, timeControl) {
         role: blackId.startsWith('bot_') ? 'bot' : 'registered',
     };
 
+    // Calculate descriptive round info
+    let roundInfo = `Round ${tournament.current_round}`;
+    if (tournament.format === 'knockout') {
+        const totalRounds = knockoutTotalRounds(tournament.participants.length);
+        const remainingRounds = totalRounds - tournament.current_round + 1;
+        if (remainingRounds === 1) roundInfo = 'Final';
+        else if (remainingRounds === 2) roundInfo = 'Semi-final';
+        else if (remainingRounds === 3) roundInfo = 'Quarter-final';
+    }
+
     try {
-        const { hash, gameData } = await _createGameFn(whitePlayer, blackPlayer, timeControl, tournament.board_id);
-        gameData.tournamentId = tournament.id;
+        const { hash, gameData } = await _createGameFn(whitePlayer, blackPlayer, timeControl, tournament.board_id, { 
+            tournamentId: tournament.id,
+            roundInfo: roundInfo
+        });
 
         const gameEntry = {
             id: uuidv4().slice(0, 12),
             tournament_id: tournament.id,
             round: tournament.current_round,
+            round_info: roundInfo,
             white_id: whiteId,
             black_id: blackId,
             game_hash: hash,
@@ -492,15 +520,16 @@ async function createTournamentGame(tournament, whiteId, blackId, timeControl) {
 
         tournament.games.push(gameEntry);
 
-        // Persist
-        const db = getTournamentsDb();
+        // Persist to NEW tournament_games.duckdb
+        const db = getTournamentGamesDb();
         await db.run(`
-            INSERT INTO tournament_games (id, tournament_id, round, white_id, black_id, game_hash, result, white_score, black_score, started_at, completed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)
+            INSERT INTO tournament_games (id, tournament_id, round_info, white_player_id, black_player_id, board_id, winner, moves, white_score, black_score, started_at, completed_at, white_name, black_name, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?)
         `, [
-            gameEntry.id, gameEntry.tournament_id, gameEntry.round,
-            gameEntry.white_id, gameEntry.black_id, gameEntry.game_hash,
-            null, gameEntry.started_at, null,
+            gameEntry.id, gameEntry.tournament_id, gameEntry.round_info,
+            gameEntry.white_id, gameEntry.black_id, tournament.board_id,
+            null, null, gameEntry.started_at, null,
+            whitePlayer.username, blackPlayer.username, gameEntry.started_at
         ]);
 
         // Notify players
@@ -522,11 +551,13 @@ async function createTournamentGame(tournament, whiteId, blackId, timeControl) {
 
 
 // ─── On Game Complete (called from index.js) ────────────────────────────────
-async function onGameComplete(gameHash, winnerSide) {
+async function onGameComplete(gameHash, winnerSide, moves = []) {
     // Find which tournament game this belongs to
     for (const [tid, t] of activeTournaments) {
         const game = t.games.find(g => g.game_hash === gameHash && !g.result);
         if (!game) continue;
+
+        game.moves = moves; // Store moves temporarily to persist them
 
         // Determine result
         game.result = winnerSide || 'draw'; // 'white' | 'black' | 'draw'
@@ -553,10 +584,10 @@ async function onGameComplete(gameHash, winnerSide) {
             if (blackPart) { blackPart.score += CONFIG.DRAW_POINTS; blackPart.draws += 1; }
         }
 
-        // Persist scores
-        const db = getTournamentsDb();
-        await db.run(`UPDATE tournament_games SET result = ?, white_score = ?, black_score = ?, completed_at = ? WHERE id = ?`,
-            [game.result, game.white_score, game.black_score, game.completed_at, game.id]);
+        // Persist scores and MOVES to dedicated DB
+        const db = getTournamentGamesDb();
+        await db.run(`UPDATE tournament_games SET winner = ?, white_score = ?, black_score = ?, completed_at = ?, moves = ? WHERE id = ?`,
+            [game.result, game.white_score, game.black_score, game.completed_at, JSON.stringify(game.moves || []), game.id]);
         // Update participant scores
         if (whitePart) {
             await db.run(`UPDATE tournament_participants SET score = ?, wins = ?, draws = ?, losses = ? WHERE tournament_id = ? AND user_id = ?`,
@@ -799,6 +830,7 @@ function broadcastTournamentUpdate(tournamentId) {
 
     _ioRef.to(`tournament:${tournamentId}`).emit('tournament_update', {
         id: t.id,
+        name: t.name || 'Tournament',
         status: t.status,
         format: t.format,
         currentRound: t.current_round,
@@ -806,6 +838,15 @@ function broadcastTournamentUpdate(tournamentId) {
         currentCount: t.current_count,
         maxParticipants: t.max_participants,
         timeControl: { minutes: t.time_control_minutes, increment: t.time_control_increment },
+        creatorId: t.creator_id,
+        creatorName: t.creator_username || t.creator_id,
+        createdAt: t.created_at,
+        launchMode: t.launch_mode,
+        launchAt: t.launch_at,
+        boardId: t.board_id,
+        ratingMin: t.rating_min,
+        ratingMax: t.rating_max,
+        durationValue: t.duration_value,
         standings,
         bracket,
         games: t.games.map(g => ({
@@ -845,6 +886,7 @@ function getOpenTournaments() {
         if (t.status === 'open') {
             result.push({
                 id: t.id,
+                name: t.name || 'Tournament',
                 format: t.format,
                 hasPassword: t.has_password === 1,
                 currentCount: t.current_count,
@@ -871,6 +913,7 @@ function getActiveTournamentsList() {
         if (t.status === 'active' || t.status === 'completed') {
             result.push({
                 id: t.id,
+                name: t.name || 'Tournament',
                 format: t.format,
                 status: t.status,
                 currentRound: t.current_round,
@@ -890,19 +933,18 @@ function getTournamentById(id) {
 }
 
 // ─── Row → Object helpers ───────────────────────────────────────────────────
-function rowsToObjects(result) {
+// (rowsToObjects is imported from db.js)
+
+
+async function getTournamentGamesJson(tournamentId) {
     try {
-        const rows = result.getRows();
-        const columns = result.columnNames();
-        return rows.map(row => {
-            const obj = {};
-            columns.forEach((col, i) => {
-                obj[col] = row[i];
-            });
-            return obj;
-        });
+        const db = getTournamentGamesDb();
+        const res = await db.runAndReadAll(`SELECT * FROM tournament_games WHERE tournament_id = ? ORDER BY started_at ASC`, [tournamentId]);
+        const games = rowsToObjects(res);
+        return JSON.stringify(games, null, 2);
     } catch (e) {
-        return [];
+        logger.error('Tournament', `Failed to export games for ${tournamentId}:`, e.message);
+        return '[]';
     }
 }
 
@@ -923,4 +965,5 @@ module.exports = {
     getUserActiveTournament,
     pairIdleArenaPlayers,
     FORMAT_LIMITS,
+    getTournamentGamesJson,
 };

@@ -689,6 +689,39 @@ button { font-family: inherit; }
   background: rgba(34,197,94,0.18);
   border-color: rgba(34,197,94,0.6);
 }
+/* Disconnected / reconnecting game card */
+.active-game-card--disconnected {
+  border-color: rgba(251, 191, 36, 0.55);
+  background: rgba(251, 191, 36, 0.07);
+  animation: fadeIn 0.3s ease-out, disconnectPulse 2s ease-in-out infinite;
+}
+.active-game-card--disconnected:hover {
+  background: rgba(251, 191, 36, 0.13);
+  border-color: rgba(251, 191, 36, 0.8);
+}
+.agc-disconnect-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fbbf24;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+@keyframes disconnectPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(251,191,36,0); }
+  50%       { box-shadow: 0 0 10px 2px rgba(251,191,36,0.25); }
+}
+/* Rejoin button — shown instead of Watch when the logged-in user is a player */
+.agc-rejoin-btn {
+  border-color: rgba(251,191,36,0.5) !important;
+  background: rgba(251,191,36,0.12) !important;
+  color: #fbbf24 !important;
+}
+.agc-rejoin-btn:hover {
+  background: rgba(251,191,36,0.25) !important;
+  border-color: rgba(251,191,36,0.8) !important;
+}
 
 /* ─────────────────── NOTIFICATION TOAST ─────────────────── */
 .lobby-notification {
@@ -767,24 +800,35 @@ button { font-family: inherit; }
   text-align: center;
 }
 .game-page-wrapper {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100vh;
-  height: 100dvh; /* dynamic viewport height — excludes mobile browser chrome / status bar */
+  height: 100dvh;
   overflow: hidden;
 }
 
-/* Spectator banner */
+/* Spectator banner — transparent overlay, sits behind the board HUD panels */
 .spectator-banner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 10px 20px;
-  background: rgba(70,176,212,0.12);
-  border-bottom: 1px solid rgba(70,176,212,0.2);
+  background: transparent;
   font-size: 14px;
   font-weight: 600;
   color: var(--primary);
+  pointer-events: none; /* let board events pass through the strip */
+}
+/* Re-enable clicks on the actual buttons inside the banner */
+.spectator-banner button,
+.spectator-banner a {
+  pointer-events: all;
 }
 
 .back-to-lobby-btn {
@@ -824,6 +868,8 @@ button { font-family: inherit; }
 
 /* ─────────────────── GAME BOARD (existing) ─────────────────── */
 .game-board-container {
+  position: relative;
+  z-index: 2;
   animation: fadeIn 0.8s ease-out;
 }
 
@@ -835,10 +881,16 @@ svg polygon:hover {
   filter: brightness(1.1) drop-shadow(0 2px 4px rgba(0,0,0,0.2));
 }
 
-/* Game board SVG: disable browser touch handling so we can capture all touch events */
+/* Game board SVG: disable browser touch handling */
 .game-board-svg {
   touch-action: none;
   -webkit-user-drag: none;
+}
+
+/* Fine grey border on the wrapper — now correctly sized to board content */
+.game-board-wrapper {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
 }
 
 /* Piece group transitions — controlled by JS class */
@@ -905,17 +957,152 @@ svg polygon:hover {
   .game-list-panel { min-height: auto; }
 }
 
-/* ─── HUD Panels (Standard/Desktop) ─── */
-.hud-panel {
+/* ─── RGL Dashboard Panel System ─── */
+
+/* Outer container — just a full-size relative box for the GridLayout */
+.game-board-container {
+  position: relative;
+  width: 100%;
+  flex: 1;           /* fill remaining space in .game-page-wrapper flex column */
+  min-height: 0;     /* allow flex child to shrink below content size */
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Every grid item (panel) */
+.rgl-panel {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: clamp(8px, 2vh, 15px);
-  padding: clamp(6px, 1.5vw, 10px);
-  width: clamp(140px, 18vw, 180px);
-  min-width: 0;
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+  overflow: hidden;
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.10), 0 4px 16px rgba(0,0,0,0.25);
+  /* subtle glass bg so items are visible even without inner .glass-panel */
+  background: rgba(14,22,36,0.55);
+  backdrop-filter: blur(10px);
+  transition: box-shadow 0.2s;
+}
+.rgl-panel:hover {
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.18), 0 6px 24px rgba(0,0,0,0.35);
+}
+
+/* Board panel: transparent — the SVG is the visual */
+.board-panel {
+  background: transparent;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.15);
+}
+.board-panel:hover {
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.28);
+}
+
+/* Drag handle bar at the top of every panel */
+.panel-drag-handle {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  gap: 6px;
+  background: rgba(255,255,255,0.05);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  cursor: grab;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.35);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  user-select: none;
+  min-height: 22px;
+  border-radius: 10px 10px 0 0;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.panel-drag-handle:active { cursor: grabbing; }
+.panel-drag-handle:hover {
+  background: rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.75);
+}
+/* Keep board panel handle invisible by default (board is the star) */
+.board-panel .panel-drag-handle {
+  background: rgba(0,0,0,0.25);
+  color: rgba(255,255,255,0.2);
+}
+.board-panel .panel-drag-handle:hover {
+  background: rgba(0,0,0,0.45);
+  color: rgba(255,255,255,0.6);
+}
+
+/* Panel content area scrolls independently */
+.panel-content {
+  flex: 1;
+  overflow: auto;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and OS Edge */
+  padding: 8px;
+  box-sizing: border-box;
+  /* CSS container queries — content adapts to the panel's width */
+  container-type: inline-size;
+  container-name: panel;
+}
+
+.panel-content::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
+}
+
+/* Board panel content: no padding, no scroll */
+.board-content {
+  padding: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ─── React-Grid-Layout / React-Resizable theming ─── */
+
+/* Resize handle corners — style to match dark theme */
+.react-resizable-handle-ne {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  top: 0;
+  right: 0;
+  padding: 3px 3px 0 0;
+  background: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12'%3E%3Cpath fill='rgba(255,255,255,0.4)' d='M11 0L0 11v1h1L12 1V0z'/%3E%3Cpath fill='rgba(255,255,255,0.4)' d='M11 5L5 11h1.5L11 6.5z'/%3E%3C/svg%3E") no-repeat top right;
+  cursor: ne-resize;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+.react-resizable-handle-ne:hover { opacity: 1; }
+
+/* Panel shadow when being dragged */
+.react-grid-item.react-draggable-dragging {
+  box-shadow: 0 0 0 2px var(--primary, #46b0d4), 0 16px 48px rgba(0,0,0,0.55) !important;
   z-index: 100;
+  transition: none;
+}
+
+/* Panel shadow when being resized */
+.react-grid-item.resizing {
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.35), 0 16px 48px rgba(0,0,0,0.55) !important;
+  transition: none;
+}
+
+/* Placeholder ghost */
+.react-grid-item.react-grid-placeholder {
+  background: rgba(70,176,212,0.12);
+  border: 1px dashed rgba(70,176,212,0.4);
+  border-radius: 10px;
+  opacity: 1;
+}
+
+/* ─── Container queries for panel content scaling ─── */
+@container panel (max-width: 220px) {
+  .clock-time    { font-size: 1.05rem !important; }
+  .player-name   { font-size: 0.65rem !important; }
+  .phase-label   { display: none; }
+  .action-btn    { padding: 5px 6px !important; font-size: 11px !important; }
+  .color-swatch  { width: 28px !important; height: 28px !important; }
+}
+@container panel (max-width: 150px) {
+  .clock-time    { font-size: 0.85rem !important; }
+  .color-swatch  { width: 20px !important; height: 20px !important; }
+  .action-btn span { display: none; }
 }
 
 /* ─── Portrait layout: Compact Top Header ─── */
@@ -2144,4 +2331,32 @@ svg polygon:hover {
   .game-lists-section { grid-template-columns: 1fr !important; }
   .tourn-room-content { grid-template-columns: 1fr; }
   .tourn-format-grid { grid-template-columns: 1fr; }
+}
+
+/* Tournament Details Section */
+.tourn-details-panel {
+  padding: 1.25rem 1.5rem;
+  border-radius: 1rem;
+}
+.tourn-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1rem;
+}
+.tourn-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.tourn-detail-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.tourn-detail-value {
+  font-size: 0.9rem;
+  color: var(--text-main);
+  font-weight: 700;
 }

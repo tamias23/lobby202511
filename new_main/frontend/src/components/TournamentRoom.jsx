@@ -11,6 +11,7 @@ export default function TournamentRoom({ user }) {
 
   const [tournament, setTournament] = useState(null);
   const [showQuitConfirm, setShowQuitConfirm] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   // Tick counter — incremented every 500ms so the arena countdown re-renders
   // automatically, not just when a socket event arrives.
   const [, setTick] = useState(0);
@@ -39,15 +40,35 @@ export default function TournamentRoom({ user }) {
       }
     };
 
+    const onDownloadData = (data) => {
+      if (data.tournamentId !== id) return;
+      setIsDownloading(false);
+      try {
+        const blob = new Blob([data.json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `tournament_${id}_games.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error('Download failed:', e);
+      }
+    };
+
     socket.on('tournament_update', onUpdate);
     socket.on('tournament_game_start', onGameStart);
     socket.on('tournament_game_aborted', onGameAborted);
+    socket.on('tournament_games_download_data', onDownloadData);
 
     return () => {
       socket.emit('leave_tournament_room', { tournamentId: id });
       socket.off('tournament_update', onUpdate);
       socket.off('tournament_game_start', onGameStart);
       socket.off('tournament_game_aborted', onGameAborted);
+      socket.off('tournament_games_download_data', onDownloadData);
     };
   }, [socket, id, user, navigate]);
 
@@ -68,6 +89,12 @@ export default function TournamentRoom({ user }) {
     setShowQuitConfirm(false);
     navigate('/');
   }, [socket, id, navigate]);
+
+  const handleDownload = useCallback(() => {
+    if (!socket || isDownloading) return;
+    setIsDownloading(true);
+    socket.emit('download_tournament_games', { tournamentId: id });
+  }, [socket, id, isDownloading]);
 
   if (!tournament) {
     return (
@@ -98,8 +125,8 @@ export default function TournamentRoom({ user }) {
       <div className="tourn-room-header">
         <button className="tourn-back-link" onClick={() => navigate('/')}>← Lobby</button>
         <h1 className="tourn-room-title">
-          {FORMAT_LABELS[tournament.format] || tournament.format}
-          <span className="tourn-room-id">#{id}</span>
+          {tournament.name || tournament.id}
+          <span className="tourn-room-id">{FORMAT_LABELS[tournament.format] || tournament.format}</span>
         </h1>
         <div className="tourn-room-meta">
           <span className={`tourn-status tourn-status--${tournament.status}`}>
@@ -118,48 +145,87 @@ export default function TournamentRoom({ user }) {
 
       {/* Main content */}
       <div className="tourn-room-content">
-        {/* Standings panel */}
-        <div className="tourn-standings-panel glass-panel">
-          <h3 className="tourn-panel-title">Standings</h3>
-          <div className="tourn-standings-scroll">
-            <table className="tourn-standings-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Player</th>
-                  <th>Score</th>
-                  <th>W</th>
-                  <th>D</th>
-                  <th>L</th>
-                  {tournament.format === 'swiss' && <th>TB</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {(tournament.standings || []).map((s, i) => {
-                  const isMe = user && s.user_id === user.id;
-                  return (
-                    <tr key={s.user_id} className={isMe ? 'tourn-row--me' : ''}>
-                      <td className="tourn-rank">
-                        {i === 0 && isCompleted ? '🥇' : i === 1 && isCompleted ? '🥈' : i === 2 && isCompleted ? '🥉' : s.rank}
-                      </td>
-                      <td className="tourn-player-name">
-                        {s.is_bot ? '🤖 ' : ''}{s.username || s.user_id}
-                        {s.eliminated && <span className="tourn-eliminated">✗</span>}
-                      </td>
-                      <td className="tourn-score">{s.score}</td>
-                      <td>{s.wins}</td>
-                      <td>{s.draws}</td>
-                      <td>{s.losses}</td>
-                      {tournament.format === 'swiss' && <td>{(s.tiebreak || 0).toFixed(1)}</td>}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+        {/* Left Column: Details & Standings */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', overflow: 'hidden' }}>
+          
+          {/* Details Panel */}
+          <div className="tourn-details-panel glass-panel">
+            <h3 className="tourn-panel-title" style={{ marginBottom: '0.75rem' }}>Tournament Details</h3>
+            <div className="tourn-details-grid">
+              <div className="tourn-detail-item">
+                <span className="tourn-detail-label">Organizer</span>
+                <span className="tourn-detail-value">{tournament.creatorName || tournament.creatorId || 'System'}</span>
+              </div>
+              <div className="tourn-detail-item">
+                <span className="tourn-detail-label">Type</span>
+                <span className="tourn-detail-value" style={{ textTransform: 'capitalize' }}>{tournament.format || 'Standard'}</span>
+              </div>
+              <div className="tourn-detail-item">
+                <span className="tourn-detail-label">Created</span>
+                <span className="tourn-detail-value">{new Date(tournament.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
+              </div>
+              <div className="tourn-detail-item">
+                <span className="tourn-detail-label">Start Plan</span>
+                <span className="tourn-detail-value">
+                  {tournament.launchMode === 'at_time' ? `Scheduled at ${new Date(tournament.launchAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` :
+                   tournament.launchMode === 'when_complete' ? 'Starts when full' :
+                   'Either time or full'}
+                </span>
+              </div>
+              <div className="tourn-detail-item" style={{ gridColumn: '1 / -1' }}>
+                <span className="tourn-detail-label">Board</span>
+                <span className="tourn-detail-value">{tournament.boardId || 'Random'}</span>
+              </div>
+              <div className="tourn-detail-item">
+                <span className="tourn-detail-label">Rating</span>
+                <span className="tourn-detail-value">{tournament.ratingMin}–{tournament.ratingMax}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Standings panel */}
+          <div className="tourn-standings-panel glass-panel" style={{ flex: 1 }}>
+            <h3 className="tourn-panel-title">Standings</h3>
+            <div className="tourn-standings-scroll">
+              <table className="tourn-standings-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Player</th>
+                    <th>Score</th>
+                    <th>W</th>
+                    <th>D</th>
+                    <th>L</th>
+                    {tournament.format === 'swiss' && <th>TB</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(tournament.standings || []).map((s, i) => {
+                    const isMe = user && s.user_id === user.id;
+                    return (
+                      <tr key={s.user_id} className={isMe ? 'tourn-row--me' : ''}>
+                        <td className="tourn-rank">
+                          {i === 0 && isCompleted ? '🥇' : i === 1 && isCompleted ? '🥈' : i === 2 && isCompleted ? '🥉' : s.rank}
+                        </td>
+                        <td className="tourn-player-name">
+                          {s.username || s.user_id}
+                          {s.eliminated && <span className="tourn-eliminated">✗</span>}
+                        </td>
+                        <td className="tourn-score">{s.score}</td>
+                        <td>{s.wins}</td>
+                        <td>{s.draws}</td>
+                        <td>{s.losses}</td>
+                        {tournament.format === 'swiss' && <td>{(s.tiebreak || 0).toFixed(1)}</td>}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
-        {/* Games / Bracket panel */}
+        {/* Games / Bracket panel (Right Column) */}
         <div className="tourn-games-panel glass-panel">
           <h3 className="tourn-panel-title">
             {tournament.format === 'knockout' ? 'Bracket' : 'Games'}
@@ -175,11 +241,11 @@ export default function TournamentRoom({ user }) {
                     {round.matches.map((m, mi) => (
                       <div key={mi} className={`tourn-bracket-match glass-panel${m.result ? ' tourn-bracket-match--done' : ''}`}>
                         <div className={`tourn-bracket-player${m.result === 'white' ? ' tourn-bracket-player--winner' : ''}`}>
-                          {m.white?.is_bot ? '🤖 ' : ''}{m.white?.username || '?'}
+                          {m.white?.username || '?'}
                         </div>
                         <div className="tourn-bracket-vs">vs</div>
                         <div className={`tourn-bracket-player${m.result === 'black' ? ' tourn-bracket-player--winner' : ''}`}>
-                          {m.black?.is_bot ? '🤖 ' : ''}{m.black?.username || '?'}
+                          {m.black?.username || '?'}
                         </div>
                         {m.gameHash && !m.result && (
                           <button className="tourn-watch-btn" onClick={() => navigate(`/games/${m.gameHash}`)}>
@@ -232,7 +298,7 @@ export default function TournamentRoom({ user }) {
 
       {/* Footer */}
       <div className="tourn-room-footer">
-        {isParticipant && !isCompleted && (
+        {isParticipant && isOpen && (
           <div>
             {showQuitConfirm ? (
               <div className="tourn-quit-confirm">
@@ -247,12 +313,21 @@ export default function TournamentRoom({ user }) {
             )}
           </div>
         )}
-        <div className="tourn-room-info">
-          {tournament.boardId && <span>Board: {tournament.boardId}</span>}
-          {tournament.ratingMin > 0 && <span>Rating: {tournament.ratingMin}–{tournament.ratingMax}</span>}
-          {tournament.hasPassword && <span>🔒 Private</span>}
+        {(isCompleted || (tournament.games && tournament.games.length > 0)) && (
+          <button 
+            className="tourn-btn tourn-btn--secondary" 
+            onClick={handleDownload}
+            disabled={isDownloading}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+          >
+            {isDownloading ? 'Preparing...' : '📥 Download Games (JSON)'}
+          </button>
+        )}
+        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+          Tournament ID: <code style={{ color: 'var(--primary)' }}>{id}</code>
         </div>
       </div>
     </div>
   );
 }
+

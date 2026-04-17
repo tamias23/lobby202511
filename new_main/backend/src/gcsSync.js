@@ -83,8 +83,9 @@ async function restoreFromGcs() {
     logger.info('GCS', `Restoring databases from gs://${GCS_BUCKET} → ${DB_PATH}`);
     fs.mkdirSync(DB_PATH, { recursive: true });
 
-    await downloadFromGcs('users.duckdb',       path.join(DB_PATH, 'users.duckdb'));
-    await downloadFromGcs('tournaments.duckdb',  path.join(DB_PATH, 'tournaments.duckdb'));
+    await downloadFromGcs('users.duckdb',            path.join(DB_PATH, 'users.duckdb'));
+    await downloadFromGcs('tournaments.duckdb',      path.join(DB_PATH, 'tournaments.duckdb'));
+    await downloadFromGcs('tournament_games.duckdb', path.join(DB_PATH, 'tournament_games.duckdb'));
     // games.duckdb always starts fresh — no restore needed
     logger.info('GCS', 'Restore complete. games.duckdb starts fresh.');
 }
@@ -145,10 +146,11 @@ async function exportGamesParquet(getGamesDb) {
 /**
  * Run one full sync cycle: persist user/tournament DBs and export games.
  */
-async function runSync(getUsersDb, getTournamentsDb, getGamesDb) {
+async function runSync(getUsersDb, getTournamentsDb, getGamesDb, getTournamentGamesDb) {
     logger.info('GCS', 'Running sync cycle…');
-    await syncDbFile(getUsersDb(),       'users.duckdb');
-    await syncDbFile(getTournamentsDb(), 'tournaments.duckdb');
+    await syncDbFile(getUsersDb(),            'users.duckdb');
+    await syncDbFile(getTournamentsDb(),      'tournaments.duckdb');
+    await syncDbFile(getTournamentGamesDb(),  'tournament_games.duckdb');
     await exportGamesParquet(getGamesDb);
     logger.info('GCS', 'Sync cycle complete.');
 }
@@ -157,14 +159,14 @@ async function runSync(getUsersDb, getTournamentsDb, getGamesDb) {
  * Start the periodic 15-minute sync.
  * Call this AFTER initDb() is complete.
  */
-function startGcsSync(getUsersDb, getTournamentsDb, getGamesDb) {
+function startGcsSync(getUsersDb, getTournamentsDb, getGamesDb, getTournamentGamesDb) {
     if (!isGcpMode) {
         logger.debug('GCS', 'Local mode — GCS sync disabled.');
         return;
     }
     logger.info('GCS', `Sync scheduled every ${SYNC_INTERVAL_MS / 60000} minutes.`);
     const timer = setInterval(
-        () => runSync(getUsersDb, getTournamentsDb, getGamesDb)
+        () => runSync(getUsersDb, getTournamentsDb, getGamesDb, getTournamentGamesDb)
                 .catch(e => logger.error('GCS', 'Sync error:', e.message)),
         SYNC_INTERVAL_MS
     );

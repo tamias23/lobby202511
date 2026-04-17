@@ -51,11 +51,18 @@ const { saveMatchResult: _saveMatchResult } = require('./utils/gameStorage');
 
 // Wrapper: after saving a match result, also notify the tournament system (if applicable)
 const saveMatchResult = async (gameId, timestamp, whiteName, blackName, whitePlayerId, blackPlayerId, boardId, winner, moves, io) => {
-    await _saveMatchResult(gameId, timestamp, whiteName, blackName, whitePlayerId, blackPlayerId, boardId, winner, moves, io);
-    // Hook: if this game belongs to a tournament, update it
+    // 1. Determine tournament context from the in-memory game state
+    const game = lobby.activeGames.get(gameId);
+    const tournamentId = game?.tournamentId || null;
+    const roundInfo = game?.roundInfo || null;
+
+    // 2. Persist to main games log
+    await _saveMatchResult(gameId, timestamp, whiteName, blackName, whitePlayerId, blackPlayerId, boardId, winner, moves, io, tournamentId, roundInfo);
+
+    // 3. Hook: if this game belongs to a tournament, update it
     if (TOURNAMENTS_ENABLED) {
         try {
-            await tournamentManager.onGameComplete(gameId, winner);
+            await tournamentManager.onGameComplete(gameId, winner, moves);
         } catch (e) {
             logger.error('Tournament', 'onGameComplete error:', e.message);
         }
@@ -1122,6 +1129,15 @@ function buildLobbyStats() {
     };
 }
 
+// Returns true if 'userId' is currently an active (non-GameOver) player in any game.
+function isUserInActiveGame(userId) {
+    if (!userId) return false;
+    for (const [, game] of lobby.activeGames) {
+        if (game.phase !== 'GameOver' && (game.white === userId || game.black === userId)) return true;
+    }
+    return false;
+}
+
 function buildActiveGamesList() {
     return Array.from(lobby.activeGames.values()).map(g => ({
         hash: g.hash,
@@ -1134,6 +1150,9 @@ function buildActiveGamesList() {
         timeControl: g.timeControl,
         moveCount: g.moves ? g.moves.length : 0,
         phase: g.phase,
+        tournamentId: g.tournamentId || null,
+        // Flag a game where at least one player is currently disconnected
+        hasDisconnect: !!(g.whiteDisconnectedAt || g.blackDisconnectedAt),
     }));
 }
 
@@ -1195,6 +1214,17 @@ setInterval(() => {
     }
 }, 60 * 1000); // check every minute
 
+// ── Stale-game thresholds ────────────────────────────────────────────────────
+// Applied regardless of game phase — the clock starts at game creation.
+const BOTH_ABSENT_LIMIT_MS = 60_000;       // 60s both-absent → stale draw
+const STALE_GAME_LIMIT_MS  = 10 * 60_000; // 10min with no socket in room → stale draw
+
+// Helper: true when no socket currently subscribes to this game's room
+function noActiveSocketsInRoom(gameId) {
+    const room = io.sockets.adapter.rooms.get(gameId);
+    return !room || room.size === 0;
+}
+
 // Global Timeout Check
 setInterval(() => {
     const now = Date.now();
@@ -1203,6 +1233,62 @@ setInterval(() => {
 
         // Only the owner instance runs timeout checks to prevent duplicate game-over events
         if (game.ownerInstanceId && game.ownerInstanceId !== valkeySync.getInstanceId()) continue;
+
+        // ── STALE-GAME SWEEPS ────────────────────────────────────────────────
+        // These run before disconnect/clock checks and handle games that will
+        // never self-terminate because both players are long gone.
+
+        // Condition 1: Orphaned tournament game
+        // The parent tournament was cancelled/expired/never survived a restart.
+        // Attempt to record a draw result in the tournament (will no-op if gone).
+        if (game.tournamentId && TOURNAMENTS_ENABLED) {
+            const t = tournamentManager.getTournamentById(game.tournamentId);
+            if (!t) {
+                logger.info('Game', `Stale orphan tournament game ${gameId} (tournament ${game.tournamentId} gone). Removing as draw.`);
+                game.phase = 'GameOver';
+                io.to(gameId).emit('game_over', { winnerId: null, reason: 'tournament_ended', message: 'Tournament has ended.' });
+                saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, 'draw', game.moves, io)
+                    .catch(err => logger.error('Game', `Failed to save orphan tournament game ${gameId}:`, err));
+                try { tournamentManager.onGameComplete(gameId, null, game.moves || []); } catch (_) {}
+                releaseBotIfNeeded(game);
+                lobby.activeGames.delete(gameId);
+                valkeySync.syncGameDeleted(gameId);
+                broadcastLobbyUpdate(io);
+                continue;
+            }
+        }
+
+        // Condition 2: Both players absent simultaneously for too long
+        if (game.whiteDisconnectedAt && game.blackDisconnectedAt) {
+            const earliestDiscon = Math.min(game.whiteDisconnectedAt, game.blackDisconnectedAt);
+            if (now - earliestDiscon >= BOTH_ABSENT_LIMIT_MS) {
+                logger.info('Game', `Stale game ${gameId}: both players absent for ${Math.round((now - earliestDiscon) / 1000)}s. Removing as draw.`);
+                game.phase = 'GameOver';
+                io.to(gameId).emit('game_over', { winnerId: null, reason: 'abandoned', message: 'Both players disconnected.' });
+                saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, 'draw', game.moves, io)
+                    .catch(err => logger.error('Game', `Failed to save both-absent game ${gameId}:`, err));
+                releaseBotIfNeeded(game);
+                lobby.activeGames.delete(gameId);
+                valkeySync.syncGameDeleted(gameId);
+                broadcastLobbyUpdate(io);
+                continue;
+            }
+        }
+
+        // Condition 3: Game has been alive too long with no active socket in its room
+        // Applies to ALL phases — Setup games are NOT exempt.
+        if (game.gameStartTimestamp && (now - game.gameStartTimestamp) >= STALE_GAME_LIMIT_MS && noActiveSocketsInRoom(gameId)) {
+            logger.info('Game', `Stale game ${gameId}: no socket in room for ${Math.round((now - game.gameStartTimestamp) / 60000)}min (phase=${game.phase}). Removing as draw.`);
+            game.phase = 'GameOver';
+            io.to(gameId).emit('game_over', { winnerId: null, reason: 'abandoned', message: 'Game abandoned.' });
+            saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, 'draw', game.moves, io)
+                .catch(err => logger.error('Game', `Failed to save stale game ${gameId}:`, err));
+            releaseBotIfNeeded(game);
+            lobby.activeGames.delete(gameId);
+            valkeySync.syncGameDeleted(gameId);
+            broadcastLobbyUpdate(io);
+            continue;
+        }
 
         // --- DISCONNECTION HANDLING ---
         // Guest: Remove after 5s
@@ -1298,7 +1384,7 @@ function buildInitialState(gameData) {
 }
 
 // --- helper to create a game from two players ---
-async function createGame(whitePlayer, blackPlayer, timeControl, boardId) {
+async function createGame(whitePlayer, blackPlayer, timeControl, boardId, tournamentId = null, roundInfo = null) {
     const hash = getRandomHash();
 
     let randomBoardFile;
@@ -1371,6 +1457,8 @@ async function createGame(whitePlayer, blackPlayer, timeControl, boardId) {
         whiteDisconnectedAt: null,
         blackDisconnectedAt: null,
         ownerInstanceId: valkeySync.getInstanceId(),
+        tournamentId,
+        roundInfo,
     };
 
     // Fetch ratings from DB (non-blocking for guests)
@@ -1387,44 +1475,22 @@ async function createGame(whitePlayer, blackPlayer, timeControl, boardId) {
 }
 
 // --- helper to create a tournament game (with optional fixed board) ---
-async function createTournamentGame(whitePlayer, blackPlayer, timeControl, boardId) {
-    // If a fixed board is requested, temporarily swap in that board
-    let result;
-    if (boardId) {
-        const boardFile = boardPool.find(f => f === `${boardId}.json` || f.replace('.json', '') === boardId);
-        if (boardFile) {
-            result = await createGame(whitePlayer, blackPlayer, timeControl);
-            try {
-                const boardPath = path.join(BOARDS_PATH, boardFile);
-                const boardData = JSON.parse(fs.readFileSync(boardPath, 'utf8'));
-                result.gameData.board = boardData;
-                result.gameData.boardName = boardId;
-                const response = initGameStateNapi({ boardJson: JSON.stringify(boardData), randomSetup: false });
-                result.gameData.pieces = JSON.parse(response.piecesJson);
-            } catch (e) { logger.error('Tournament', 'Fixed board load error:', e.message); }
-        } else {
-            result = await createGame(whitePlayer, blackPlayer, timeControl);
-        }
-    } else {
-        result = await createGame(whitePlayer, blackPlayer, timeControl);
-    }
-
+async function createTournamentGame(whitePlayer, blackPlayer, timeControl, boardId, extraData = {}) {
+    const result = await createGame(whitePlayer, blackPlayer, timeControl, boardId, extraData?.tournamentId, extraData?.roundInfo);
     const { hash, gameData } = result;
+    
     gameData.botThinking = false;
 
     // ── Wire up bots ──
-    // Detect bot players by userId prefix or role
     const whiteIsBot = whitePlayer.userId?.startsWith('bot_') || whitePlayer.role === 'bot';
     const blackIsBot = blackPlayer.userId?.startsWith('bot_') || blackPlayer.role === 'bot';
 
-    // Look up bot config from the availableBots list by matching the constructed botId
     function findBotConfigByUserId(botUserId) {
         for (const b of availableBots) {
             if (`bot_${b.agent_type}_${b.model_name}` === botUserId) {
                 return { type: b.agent_type, modelName: b.model_name };
             }
         }
-        // Fallback: try to guess from userId (shouldn't happen if bot is registered)
         const suffix = botUserId.replace(/^bot_/, '');
         return { type: suffix, modelName: '' };
     }
@@ -1476,7 +1542,6 @@ async function createTournamentGame(whitePlayer, blackPlayer, timeControl, board
     }
 
     logger.info('Game', `Tournament game ${hash} wired: white=${whitePlayer.userId}${whiteIsBot?' (BOT)':''}, black=${blackPlayer.userId}${blackIsBot?' (BOT)':''}`);
-    logger.debug('Socket', `Notifying game room ${hash}`);
     return result;
 }
 
@@ -1495,6 +1560,17 @@ io.on('connection', (socket) => {
             logger.debug('Auth', `Socket ${socket.id} authenticated as ${decoded.username} (${decoded.id})`);
         } catch (e) {
             logger.debug('Auth', `Socket ${socket.id} had invalid/expired JWT, treating as guest.`);
+        }
+    }
+
+    // Enforce single session per registered user: kick any existing socket for this userId
+    if (socket.userId && !socket.userId.startsWith('guest_')) {
+        for (const [, s] of io.sockets.sockets) {
+            if (s.id !== socket.id && s.userId === socket.userId) {
+                logger.info('Auth', `Kicking stale session for ${socket.userId} (old: ${s.id}, new: ${socket.id})`);
+                s.emit('session_conflict', { message: 'You have connected from another location. This session is closing.' });
+                s.disconnect(true);
+            }
         }
     }
 
@@ -1537,7 +1613,13 @@ io.on('connection', (socket) => {
 
         const requestId = uuidv4();
         const effectiveUserId = userId || socket.userId || generateGuestId();
-        const effectiveRole = role || socket.userRole || 'guest';
+        const effectiveRole = socket.userRole || role || 'guest';
+
+        // Registered users can only be in one game at a time
+        if (effectiveRole !== 'guest' && isUserInActiveGame(effectiveUserId)) {
+            socket.emit('request_error', { message: 'You are already in an active game. Finish it before starting a new one.' });
+            return;
+        }
 
         lobby.gameRequests.push({
             requestId,
@@ -1581,9 +1663,20 @@ io.on('connection', (socket) => {
         }
 
         // Guest-only rule: guests can only play guests, registered users can play anyone
-        const acceptorRole = role || socket.userRole || 'guest';
-        if (req.role === 'guest' && acceptorRole !== 'guest') {
-            socket.emit('request_error', { message: 'Registered users cannot join guest-only requests.' });
+        // socket.userRole (from JWT) is authoritative; client role is fallback only
+        const acceptorRole = socket.userRole || role || 'guest';
+        if ((req.role === 'guest') !== (acceptorRole === 'guest')) {
+            const errorMsg = req.role === 'guest' 
+                ? 'Registered users cannot join guest-only requests.' 
+                : 'Guest users can only join guest-only requests.';
+            socket.emit('request_error', { message: errorMsg });
+            return;
+        }
+
+        // Registered users can only be in one game at a time
+        const effectiveAcceptorId = userId || socket.userId || null;
+        if (acceptorRole !== 'guest' && isUserInActiveGame(effectiveAcceptorId)) {
+            socket.emit('request_error', { message: 'You are already in an active game. Finish it before starting a new one.' });
             return;
         }
 
@@ -1603,8 +1696,8 @@ io.on('connection', (socket) => {
 
         // Randomize sides
         const isRequesterWhite = Math.random() > 0.5;
-        const requesterPlayer = { socketId: req.socketId, userId: req.userId, username: req.username };
-        const acceptorPlayer  = { socketId: socket.id, userId: effectiveUserId, username: effectiveUsername };
+        const requesterPlayer = { socketId: req.socketId, userId: req.userId, username: req.username, role: req.role };
+        const acceptorPlayer  = { socketId: socket.id, userId: effectiveUserId, username: effectiveUsername, role: acceptorRole };
 
         const whitePlayer = isRequesterWhite ? requesterPlayer : acceptorPlayer;
         const blackPlayer = isRequesterWhite ? acceptorPlayer  : requesterPlayer;
@@ -1639,9 +1732,16 @@ io.on('connection', (socket) => {
 
     // --- CREATE BOT GAME ---
     socket.on('create_bot_game', async ({ userId, username, role, timeControl, botConfig }) => {
+        // Role: JWT identity from socket is always authoritative; client role is fallback only
         const effectiveUserId = userId || socket.userId || generateGuestId();
         const effectiveUsername = username || effectiveUserId;
-        const effectiveRole = role || socket.userRole || 'guest';
+        const effectiveRole = socket.userRole || role || 'guest';
+
+        // Registered users can only be in one game at a time
+        if (effectiveRole !== 'guest' && isUserInActiveGame(effectiveUserId)) {
+            socket.emit('bot_error', { message: 'You are already in an active game. Finish it before starting a new one.' });
+            return;
+        }
 
         const agentType = botConfig?.type || 'greedy_jack';
         const modelName = botConfig?.modelName || 'rank_002_yYtlgZLn13';
@@ -1800,13 +1900,23 @@ io.on('connection', (socket) => {
             }
             socket.emit('tournament_update', {
                 id: t.id,
+                name: t.name || 'Tournament',
                 status: t.status,
                 format: t.format,
                 currentRound: t.current_round,
-                maxRounds: t.duration_value,
+                maxRounds: t.format === 'knockout' ? require('./tournament/pairings').knockoutTotalRounds(t.current_count) : t.duration_value,
                 currentCount: t.current_count,
                 maxParticipants: t.max_participants,
                 timeControl: { minutes: t.time_control_minutes, increment: t.time_control_increment },
+                creatorId: t.creator_id,
+                creatorName: t.creator_username || t.creator_id,
+                createdAt: t.created_at,
+                launchMode: t.launch_mode,
+                launchAt: t.launch_at,
+                boardId: t.board_id,
+                ratingMin: t.rating_min,
+                ratingMax: t.rating_max,
+                durationValue: t.duration_value,
                 standings,
                 bracket,
                 games: t.games.map(g => ({
@@ -1816,10 +1926,6 @@ io.on('connection', (socket) => {
                 })),
                 arenaEndAt: t.arenaEndAt || null,
                 hasPassword: t.has_password === 1,
-                boardId: t.board_id,
-                ratingMin: t.rating_min,
-                ratingMax: t.rating_max,
-                creatorId: t.creator_id,
             });
         } else {
             socket.emit('tournament_error', { message: 'Tournament not found.' });
@@ -1828,6 +1934,15 @@ io.on('connection', (socket) => {
 
     socket.on('leave_tournament_room', ({ tournamentId }) => {
         socket.leave(`tournament:${tournamentId}`);
+    });
+
+    socket.on('download_tournament_games', async ({ tournamentId }) => {
+        try {
+            const json = await tournamentManager.getTournamentGamesJson(tournamentId);
+            socket.emit('tournament_games_download_data', { tournamentId, json });
+        } catch (e) {
+            socket.emit('tournament_error', { message: 'Failed to prepare game export.' });
+        }
     });
 
 
@@ -1886,6 +2001,12 @@ io.on('connection', (socket) => {
             initialState: buildInitialState(game),
             tournamentId: game.tournamentId || null,
         });
+    });
+
+    socket.on('leave_game_by_hash', ({ hash }) => {
+        if (!hash) return;
+        socket.leave(hash);
+        logger.debug('Socket', `leave_game_by_hash ${hash}`);
     });
 
     // --- GAME ACTIONS ---
@@ -2525,6 +2646,12 @@ io.on('connection', (socket) => {
                 moves: game.moves || [],
             });
         }
+    });
+
+    socket.on('leave_game_room', ({ gameId }) => {
+        if (!gameId) return;
+        socket.leave(gameId);
+        logger.debug('Socket', `leave_game_room ${gameId}`);
     });
 
     socket.on('disconnect', () => {

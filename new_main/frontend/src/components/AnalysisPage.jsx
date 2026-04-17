@@ -468,7 +468,20 @@ const AnalysisPage = () => {
     <div className="al-page">
       {/* ── Header ── */}
       <div className="al-header glass-panel">
-        <button className="al-back-btn" onClick={() => navigate('/')}>← Lobby</button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {record?.tournamentId && (
+            <button 
+              className="al-back-btn" 
+              onClick={() => navigate(`/tournament/${record.tournamentId}`)}
+              style={{ borderColor: 'rgba(70,176,212,0.4)', color: 'var(--primary)' }}
+            >
+              ← Tournament
+            </button>
+          )}
+          <button className="al-back-btn" onClick={() => navigate('/')}>
+            {record?.tournamentId ? 'Lobby' : '← Lobby'}
+          </button>
+        </div>
         <div className="al-title-area">
           <span className="al-title-label">Analysis Room</span>
           {record && (

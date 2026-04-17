@@ -15,8 +15,34 @@
 # Example: VALKEY_ENABLED=true ./launch_back_and_front_and_bot.sh
 # Requires a Valkey/Redis instance: podman run -d -p 6379:6379 valkey/valkey
 # Without VALKEY_ENABLED=true, the server runs in single-instance mode.
+# podman run -d \
+#   --name local-valkey \
+#   -p 6379:6379 \
+#   docker.io/valkey/valkey:latest
 
-set -e
+set -euo
+
+if podman container exists "local-valkey"; then
+    echo "Container 'local-valkey' already exists. Ensuring it is started..."
+    podman start "local-valkey"
+else
+    echo "Container 'local-valkey' does not exist. Creating and starting..."
+    podman run -d \
+      --name "local-valkey" \
+      -p 6379:6379 \
+      docker.io/valkey/valkey:latest
+fi
+
+if podman container exists "local-firestore"; then
+    echo "Container 'local-firestore' already exists. Ensuring it is started..."
+    podman start "local-firestore"
+else
+    echo "Container 'local-firestore' does not exist. Creating and starting..."
+    podman run -d --name local-firestore \
+      -p 8200:8200 \
+      -e FIRESTORE_PROJECT_ID=my-local-firestore \
+      docker.io/mtlynch/firestore-emulator
+fi
 
 source ~/.nvm/nvm.sh && nvm use default
 

@@ -13,6 +13,10 @@ const GamePage = ({ user }) => {
   const [loading, setLoading]   = useState(true);
   // Guard: prevent double-emit of join_game_by_hash when the effect re-runs after user loads.
   const joinedRef = useRef(false);
+  const [tournamentData, setTournamentData] = useState(null);
+  
+  // Grab tournamentId from gameInfo or location state
+  const tournamentId = gameInfo?.tournamentId || location.state?.tournamentId || null;
 
   useEffect(() => {
     // State may already be passed from lobby navigation
@@ -25,6 +29,10 @@ const GamePage = ({ user }) => {
         opponent: stateFromNav.opponent,
         initialState: stateFromNav.initialState,
         spectator: false,
+        whiteRole: stateFromNav.initialState?.whiteRole,
+        blackRole: stateFromNav.initialState?.blackRole,
+        whiteName: stateFromNav.initialState?.whiteName,
+        blackName: stateFromNav.initialState?.blackName,
         whiteRating: stateFromNav.initialState?.whiteRating,
         blackRating: stateFromNav.initialState?.blackRating,
         tournamentId: stateFromNav.tournamentId || null,
@@ -75,8 +83,9 @@ const GamePage = ({ user }) => {
     socket.on('game_joined', onGameJoined);
     return () => {
       socket.off('game_joined', onGameJoined);
+      socket.emit('leave_game_by_hash', { hash });
     };
-  }, [hash, user]);
+  }, [socket, hash, user]);
 
   // On reconnect: re-register as a player so the server clears whiteDisconnectedAt
   // and sends a fresh game state. If the game was forfeited while disconnected,
@@ -94,19 +103,24 @@ const GamePage = ({ user }) => {
     return () => socket.off('connect', onConnect);
   }, [hash, user]);
 
+  // Handle Tournament Room Subscription
+  useEffect(() => {
+    if (!socket || !tournamentId) return;
 
-
-  if (loading && !gameInfo) {
-    return (
-      <div className="game-page-loading">
-        <div className="spinner" />
-        <p>Joining game…</p>
-      </div>
-    );
-  }
-
-  // Grab tournamentId from nav state (set when coming from TournamentRoom)
-  const tournamentId = gameInfo?.tournamentId || location.state?.tournamentId || null;
+    socket.emit('enter_tournament_room', { tournamentId });
+    
+    const onTournUpdate = (data) => {
+      if (data.id === tournamentId || !data.id) {
+        setTournamentData(data);
+      }
+    };
+    
+    socket.on('tournament_update', onTournUpdate);
+    return () => {
+      socket.emit('leave_tournament_room', { tournamentId });
+      socket.off('tournament_update', onTournUpdate);
+    };
+  }, [socket, tournamentId]);
 
   if (error) {
     return (
@@ -126,19 +140,39 @@ const GamePage = ({ user }) => {
     );
   }
 
+  if (loading && !gameInfo) {
+    return (
+      <div className="game-page-loading">
+        <div className="spinner" />
+        <p>Joining game…</p>
+      </div>
+    );
+  }
+
   if (!gameInfo) return null;
 
   return (
     <div className="game-page-wrapper">
       {gameInfo.spectator && (
         <div className="spectator-banner">
-          <span>👁 Spectating</span>
-          <SpectatorFlipToggle />
-          <button className="back-to-lobby-btn-small" onClick={() => navigate('/')}>← Lobby</button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {tournamentId && (
+              <button 
+                className="back-to-lobby-btn-small" 
+                onClick={() => navigate(`/tournament/${tournamentId}`)}
+                style={{ background: 'rgba(70,176,212,0.1)', borderColor: 'rgba(70,176,212,0.3)' }}
+              >
+                ← Tournament
+              </button>
+            )}
+            <button className="back-to-lobby-btn-small" onClick={() => navigate('/')} style={{ marginLeft: 0 }}>
+              {tournamentId ? 'Lobby' : '← Lobby'}
+            </button>
+          </div>
         </div>
       )}
+
       <GameBoard
-        gameId={hash}
         side={gameInfo.spectator ? 'spectator' : gameInfo.side}
         opponent={gameInfo.opponent}
         playerName={user?.username || user?.id || 'Guest'}
@@ -156,30 +190,5 @@ const GamePage = ({ user }) => {
   );
 };
 
-/* Small flip toggle for spectators */
-const SpectatorFlipToggle = () => {
-  const [perspective, setPerspective] = useState('white');
-  // We emit a custom event that GameBoard can listen to for spectator perspective
-  const toggle = () => {
-    const next = perspective === 'white' ? 'black' : 'white';
-    setPerspective(next);
-    window.dispatchEvent(new CustomEvent('spectator-flip', { detail: { perspective: next } }));
-  };
-  return (
-    <button style={flipBtnStyle} onClick={toggle} id="spectator-flip-btn">
-      {perspective === 'white' ? '⬜ White' : '⬛ Black'} ↔
-    </button>
-  );
-};
-
-const flipBtnStyle = {
-  padding: '4px 12px',
-  borderRadius: '8px',
-  border: '1px solid var(--border)',
-  background: 'var(--card-bg)',
-  color: 'var(--text-main)',
-  cursor: 'pointer',
-  fontSize: '13px',
-};
 
 export default GamePage;

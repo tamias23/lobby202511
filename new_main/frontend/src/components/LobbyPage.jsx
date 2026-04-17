@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { socket } from '../socket';
 
 // Color map for polygon colors → hex (shared with TournamentCreate)
@@ -65,6 +65,7 @@ const TIME_CONTROLS = [
 
 const LobbyPage = ({ user }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [gameRequests, setGameRequests] = useState([]);
   const [activeGames, setActiveGames]   = useState([]);
   const [liveStats, setLiveStats]       = useState({ onlineUsers: 0, activeGames: 0 });
@@ -93,6 +94,15 @@ const LobbyPage = ({ user }) => {
     setNotification({ msg, type });
     setTimeout(() => setNotification(null), 3500);
   };
+
+  // Show any one-shot notification passed via navigation state (e.g. session_conflict)
+  useEffect(() => {
+    if (location.state?.notification) {
+      showNotif(location.state.notification, location.state.notifType || 'info');
+      // Clear the state so refreshing doesn't re-show it
+      window.history.replaceState({}, '');
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Socket listeners ---
   useEffect(() => {
@@ -252,6 +262,13 @@ const LobbyPage = ({ user }) => {
   const handleSpectate = (game) => {
     navigate(`/games/${game.hash}`, {
       state: { spectator: true, gameHash: game.hash },
+    });
+  };
+
+  const handleRejoin = (game) => {
+    // Navigate as a player — server will re-identify via socket.userId and clear the disconnect timer
+    navigate(`/games/${game.hash}`, {
+      state: { gameHash: game.hash, tournamentId: game.tournamentId || null },
     });
   };
 
@@ -600,9 +617,18 @@ const LobbyPage = ({ user }) => {
             <div className="game-list-empty">No games in progress.<br /><span>Start one above!</span></div>
           ) : (
             <div className="game-list-scroll">
-              {activeGames.map((game) => (
-                <div key={game.hash} className="active-game-card">
+              {[...activeGames]
+                // Disconnected games bubble to top
+                .sort((a, b) => (b.hasDisconnect ? 1 : 0) - (a.hasDisconnect ? 1 : 0))
+                .map((game) => (
+                <div
+                  key={game.hash}
+                  className={`active-game-card${game.hasDisconnect ? ' active-game-card--disconnected' : ''}`}
+                >
                   <div className="agc-left">
+                    {game.hasDisconnect && (
+                      <span className="agc-disconnect-badge">⚡ Reconnecting…</span>
+                    )}
                     <span className="agc-players">
                       {formatUsername(game.whiteName, game.whiteRole || 'guest')} <span className="agc-vs">vs</span> {formatUsername(game.blackName, game.blackRole || 'guest')}
                     </span>
@@ -611,13 +637,23 @@ const LobbyPage = ({ user }) => {
                     </span>
                   </div>
                   <div className="agc-right">
-                    <button
-                      className="agc-spectate-btn"
-                      id={`spectate-${game.hash}`}
-                      onClick={() => handleSpectate(game)}
-                    >
-                      Watch
-                    </button>
+                    {user && (game.white === user.id || game.black === user.id) ? (
+                      <button
+                        className="agc-spectate-btn agc-rejoin-btn"
+                        id={`rejoin-${game.hash}`}
+                        onClick={() => handleRejoin(game)}
+                      >
+                        ▶ Rejoin
+                      </button>
+                    ) : (
+                      <button
+                        className="agc-spectate-btn"
+                        id={`spectate-${game.hash}`}
+                        onClick={() => handleSpectate(game)}
+                      >
+                        Watch
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -638,8 +674,8 @@ const LobbyPage = ({ user }) => {
               {openTournaments.map((t) => (
                 <div key={t.id} className="game-request-card">
                   <div className="grc-left">
-                    <span className="grc-user">{formatLabel[t.format] || t.format}</span>
-                    <span className="grc-tc">{t.timeControl.minutes}+{t.timeControl.increment}</span>
+                    <span className="grc-user">{t.name || formatLabel[t.format]}</span>
+                    <span className="grc-tc">by {t.creator_username || 'System'} · {t.timeControl.minutes}+{t.timeControl.increment}</span>
                     <span className="grc-time">
                       {t.currentCount}/{t.maxParticipants}
                       {t.hasPassword && ' 🔒'}
@@ -668,11 +704,11 @@ const LobbyPage = ({ user }) => {
                 <div key={t.id} className="active-game-card">
                   <div className="agc-left">
                     <span className="agc-players">
-                      {formatLabel[t.format] || t.format}
+                      {t.name || formatLabel[t.format]}
                       {t.status === 'completed' && ' ✅'}
                     </span>
                     <span className="agc-meta">
-                      {t.timeControl.minutes}+{t.timeControl.increment}
+                      by {t.creator_username || 'System'} · {t.timeControl.minutes}+{t.timeControl.increment}
                       {t.format !== 'arena' ? ` · R${t.currentRound}/${t.maxRounds}` : ''}
                       {' · '}{t.currentCount} players
                     </span>
