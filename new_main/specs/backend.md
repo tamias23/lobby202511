@@ -16,13 +16,13 @@ Heavy game logic is offloaded to the Rust engine via `@napi-rs/cli` generated bi
 - `applyMoveNapi`: Mutates the game state and handles captures/AoE.
 - `initGameStateNapi`: Bootstraps a new game with selected board and pieces.
 
-### 3. Database Layer (DuckDB)
-The project uses **DuckDB** as an embedded analytical engine.
-- **Persistence**: Database files are stored in `backend/db/` and synchronized to Google Cloud Storage (GCS) periodically.
-- **Lazy Connection Strategy**: 
-  - Connections are opened only when a query is made.
-  - An idle timer (30s) closes connections and performs a `CHECKPOINT` to flush the Write-Ahead Log (WAL).
-  - This ensures data integrity even if the container is killed.
+### 3. Database Layer (Firestore)
+The project uses **Google Cloud Firestore** as its persistent document database.
+- **Collections**: `users`, `profiles`, `games`, `tournaments`, `tournament_participants`.
+- **Connection Manager** (`firestoreAdapter.js`): Manages Firestore connection with 15-second retry on failure. Locally connects to the Firestore emulator (`FIRESTORE_EMULATOR_HOST=localhost:8200`). On GCP, uses default credentials.
+- **Graceful Degradation**: If Firestore is unavailable, the game engine continues running in memory. Auth and persistence operations will fail gracefully.
+- **Game Offload**: Old games (beyond `GAME_RETENTION_DAYS`, default 7) are periodically exported to Parquet files on `/mnt/db` using DuckDB in-memory, then deleted from Firestore. This runs every 24h in GCP mode only.
+- **Minimal Interaction**: All real-time game state lives in memory, synced via Valkey. Firestore is only used for durable persistence of users, completed games, and tournament metadata. See `specs/about_firestore.md` for the full interaction inventory.
 
 ### 4. Distributed State Synchronization (`valkeySync.js`)
 To support horizontal scaling, instances replicate state using Valkey (Redis-compatible):
@@ -42,11 +42,13 @@ The server is configured via a YAML file mapped to environment variables.
 | `JWT_SECRET` | Secret for HS256 signing of tokens | (Managed) |
 | `BOT_SERVER_URL` | Endpoint for the Rust Bot Server | `http://localhost:5001` |
 | `MCTS_DEFAULT_BUDGET_MS` | Time target for bot move calculation | `500` |
+| `FIRESTORE_PROJECT_ID` | GCP project ID for Firestore | `my-local-firestore` |
+| `GAME_RETENTION_DAYS` | Days to keep games before Parquet offload | `7` |
 
 ## Authentication Flow
 
 1. **Guest**: Generates a long random string, hashes it (SHA-256), and returns a `guest_[hash]` ID.
-2. **Registration**: Validates email unique constraint, hashes password with Bcrypt (rounds: 10), and stores in `users.duckdb`.
+2. **Registration**: Validates email unique constraint, hashes password with Bcrypt (rounds: 10), and stores in Firestore `users` collection.
 3. **JWT**: tokens are signed with `JWT_SECRET` and include `userId`, `username`, and `role`.
 
 ---

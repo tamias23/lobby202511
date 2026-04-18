@@ -1,4 +1,12 @@
-const { getGamesDb, getUsersDb } = require('../db');
+/**
+ * gameStorage.js — Persists completed games and updates Glicko-2 ratings.
+ *
+ * Uses Firestore via the db.js facade.
+ */
+
+'use strict';
+
+const db = require('../db');
 const logger = require('./logger');
 
 // ─── Serial Rating Queue ─────────────────────────────────────────────────────
@@ -115,8 +123,8 @@ function glicko2Update(r, rd, sigma, rJ, rdJ, score) {
 // ─── saveMatchResult ─────────────────────────────────────────────────────────
 
 /**
- * Persists a completed game to games.duckdb and — if both players are
- * registered — enqueues a serial Glicko-2 rating update to users.duckdb.
+ * Persists a completed game to Firestore and — if both players are
+ * registered — enqueues a serial Glicko-2 rating update.
  *
  * Game record writes are direct (append-only, no conflict).
  * Rating writes go through the SerialQueue (each reads the value the
@@ -128,15 +136,20 @@ const saveMatchResult = async (
     tournamentId = null, tournamentRoundInfo = null
 ) => {
     try {
-        // ── 1. Persist game record (direct, no queue needed) ──
-        await getGamesDb().run(`
-            INSERT INTO games (game_id, timestamp, white_name, black_name,
-                white_player_id, black_player_id, board_id, winner, moves,
-                tournament_id, tournament_round_info)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [gameId, timestamp, whiteName, blackName,
-            whitePlayerId, blackPlayerId, boardId, winner, JSON.stringify(moves),
-            tournamentId, tournamentRoundInfo]);
+        // ── 1. Persist game record ──
+        await db.saveGame({
+            game_id: gameId,
+            timestamp,
+            white_name: whiteName,
+            black_name: blackName,
+            white_player_id: whitePlayerId,
+            black_player_id: blackPlayerId,
+            board_id: boardId,
+            winner,
+            moves: JSON.stringify(moves),
+            tournament_id: tournamentId,
+            tournament_round_info: tournamentRoundInfo,
+        });
 
         logger.info('Storage', `Match ${gameId} stored (winner=${winner}).`);
 
@@ -146,44 +159,30 @@ const saveMatchResult = async (
 
         // Fire-and-forget into the queue (don't await — lets the socket handler return fast)
         ratingQueue.enqueue(async () => {
-            const usersDb = getUsersDb();
-
-            const fetchUser = async (id) => {
-                const res  = await usersDb.runAndReadAll(
-                    `SELECT rating, rating_deviation, rating_volatility FROM users WHERE id = ?`, [id]
-                );
-                const rows = res.getRows();
-                if (!rows || rows.length === 0) return null;
-                return {
-                    r:     Number(rows[0][0]) || 1500,
-                    rd:    Number(rows[0][1]) || 350,
-                    sigma: Number(rows[0][2]) || 0.06,
-                };
-            };
-
-            const white = await fetchUser(whitePlayerId);
-            const black = await fetchUser(blackPlayerId);
+            const white = await db.getUser(whitePlayerId);
+            const black = await db.getUser(blackPlayerId);
             if (!white || !black) return;
 
-            const whiteScore = winner === 'white' ? 1 : (winner === 'draw' ? 0.5 : 0);
-            const newWhite = glicko2Update(white.r, white.rd, white.sigma, black.r, black.rd, whiteScore);
-            const newBlack = glicko2Update(black.r, black.rd, black.sigma, white.r, white.rd, 1 - whiteScore);
+            const whiteR     = Number(white.rating) || 1500;
+            const whiteRd    = Number(white.rating_deviation) || 350;
+            const whiteSigma = Number(white.rating_volatility) || 0.06;
+            const blackR     = Number(black.rating) || 1500;
+            const blackRd    = Number(black.rating_deviation) || 350;
+            const blackSigma = Number(black.rating_volatility) || 0.06;
 
-            await usersDb.run(
-                `UPDATE users SET rating = ?, rating_deviation = ?, rating_volatility = ? WHERE id = ?`,
-                [newWhite.r, newWhite.rd, newWhite.sigma, whitePlayerId]
-            );
-            await usersDb.run(
-                `UPDATE users SET rating = ?, rating_deviation = ?, rating_volatility = ? WHERE id = ?`,
-                [newBlack.r, newBlack.rd, newBlack.sigma, blackPlayerId]
-            );
+            const whiteScore = winner === 'white' ? 1 : (winner === 'draw' ? 0.5 : 0);
+            const newWhite = glicko2Update(whiteR, whiteRd, whiteSigma, blackR, blackRd, whiteScore);
+            const newBlack = glicko2Update(blackR, blackRd, blackSigma, whiteR, whiteRd, 1 - whiteScore);
+
+            await db.updateUserRating(whitePlayerId, newWhite.r, newWhite.rd, newWhite.sigma);
+            await db.updateUserRating(blackPlayerId, newBlack.r, newBlack.rd, newBlack.sigma);
 
             logger.info('Rating',
                 `Glicko-2 update for ${gameId}: ` +
-                `white ${white.r.toFixed(0)}→${newWhite.r.toFixed(0)} ` +
-                `(RD ${white.rd.toFixed(0)}→${newWhite.rd.toFixed(0)}), ` +
-                `black ${black.r.toFixed(0)}→${newBlack.r.toFixed(0)} ` +
-                `(RD ${black.rd.toFixed(0)}→${newBlack.rd.toFixed(0)})`
+                `white ${whiteR.toFixed(0)}→${newWhite.r.toFixed(0)} ` +
+                `(RD ${whiteRd.toFixed(0)}→${newWhite.rd.toFixed(0)}), ` +
+                `black ${blackR.toFixed(0)}→${newBlack.r.toFixed(0)} ` +
+                `(RD ${blackRd.toFixed(0)}→${newBlack.rd.toFixed(0)})`
             );
 
             // Emit rating update to all sockets in the game room
@@ -193,8 +192,8 @@ const saveMatchResult = async (
                     blackPlayerId,
                     whiteRating: Math.round(newWhite.r),
                     blackRating: Math.round(newBlack.r),
-                    whiteRatingOld: Math.round(white.r),
-                    blackRatingOld: Math.round(black.r),
+                    whiteRatingOld: Math.round(whiteR),
+                    blackRatingOld: Math.round(blackR),
                 });
             }
         }).catch(err => logger.error('Rating', 'Rating update failed:', err));

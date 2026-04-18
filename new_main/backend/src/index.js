@@ -7,8 +7,8 @@ const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
-const { initDb, getUsersDb, getGamesDb, getTournamentsDb } = require('./db');
-const { restoreFromGcs, startGcsSync } = require('./gcsSync');
+const { initDb, isDbUp, getUser, getUserByEmailOrUsername, getUserByVerificationToken, createUser, updateUser, updateUserRating } = require('./db');
+const { startGameOffload } = require('./gcsSync');
 const tournamentManager = require('./tournament/tournamentManager');
 const { generateGuestId } = require('./utils/auth');
 const fs = require('fs');
@@ -74,13 +74,9 @@ async function fetchUserRating(userId) {
     if (!userId || (userId.startsWith('guest_') && !userId.startsWith('bot_'))) return null;
     // Allow bots to have ratings fetched
     try {
-        const usersDb = getUsersDb();
-        const res = await usersDb.runAndReadAll(
-            `SELECT rating FROM users WHERE id = ?`, [userId]
-        );
-        const rows = res.getRows();
-        if (!rows || rows.length === 0) return null;
-        return Math.round(Number(rows[0][0]) || 1500);
+        const user = await getUser(userId);
+        if (!user) return null;
+        return Math.round(Number(user.rating) || 1500);
     } catch (_) {
         return null;
     }
@@ -102,8 +98,7 @@ const JWT_EXPIRY_DAYS = parseInt(process.env.JWT_EXPIRY_DAYS) || 7;
 
 /**
  * Deep-sanitize an object so it's safe to emit over socket.io.
- * DuckDB returns BigInt for integer columns; JSON.stringify chokes on them.
- * This converts BigInt → Number everywhere in the payload.
+ * Converts BigInt → Number everywhere in the payload (safety net).
  */
 function sanitizeBigInt(val) {
     if (typeof val === 'bigint') return Number(val);
@@ -170,18 +165,13 @@ async function fetchAvailableBots() {
 async function refreshBotRatings() {
     if (availableBots.length === 0) return;
     try {
-        const usersDb = getUsersDb();
-        const con = await usersDb.connect();
         for (const bot of availableBots) {
             const botId = `bot_${bot.agent_type}_${bot.model_name}`;
-            const r = await con.runAndReadAll(
-                `SELECT rating, rating_deviation FROM users WHERE id = ?`, [botId]
-            );
-            const rows = r.getRows();
-            if (rows.length > 0) {
+            const user = await getUser(botId);
+            if (user) {
                 botRatingsCache.set(botId, {
-                    rating: Math.round(Number(rows[0][0]) || 1500),
-                    ratingDeviation: Math.round(Number(rows[0][1]) || 350),
+                    rating: Math.round(Number(user.rating) || 1500),
+                    ratingDeviation: Math.round(Number(user.rating_deviation) || 350),
                 });
             }
         }
@@ -193,24 +183,28 @@ async function refreshBotRatings() {
 async function ensureBotsRegistered(bots) {
     if (!bots || bots.length === 0) return;
     try {
-        const usersDb = getUsersDb();
-        const con = await usersDb.connect();
         for (const bot of bots) {
             const botKey = getBotKey(bot.agent_type, bot.model_name);
             const botId = `bot_${bot.agent_type}_${bot.model_name}`;
             const botName = makeBotDisplayName(bot.agent_type, bot.model_name);
             
-            const existing = await con.runAndReadAll(`SELECT id FROM users WHERE id = ?`, [botId]);
-            if (existing.getRows().length === 0) {
+            const existing = await getUser(botId);
+            if (!existing) {
                 logger.info('Bot', `Registering new bot in DB: ${botId}`);
-                await con.run(`
-                    INSERT INTO users (id, username, email, role, is_verified, rating)
-                    VALUES (?, ?, ?, 'bot', 1, 1500)
-                `, [botId, botName, `${botId}@internal`]);
-                
                 try {
-                    await con.run(`INSERT INTO profiles (user_id) VALUES (?)`, [botId]);
-                } catch (_) { /* profile might already exist if table was partially wiped */ }
+                    await createUser({
+                        id: botId,
+                        username: botName,
+                        email: `${botId}@internal`,
+                        password_hash: '',
+                        role: 'bot',
+                        is_verified: 1,
+                        rating: 1500,
+                    });
+                } catch (e) {
+                    // May fail if another instance registered it first
+                    logger.debug('Bot', `Bot ${botId} registration skipped: ${e.message}`);
+                }
             }
             // Mark as checked to avoid re-checking DB in this session
             registeredBotsCache.add(botKey);
@@ -767,11 +761,10 @@ valkeyAdapter.init(io);
 
 const PORT = process.env.PORT || 4000;
 
-// Initialize Database — restore from GCS first (no-op locally), then start services
-restoreFromGcs()
-    .then(() => initDb())
+// Initialize Database — connect to Firestore, then start services
+initDb()
     .then(async () => {
-    logger.info('Server', 'DuckDB initialized successfully.');
+    logger.info('Server', 'Database layer initialized.');
 
     // Start bot polling NOW that the DB is ready
     fetchAvailableBots();
@@ -807,11 +800,12 @@ restoreFromGcs()
         logger.info('Tournament', 'Tournaments are DISABLED in config.');
     }
 
-    // Start GCS persistence sync (no-op locally)
-    startGcsSync(getUsersDb, getTournamentsDb, getGamesDb);
+    // Start game offload to Parquet (no-op locally)
+    const db = require('./db');
+    startGameOffload(db);
 
 }).catch(err => {
-    logger.error('Server', 'Failed to initialize DuckDB:', err);
+    logger.error('Server', 'Failed to initialize database:', err);
 });
 
 // --- API ROUTES ---
@@ -953,26 +947,22 @@ app.post('/register', async (req, res) => {
         // is_verified is set to 0 (unverified) but the login gate is bypassed below.
         // To re-enable: generate verificationToken, insert with token/expires, call sendVerificationEmail.
 
-        const con = await getUsersDb().connect();
-        
-        try {
-            await con.run(`
-                INSERT INTO users (id, username, email, password_hash, role, is_verified)
-                VALUES (?, ?, ?, ?, 'registered', 0)
-            `, [userId, username, email, passwordHash]);
+        await createUser({
+            id: userId,
+            username,
+            email,
+            password_hash: passwordHash,
+            role: 'registered',
+            is_verified: 0,
+        });
 
-            // Create empty profile
-            await con.run(`INSERT INTO profiles (user_id) VALUES (?)`, [userId]);
-
-            res.status(201).json({ message: 'User registered successfully. You can now log in.' });
-        } catch (err) {
-            if (err.message.includes('Constraint Error') || err.message.includes('UNIQUE constraint')) {
-                return res.status(400).json({ error: 'Username or Email already registered' });
-            }
-            return res.status(500).json({ error: err.message });
+        res.status(201).json({ message: 'User registered successfully. You can now log in.' });
+    } catch (err) {
+        if (err.message.includes('already registered')) {
+            return res.status(400).json({ error: err.message });
         }
-    } catch (e) {
-        res.status(500).json({ error: e.message });
+        logger.error('Auth', 'Registration error:', err);
+        res.status(500).json({ error: err.message });
     }
 });
 
@@ -980,23 +970,17 @@ app.get('/verify-email', async (req, res) => {
     const { token } = req.query;
 
     try {
-        const con = await getUsersDb().connect();
-        const reader = await con.runAndReadAll(`
-            SELECT id FROM users 
-            WHERE verification_token = ? AND CAST(token_expires_at AS TIMESTAMP) > CURRENT_TIMESTAMP
-        `, [token]);
-        
-        const rows = reader.getRows();
+        const user = await getUserByVerificationToken(token);
 
-        if (!rows || rows.length === 0) {
+        if (!user) {
             return res.status(400).send('<h1>Invalid or expired verification link</h1>');
         }
 
-        const userId = rows[0][0]; // DuckDB rows are arrays of values
-        await con.run(`
-            UPDATE users SET is_verified = 1, verification_token = NULL, token_expires_at = NULL 
-            WHERE id = ?
-        `, [userId]);
+        await updateUser(user.id, {
+            is_verified: 1,
+            verification_token: null,
+            token_expires_at: null,
+        });
         
         res.send('<h1>Email verified successfully! You can now log in to the lobby.</h1>');
     } catch (err) {
@@ -1013,45 +997,37 @@ app.post('/login', async (req, res) => {
     }
 
     try {
-        const con = await getUsersDb().connect();
-        const reader = await con.runAndReadAll(`
-            SELECT id, username, password_hash, role, is_verified, rating, rating_deviation, rating_volatility
-            FROM users WHERE email = ? OR username = ?
-        `, [identifier, identifier]);
-        
-        const rows = reader.getRows();
+        const user = await getUserByEmailOrUsername(identifier);
 
-        if (!rows || rows.length === 0) {
+        if (!user) {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
 
-        const [userId, username, passwordHash, role, isVerified, rating, ratingDeviation, ratingVolatility] = rows[0];
-
         // NOTE: Email verification gate is currently DISABLED.
         // To re-enable: uncomment the block below.
-        // if (!isVerified) {
+        // if (!user.is_verified) {
         //     return res.status(401).json({ error: 'Please verify your email before logging in.' });
         // }
 
-        const isMatch = await bcrypt.compare(password, passwordHash);
+        const isMatch = await bcrypt.compare(password, user.password_hash);
         if (!isMatch) {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
 
         // Sign JWT
         const token = jwt.sign(
-            { id: userId, username, role },
+            { id: user.id, username: user.username, role: user.role },
             JWT_SECRET,
             { algorithm: 'HS256', expiresIn: `${JWT_EXPIRY_DAYS}d` }
         );
 
         res.json({
-            id: userId,
-            username,
-            role,
-            rating: Math.round(rating || 1500),
-            ratingDeviation: Math.round(ratingDeviation || 350),
-            ratingVolatility: ratingVolatility || 0.06,
+            id: user.id,
+            username: user.username,
+            role: user.role,
+            rating: Math.round(user.rating || 1500),
+            ratingDeviation: Math.round(user.rating_deviation || 350),
+            ratingVolatility: user.rating_volatility || 0.06,
             token,
         });
     } catch (err) {
@@ -1070,23 +1046,17 @@ app.get('/api/me', async (req, res) => {
     try {
         const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
         // Fetch fresh user data from DB
-        const con = await getUsersDb().connect();
-        const reader = await con.runAndReadAll(
-            `SELECT id, username, role, rating, rating_deviation, rating_volatility FROM users WHERE id = ?`,
-            [decoded.id]
-        );
-        const rows = reader.getRows();
-        if (!rows || rows.length === 0) {
+        const user = await getUser(decoded.id);
+        if (!user) {
             return res.status(401).json({ error: 'User not found' });
         }
-        const [userId, username, role, rating, ratingDeviation, ratingVolatility] = rows[0];
         res.json({
-            id: userId,
-            username,
-            role,
-            rating: Math.round(rating || 1500),
-            ratingDeviation: Math.round(ratingDeviation || 350),
-            ratingVolatility: ratingVolatility || 0.06,
+            id: user.id,
+            username: user.username,
+            role: user.role,
+            rating: Math.round(user.rating || 1500),
+            ratingDeviation: Math.round(user.rating_deviation || 350),
+            ratingVolatility: user.rating_volatility || 0.06,
         });
     } catch (err) {
         if (err.name === 'TokenExpiredError') {
@@ -1216,13 +1186,37 @@ setInterval(() => {
 
 // ── Stale-game thresholds ────────────────────────────────────────────────────
 // Applied regardless of game phase — the clock starts at game creation.
-const BOTH_ABSENT_LIMIT_MS = 60_000;       // 60s both-absent → stale draw
-const STALE_GAME_LIMIT_MS  = 10 * 60_000; // 10min with no socket in room → stale draw
+const BOTH_ABSENT_LIMIT_MS = 60_000;  // 60s with both players gone → purge
+const STALE_GAME_LIMIT_MS  = 60_000;  // 60s with no socket in room at all → purge
 
 // Helper: true when no socket currently subscribes to this game's room
 function noActiveSocketsInRoom(gameId) {
     const room = io.sockets.adapter.rooms.get(gameId);
     return !room || room.size === 0;
+}
+
+/**
+ * Handle an abandoned game (stale sweep helper).
+ *
+ * Rules:
+ *  - Non-tournament games: just purge from memory, no Firestore write.
+ *  - Tournament games: record as 'abandoned' (double loss, 0 pts each), no rating change.
+ *    saveMatchResult is NOT called — no individual game record, no Glicko update.
+ */
+function handleAbandonedGame(gameId, game, reason, message) {
+    game.phase = 'GameOver';
+    io.to(gameId).emit('game_over', { winnerId: null, reason, message });
+
+    if (game.tournamentId && TOURNAMENTS_ENABLED) {
+        // Record as double loss in the tournament (no rating change)
+        try { tournamentManager.onGameComplete(gameId, 'abandoned', game.moves || []); } catch (_) {}
+    }
+    // Non-tournament games: no save, no rating change.
+
+    releaseBotIfNeeded(game);
+    lobby.activeGames.delete(gameId);
+    valkeySync.syncGameDeleted(gameId);
+    broadcastLobbyUpdate(io);
 }
 
 // Global Timeout Check
@@ -1239,54 +1233,32 @@ setInterval(() => {
         // never self-terminate because both players are long gone.
 
         // Condition 1: Orphaned tournament game
-        // The parent tournament was cancelled/expired/never survived a restart.
-        // Attempt to record a draw result in the tournament (will no-op if gone).
+        // Should not normally occur: active tournaments cannot be cancelled/expired.
+        // Defensive fallback for edge cases (e.g. instance crash during tournament start).
         if (game.tournamentId && TOURNAMENTS_ENABLED) {
             const t = tournamentManager.getTournamentById(game.tournamentId);
             if (!t) {
-                logger.info('Game', `Stale orphan tournament game ${gameId} (tournament ${game.tournamentId} gone). Removing as draw.`);
-                game.phase = 'GameOver';
-                io.to(gameId).emit('game_over', { winnerId: null, reason: 'tournament_ended', message: 'Tournament has ended.' });
-                saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, 'draw', game.moves, io)
-                    .catch(err => logger.error('Game', `Failed to save orphan tournament game ${gameId}:`, err));
-                try { tournamentManager.onGameComplete(gameId, null, game.moves || []); } catch (_) {}
-                releaseBotIfNeeded(game);
-                lobby.activeGames.delete(gameId);
-                valkeySync.syncGameDeleted(gameId);
-                broadcastLobbyUpdate(io);
+                logger.warn('Game', `Orphaned tournament game ${gameId} (tournament ${game.tournamentId} not found). Recording as abandoned.`);
+                handleAbandonedGame(gameId, game, 'tournament_ended', 'Tournament has ended.');
                 continue;
             }
         }
 
-        // Condition 2: Both players absent simultaneously for too long
+        // Condition 2: Both players absent simultaneously for ≥ 60s
         if (game.whiteDisconnectedAt && game.blackDisconnectedAt) {
             const earliestDiscon = Math.min(game.whiteDisconnectedAt, game.blackDisconnectedAt);
             if (now - earliestDiscon >= BOTH_ABSENT_LIMIT_MS) {
-                logger.info('Game', `Stale game ${gameId}: both players absent for ${Math.round((now - earliestDiscon) / 1000)}s. Removing as draw.`);
-                game.phase = 'GameOver';
-                io.to(gameId).emit('game_over', { winnerId: null, reason: 'abandoned', message: 'Both players disconnected.' });
-                saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, 'draw', game.moves, io)
-                    .catch(err => logger.error('Game', `Failed to save both-absent game ${gameId}:`, err));
-                releaseBotIfNeeded(game);
-                lobby.activeGames.delete(gameId);
-                valkeySync.syncGameDeleted(gameId);
-                broadcastLobbyUpdate(io);
+                logger.info('Game', `Stale game ${gameId}: both players absent for ${Math.round((now - earliestDiscon) / 1000)}s. Purging.`);
+                handleAbandonedGame(gameId, game, 'abandoned', 'Both players disconnected.');
                 continue;
             }
         }
 
-        // Condition 3: Game has been alive too long with no active socket in its room
-        // Applies to ALL phases — Setup games are NOT exempt.
+        // Condition 3: No socket in room for ≥ 60s (ghost game — nobody watching)
+        // Applies to ALL phases including Setup.
         if (game.gameStartTimestamp && (now - game.gameStartTimestamp) >= STALE_GAME_LIMIT_MS && noActiveSocketsInRoom(gameId)) {
-            logger.info('Game', `Stale game ${gameId}: no socket in room for ${Math.round((now - game.gameStartTimestamp) / 60000)}min (phase=${game.phase}). Removing as draw.`);
-            game.phase = 'GameOver';
-            io.to(gameId).emit('game_over', { winnerId: null, reason: 'abandoned', message: 'Game abandoned.' });
-            saveMatchResult(gameId, game.gameStartTimestamp, game.whiteName, game.blackName, game.white, game.black, game.boardName, 'draw', game.moves, io)
-                .catch(err => logger.error('Game', `Failed to save stale game ${gameId}:`, err));
-            releaseBotIfNeeded(game);
-            lobby.activeGames.delete(gameId);
-            valkeySync.syncGameDeleted(gameId);
-            broadcastLobbyUpdate(io);
+            logger.info('Game', `Stale game ${gameId}: no socket in room for ${Math.round((now - game.gameStartTimestamp) / 1000)}s (phase=${game.phase}). Purging.`);
+            handleAbandonedGame(gameId, game, 'abandoned', 'Game abandoned.');
             continue;
         }
 
@@ -1934,6 +1906,36 @@ io.on('connection', (socket) => {
 
     socket.on('leave_tournament_room', ({ tournamentId }) => {
         socket.leave(`tournament:${tournamentId}`);
+    });
+
+    /**
+     * reconnect_tournament — called by the client when a player wants to rejoin
+     * their active tournament after being suspended (double disconnection).
+     *
+     * Response events:
+     *   tournament_reconnect_ok      { tournamentId }  — cleared, re-entering the room
+     *   tournament_reconnect_denied  { message, eliminated }  — cannot rejoin
+     */
+    socket.on('reconnect_tournament', async () => {
+        const userId = socket.userId;
+        if (!userId || userId.startsWith('guest_')) {
+            socket.emit('tournament_reconnect_denied', { message: 'Must be logged in to reconnect to a tournament.', eliminated: false });
+            return;
+        }
+
+        try {
+            const result = await tournamentManager.reconnectToTournament(userId);
+            if (result.ok) {
+                socket.join(`tournament:${result.tournamentId}`);
+                socket.emit('tournament_reconnect_ok', { tournamentId: result.tournamentId });
+                logger.info('Tournament', `${userId} reconnected to ${result.tournamentId} via socket.`);
+            } else {
+                socket.emit('tournament_reconnect_denied', { message: result.message, eliminated: result.eliminated });
+            }
+        } catch (e) {
+            logger.error('Tournament', 'reconnect_tournament error:', e.message);
+            socket.emit('tournament_reconnect_denied', { message: 'Server error.', eliminated: false });
+        }
     });
 
     socket.on('download_tournament_games', async ({ tournamentId }) => {

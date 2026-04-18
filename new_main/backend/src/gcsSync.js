@@ -1,36 +1,28 @@
 'use strict';
 
-// ─── GCS Persistence Module ───────────────────────────────────────────────────
+// ─── Game Offload Module ──────────────────────────────────────────────────────
 //
 // Strategy:
-//   users.duckdb      ← restore from GCS on startup, sync to GCS every 15 min
-//   tournaments.duckdb← same as users
-//   games.duckdb      ← always fresh; export all rows to timestamped Parquet every 15 min
+//   Periodically offload old games from Firestore to Parquet files on /mnt/db.
+//   Games older than GAME_RETENTION_DAYS are exported, then deleted from Firestore.
 //
-// Only active when both GCS_BUCKET and DB_PATH env vars are set (i.e. on GCP).
-// Locally, restoreFromGcs() and startGcsSync() are silent no-ops.
+// Only active when both GCS_BUCKET and NODE_ENV=production are set (i.e. on GCP).
+// Locally, startGameOffload() is a silent no-op.
+//
+// DuckDB is used in-memory solely for Parquet file generation.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const fs   = require('fs');
 const path = require('path');
 const logger = require('./utils/logger');
 
-const GCS_BUCKET        = process.env.GCS_BUCKET;   // e.g. 'data-bucket-mylittleproject00'
-const DB_PATH           = process.env.DB_PATH;       // e.g. '/tmp/db'
-const SYNC_INTERVAL_MS  = 15 * 60 * 1000;           // 15 minutes
+const GCS_BUCKET                = process.env.GCS_BUCKET;
+const GAME_RETENTION_DAYS       = parseInt(process.env.GAME_RETENTION_DAYS) || 7;
+const GAME_OFFLOAD_INTERVAL_MS  = (parseInt(process.env.GAME_OFFLOAD_INTERVAL_HOURS) || 24) * 60 * 60 * 1000;
+const GCS_MOUNT                 = '/mnt/db';
 
-// Only activate in production (NODE_ENV=production is set automatically by Cloud Run / Dockerfile)
-const isGcpMode = !!(GCS_BUCKET && DB_PATH && process.env.NODE_ENV === 'production');
-
-// Lazy-load Storage so the library is never imported locally
-let bucket;
-function getBucket() {
-    if (!bucket) {
-        const { Storage } = require('@google-cloud/storage');
-        bucket = new Storage().bucket(GCS_BUCKET);
-    }
-    return bucket;
-}
+// Only activate in production
+const isGcpMode = !!(GCS_BUCKET && process.env.NODE_ENV === 'production');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -42,136 +34,115 @@ function timestamp() {
            `T${p(now.getUTCHours())}${p(now.getUTCMinutes())}${p(now.getUTCSeconds())}`;
 }
 
-/**
- * Download a file from GCS to a local path.
- * Returns true if the file was downloaded, false if it didn't exist in GCS.
- */
-async function downloadFromGcs(gcsPath, localPath) {
-    try {
-        await getBucket().file(gcsPath).download({ destination: localPath });
-        logger.info('GCS', `✓ Restored  gs://${GCS_BUCKET}/${gcsPath}  →  ${localPath}`);
-        return true;
-    } catch (e) {
-        if (e.code === 404 || (e.message && e.message.includes('No such object'))) {
-            logger.info('GCS', `No ${gcsPath} in bucket — starting fresh.`);
-            return false;
-        }
-        throw e;
-    }
-}
-
-/**
- * Upload a local file to GCS.
- */
-async function uploadToGcs(localPath, gcsPath) {
-    await getBucket().upload(localPath, { destination: gcsPath });
-    logger.info('GCS', `✓ Synced    ${localPath}  →  gs://${GCS_BUCKET}/${gcsPath}`);
-}
-
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
- * Called BEFORE initDb() at startup.
- * Downloads users.duckdb and tournaments.duckdb from GCS so DuckDB can open them.
- * games.duckdb is intentionally NOT restored — it always starts fresh.
+ * Export old games from Firestore to Parquet, then delete them.
+ * Uses DuckDB in-memory for the Parquet export.
  */
-async function restoreFromGcs() {
-    if (!isGcpMode) {
-        logger.debug('GCS', 'Local mode — skipping GCS restore.');
+async function offloadOldGames(db) {
+    const cutoffMs = Date.now() - (GAME_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+    logger.info('Offload', `Looking for games older than ${new Date(cutoffMs).toISOString()} (retention: ${GAME_RETENTION_DAYS}d)…`);
+
+    const games = await db.getGamesOlderThan(cutoffMs);
+    if (games.length === 0) {
+        logger.debug('Offload', 'No games to offload this cycle.');
         return;
     }
-    logger.info('GCS', `Restoring databases from gs://${GCS_BUCKET} → ${DB_PATH}`);
-    fs.mkdirSync(DB_PATH, { recursive: true });
 
-    await downloadFromGcs('users.duckdb',            path.join(DB_PATH, 'users.duckdb'));
-    await downloadFromGcs('tournaments.duckdb',      path.join(DB_PATH, 'tournaments.duckdb'));
-    await downloadFromGcs('tournament_games.duckdb', path.join(DB_PATH, 'tournament_games.duckdb'));
-    // games.duckdb always starts fresh — no restore needed
-    logger.info('GCS', 'Restore complete. games.duckdb starts fresh.');
-}
+    logger.info('Offload', `Found ${games.length} game(s) to offload.`);
 
-/**
- * Checkpoint a LazyDbConnection then copy its file to GCS.
- */
-async function syncDbFile(lazyDb, fileName) {
-    try {
-        // Flush WAL into the main file before copying
-        await lazyDb.run('CHECKPOINT');
-    } catch (e) {
-        logger.warn('GCS', `CHECKPOINT failed for ${fileName}:`, e.message);
-    }
-    await uploadToGcs(path.join(DB_PATH, fileName), fileName);
-}
-
-/**
- * Export all games from games.duckdb to a timestamped Parquet file on GCS.
- * Skips if there are 0 rows.
- */
-async function exportGamesParquet(getGamesDb) {
-    const ts           = timestamp();
-    const localParquet = `/tmp/games_${ts}.parquet`;
-    const gcsParquet   = `games/games_${ts}.parquet`;
+    const ts = timestamp();
+    const gamesDir = path.join(GCS_MOUNT, 'games');
+    fs.mkdirSync(gamesDir, { recursive: true });
+    const localParquet = path.join(gamesDir, `games_${ts}.parquet`);
 
     try {
-        // Check row count first
-        const res  = await getGamesDb().runAndReadAll('SELECT COUNT(*) FROM games');
-        const rows = res.getRows();
-        const count = Number(rows[0][0]);
+        // Use DuckDB in-memory for Parquet export
+        const { DuckDBInstance } = require('@duckdb/node-api');
+        const instance = await DuckDBInstance.create(':memory:');
+        const conn = await instance.connect();
 
-        if (count === 0) {
-            logger.debug('GCS', 'No games to export this cycle.');
-            return;
+        // Create table matching game schema
+        await conn.run(`
+            CREATE TABLE export_games (
+                game_id VARCHAR,
+                timestamp BIGINT,
+                white_name VARCHAR,
+                black_name VARCHAR,
+                white_player_id VARCHAR,
+                black_player_id VARCHAR,
+                board_id VARCHAR,
+                winner VARCHAR,
+                moves TEXT,
+                tournament_id VARCHAR,
+                tournament_round_info VARCHAR,
+                white_score DOUBLE,
+                black_score DOUBLE,
+                started_at BIGINT,
+                completed_at BIGINT
+            )
+        `);
+
+        // Insert all games
+        for (const g of games) {
+            await conn.run(`
+                INSERT INTO export_games VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+                g.game_id, g.timestamp, g.white_name, g.black_name,
+                g.white_player_id, g.black_player_id, g.board_id,
+                g.winner, typeof g.moves === 'string' ? g.moves : JSON.stringify(g.moves || []),
+                g.tournament_id || null, g.tournament_round_info || null,
+                g.white_score || 0, g.black_score || 0,
+                g.started_at || g.timestamp, g.completed_at || null,
+            ]);
         }
 
-        // Write Parquet locally (DuckDB native support)
-        await getGamesDb().run(
-            `COPY (SELECT * FROM games) TO '${localParquet}' (FORMAT PARQUET)`
-        );
+        // Export to Parquet
+        await conn.run(`COPY (SELECT * FROM export_games) TO '${localParquet}' (FORMAT PARQUET)`);
 
-        // Upload to GCS
-        await uploadToGcs(localParquet, gcsParquet);
+        // Cleanup DuckDB
+        try { if (conn.closeSync) conn.closeSync(); } catch (_) {}
+        try { if (instance.closeSync) instance.closeSync(); } catch (_) {}
 
-        // Only delete after confirmed upload — keeps games.duckdb lean, no duplicates
-        await getGamesDb().run('DELETE FROM games');
+        logger.info('Offload', `Exported ${games.length} game(s) → ${localParquet}`);
 
-        logger.info('GCS', `Exported ${count} game(s) → ${gcsParquet} (cleared from local DB)`);
+        // Delete from Firestore only after successful export
+        const gameIds = games.map(g => g.game_id);
+        await db.deleteGamesByIds(gameIds);
+
+        logger.info('Offload', `Offload complete: ${games.length} game(s) exported and removed from Firestore.`);
+
     } catch (e) {
-        logger.error('GCS', 'Games Parquet export failed:', e.message);
-    } finally {
-        // Always clean up the local temp file
-        fs.unlink(localParquet, () => {});
+        logger.error('Offload', 'Game offload failed:', e.message);
     }
 }
 
 /**
- * Run one full sync cycle: persist user/tournament DBs and export games.
- */
-async function runSync(getUsersDb, getTournamentsDb, getGamesDb, getTournamentGamesDb) {
-    logger.info('GCS', 'Running sync cycle…');
-    await syncDbFile(getUsersDb(),            'users.duckdb');
-    await syncDbFile(getTournamentsDb(),      'tournaments.duckdb');
-    await syncDbFile(getTournamentGamesDb(),  'tournament_games.duckdb');
-    await exportGamesParquet(getGamesDb);
-    logger.info('GCS', 'Sync cycle complete.');
-}
-
-/**
- * Start the periodic 15-minute sync.
+ * Start the periodic game offload job.
  * Call this AFTER initDb() is complete.
  */
-function startGcsSync(getUsersDb, getTournamentsDb, getGamesDb, getTournamentGamesDb) {
+function startGameOffload(db) {
     if (!isGcpMode) {
-        logger.debug('GCS', 'Local mode — GCS sync disabled.');
+        logger.debug('Offload', 'Local mode — game offload disabled.');
         return;
     }
-    logger.info('GCS', `Sync scheduled every ${SYNC_INTERVAL_MS / 60000} minutes.`);
+    if (!fs.existsSync(GCS_MOUNT)) {
+        logger.warn('Offload', `Mount point ${GCS_MOUNT} not found — game offload disabled.`);
+        return;
+    }
+
+    logger.info('Offload', `Game offload scheduled every ${GAME_OFFLOAD_INTERVAL_MS / 3600000}h (retention: ${GAME_RETENTION_DAYS}d).`);
+
+    // Run once on startup after a brief delay
+    setTimeout(() => offloadOldGames(db).catch(e => logger.error('Offload', 'Initial offload error:', e.message)), 60000);
+
     const timer = setInterval(
-        () => runSync(getUsersDb, getTournamentsDb, getGamesDb, getTournamentGamesDb)
-                .catch(e => logger.error('GCS', 'Sync error:', e.message)),
-        SYNC_INTERVAL_MS
+        () => offloadOldGames(db).catch(e => logger.error('Offload', 'Offload error:', e.message)),
+        GAME_OFFLOAD_INTERVAL_MS
     );
     // Don't prevent clean process exit
     if (timer.unref) timer.unref();
 }
 
-module.exports = { restoreFromGcs, startGcsSync };
+module.exports = { startGameOffload };

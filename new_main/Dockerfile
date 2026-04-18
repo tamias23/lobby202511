@@ -40,7 +40,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=8080
 
-# Install system dependencies for native modules (DuckDB, bcrypt)
+# Install system dependencies for native modules (bcrypt)
 RUN apt-get update && apt-get install -y \
     libc6 \
     && rm -rf /var/lib/apt/lists/*
@@ -66,7 +66,6 @@ COPY --from=frontend-builder /app/frontend/dist ./dist
 
 # 4. Final Prep
 WORKDIR /app/backend
-RUN mkdir -p db
 
 # Final configuration
 EXPOSE 8080

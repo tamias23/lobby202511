@@ -12,6 +12,7 @@
   "license": "ISC",
   "dependencies": {
     "@duckdb/node-api": "^1.5.1-r.1",
+    "@google-cloud/firestore": "^8.5.0",
     "@google-cloud/storage": "^7.16.0",
     "@socket.io/redis-adapter": "^8.3.0",
     "@socket.io/redis-streams-adapter": "^0.3.1",

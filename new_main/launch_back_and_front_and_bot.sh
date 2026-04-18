@@ -39,7 +39,7 @@ if podman container exists "local-firestore"; then
 else
     echo "Container 'local-firestore' does not exist. Creating and starting..."
     podman run -d --name local-firestore \
-      -p 8200:8200 \
+      -p 8080:8080 \
       -e FIRESTORE_PROJECT_ID=my-local-firestore \
       docker.io/mtlynch/firestore-emulator
 fi
@@ -88,7 +88,7 @@ done
 # --- 3. Start Game Server (also serves the built frontend on port 4000) ---
 echo "==> Starting Game Server on port 4000..."
 cd "${SCRIPT_DIR}"
-BOT_SERVER_URL=http://localhost:5001 VALKEY_ENABLED=${VALKEY_ENABLED:-true} node backend/src/index.js &
+BOT_SERVER_URL=http://localhost:5001 VALKEY_ENABLED=${VALKEY_ENABLED:-true} FIRESTORE_EMULATOR_HOST=localhost:8080 FIRESTORE_PROJECT_ID=my-local-firestore node backend/src/index.js &
 GAME_PID=$!
 
 echo ""

@@ -84,8 +84,7 @@ echo "Bot Server deployed at: ${BOT_URL}"
 
 gcloud run services update nd6-app \
     --region europe-west1 \
-    --update-env-vars "BOT_SERVER_URL=${BOT_URL}"
-# --update-env-vars "BOT_SERVER_URL=${BOT_URL},DB_PATH=/tmp/db"
+    --update-env-vars "BOT_SERVER_URL=${BOT_URL},FIRESTORE_PROJECT_ID=mylittleproject00"
 
 sleep 5
 

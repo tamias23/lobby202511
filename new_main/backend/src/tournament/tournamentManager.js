@@ -1,13 +1,13 @@
 /**
  * tournamentManager.js — Core tournament lifecycle controller.
  *
- * Manages in-memory state + DuckDB persistence for tournaments.
+ * Manages in-memory state + Firestore persistence for tournaments.
  * Called from index.js socket handlers and periodic timers.
  */
 
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcrypt');
-const { getTournamentsDb, getUsersDb, getTournamentGamesDb, rowsToObjects } = require('../db');
+const db = require('../db');
 const { swissPairings, roundRobinPairings, knockoutPairings, arenaPairings, knockoutTotalRounds } = require('./pairings');
 const { computeStandings, computeKnockoutBracket } = require('./standings');
 const logger = require('../utils/logger');
@@ -72,26 +72,15 @@ function setDependencies(createGameFn, io, abortGameFn) {
 // ─── Load from DB on startup ────────────────────────────────────────────────
 async function loadFromDb() {
     try {
-        const db = getTournamentsDb();
-        // Load non-completed tournaments
-        const tRes = await db.runAndReadAll(
-            `SELECT * FROM tournaments WHERE status IN ('open', 'active') ORDER BY created_at`
-        );
-        const tournaments = rowsToObjects(tRes);
+        const tournaments = await db.getActiveTournaments();
 
         for (const t of tournaments) {
-            const pRes = await db.runAndReadAll(
-                `SELECT * FROM tournament_participants WHERE tournament_id = ? ORDER BY score DESC`,
-                [t.id]
-            );
-            const gRes = await db.runAndReadAll(
-                `SELECT * FROM tournament_games WHERE tournament_id = ? ORDER BY round, started_at`,
-                [t.id]
-            );
+            const participants = await db.getParticipantsForTournament(t.id);
+            const games = await db.getGamesForTournament(t.id);
             activeTournaments.set(t.id, {
                 ...t,
-                participants: rowsToObjects(pRes),
-                games: rowsToObjects(gRes),
+                participants,
+                games,
             });
         }
         logger.info('Tournament', `Loaded ${activeTournaments.size} active tournament(s) from DB.`);
@@ -173,24 +162,8 @@ async function createTournament(opts) {
     };
 
     // Persist to DB
-    const db = getTournamentsDb();
-    await db.run(`
-        INSERT INTO tournaments (id, creator_id, status, format, password_hash, has_password,
-            max_participants, current_count, time_control_minutes, time_control_increment,
-            board_id, rating_min, rating_max, duration_value, invited_bots, creator_plays,
-            launch_mode, launch_at, created_at, started_at, completed_at, remove_at, current_round, name, creator_username)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-        tournament.id, tournament.creator_id, tournament.status, tournament.format,
-        tournament.password_hash, tournament.has_password,
-        tournament.max_participants, tournament.current_count,
-        tournament.time_control_minutes, tournament.time_control_increment,
-        tournament.board_id, tournament.rating_min, tournament.rating_max,
-        tournament.duration_value, tournament.invited_bots, tournament.creator_plays,
-        tournament.launch_mode, tournament.launch_at,
-        tournament.created_at, tournament.started_at, tournament.completed_at,
-        tournament.remove_at, tournament.current_round, tournament.name, tournament.creator_username,
-    ]);
+    const { participants: _p, games: _g, ...tournamentData } = tournament;
+    await db.saveTournament(tournamentData);
 
     activeTournaments.set(id, tournament);
 
@@ -230,11 +203,9 @@ async function joinTournament(tournamentId, userId, username, password, skipPass
 
     // Rating check
     try {
-        const usersDb = getUsersDb();
-        const rRes = await usersDb.runAndReadAll(`SELECT rating FROM users WHERE id = ?`, [userId]);
-        const rows = rRes.getRows();
-        if (rows && rows.length > 0) {
-            const rating = Math.round(Number(rows[0][0]) || 1500);
+        const user = await db.getUser(userId);
+        if (user) {
+            const rating = Math.round(Number(user.rating) || 1500);
             if (rating < t.rating_min || rating > t.rating_max) {
                 throw new Error(`Your rating (${rating}) is outside the allowed range (${t.rating_min}–${t.rating_max}).`);
             }
@@ -257,18 +228,11 @@ async function joinTournament(tournamentId, userId, username, password, skipPass
     t.current_count = t.participants.length;
 
     // Persist
-    const db = getTournamentsDb();
-    await db.run(`
-        INSERT INTO tournament_participants (tournament_id, user_id, username, is_bot, score, wins, draws, losses, tiebreak, joined_at)
-        VALUES (?, ?, ?, ?, 0, 0, 0, 0, 0, ?)
-    `, [tournamentId, userId, participant.username, participant.is_bot, participant.joined_at]);
-    await db.run(`UPDATE tournaments SET current_count = ? WHERE id = ?`, [t.current_count, tournamentId]);
+    await db.addParticipant(participant);
+    await db.updateTournament(tournamentId, { current_count: t.current_count });
 
     // Increment nb_tournaments_entered
-    try {
-        const usersDb = getUsersDb();
-        await usersDb.run(`UPDATE users SET nb_tournaments_entered = nb_tournaments_entered + 1 WHERE id = ?`, [userId]);
-    } catch (_) {}
+    await db.incrementUserField(userId, 'nb_tournaments_entered', 1);
 
     // Check if tournament should start
     await tryStartTournament(tournamentId);
@@ -294,9 +258,8 @@ async function leaveTournament(tournamentId, userId) {
         t.participants.splice(idx, 1);
         t.current_count = t.participants.length;
 
-        const db = getTournamentsDb();
-        await db.run(`DELETE FROM tournament_participants WHERE tournament_id = ? AND user_id = ?`, [tournamentId, userId]);
-        await db.run(`UPDATE tournaments SET current_count = ? WHERE id = ?`, [t.current_count, tournamentId]);
+        await db.removeParticipant(tournamentId, userId);
+        await db.updateTournament(tournamentId, { current_count: t.current_count });
     }
 
     // If creator leaves an open tournament, cancel it
@@ -347,9 +310,7 @@ async function startTournament(tournamentId) {
     t.started_at = Date.now();
     t.current_round = 1;
 
-    const db = getTournamentsDb();
-    await db.run(`UPDATE tournaments SET status = 'active', started_at = ?, current_round = 1 WHERE id = ?`,
-        [t.started_at, tournamentId]);
+    await db.updateTournament(tournamentId, { status: 'active', started_at: t.started_at, current_round: 1 });
 
     logger.info('Tournament', `${tournamentId} (${t.format}) STARTED with ${t.current_count} player(s).`);
 
@@ -370,7 +331,8 @@ async function startNextRound(tournamentId) {
     if (!t || t.status !== 'active') return;
 
     let pairingsResult;
-    const activeParticipants = t.participants.filter(p => !p.eliminated);
+    // Active participants: not eliminated AND not suspended
+    const activeParticipants = t.participants.filter(p => !p.eliminated && !p.suspended);
 
     if (t.format === 'swiss') {
         pairingsResult = swissPairings(activeParticipants, t.current_round, t.games);
@@ -443,7 +405,9 @@ async function pairIdleArenaPlayers(tournamentId) {
             busyIds.add(g.black_id);
         }
     }
+    // Find idle players: not in an active game, not suspended, and rested ≥10s since last game
     const idlePlayers = t.participants.filter(p => {
+        if (p.suspended) return false;  // suspended — waiting for reconnect
         if (busyIds.has(p.user_id)) return false;
         // 10s respite between games (per player)
         const lastGame = [...t.games].reverse().find(
@@ -520,17 +484,24 @@ async function createTournamentGame(tournament, whiteId, blackId, timeControl) {
 
         tournament.games.push(gameEntry);
 
-        // Persist to NEW tournament_games.duckdb
-        const db = getTournamentGamesDb();
-        await db.run(`
-            INSERT INTO tournament_games (id, tournament_id, round_info, white_player_id, black_player_id, board_id, winner, moves, white_score, black_score, started_at, completed_at, white_name, black_name, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?)
-        `, [
-            gameEntry.id, gameEntry.tournament_id, gameEntry.round_info,
-            gameEntry.white_id, gameEntry.black_id, tournament.board_id,
-            null, null, gameEntry.started_at, null,
-            whitePlayer.username, blackPlayer.username, gameEntry.started_at
-        ]);
+        // Persist tournament game to Firestore (unified games collection)
+        await db.saveGame({
+            game_id: gameEntry.id,
+            tournament_id: gameEntry.tournament_id,
+            tournament_round_info: gameEntry.round_info,
+            white_player_id: gameEntry.white_id,
+            black_player_id: gameEntry.black_id,
+            board_id: tournament.board_id,
+            winner: null,
+            moves: null,
+            white_score: 0,
+            black_score: 0,
+            started_at: gameEntry.started_at,
+            completed_at: null,
+            white_name: whitePlayer.username,
+            black_name: blackPlayer.username,
+            timestamp: gameEntry.started_at,
+        });
 
         // Notify players
         if (_ioRef) {
@@ -560,7 +531,8 @@ async function onGameComplete(gameHash, winnerSide, moves = []) {
         game.moves = moves; // Store moves temporarily to persist them
 
         // Determine result
-        game.result = winnerSide || 'draw'; // 'white' | 'black' | 'draw'
+        // 'white' | 'black' | 'draw' | 'abandoned' (double disconnection — double loss)
+        game.result = winnerSide || 'draw';
         game.completed_at = Date.now();
 
         // Award points
@@ -577,25 +549,43 @@ async function onGameComplete(gameHash, winnerSide, moves = []) {
             game.black_score = CONFIG.WIN_POINTS;
             if (whitePart) { whitePart.score += CONFIG.LOSS_POINTS; whitePart.losses += 1; }
             if (blackPart) { blackPart.score += CONFIG.WIN_POINTS; blackPart.wins += 1; }
+        } else if (game.result === 'abandoned') {
+            // Double loss: both players disconnected — 0 pts each, recorded as a loss for both
+            game.white_score = CONFIG.LOSS_POINTS;
+            game.black_score = CONFIG.LOSS_POINTS;
+            if (whitePart) { whitePart.score += CONFIG.LOSS_POINTS; whitePart.losses += 1; }
+            if (blackPart) { blackPart.score += CONFIG.LOSS_POINTS; blackPart.losses += 1; }
+
+            // Suspend both players: they will not be paired again until they reconnect
+            if (whitePart) whitePart.suspended = true;
+            if (blackPart) blackPart.suspended = true;
+            logger.info('Tournament', `${tid}: ${game.white_id} and ${game.black_id} suspended after double disconnection.`);
         } else {
+            // draw
             game.white_score = CONFIG.DRAW_POINTS;
             game.black_score = CONFIG.DRAW_POINTS;
             if (whitePart) { whitePart.score += CONFIG.DRAW_POINTS; whitePart.draws += 1; }
             if (blackPart) { blackPart.score += CONFIG.DRAW_POINTS; blackPart.draws += 1; }
         }
 
-        // Persist scores and MOVES to dedicated DB
-        const db = getTournamentGamesDb();
-        await db.run(`UPDATE tournament_games SET winner = ?, white_score = ?, black_score = ?, completed_at = ?, moves = ? WHERE id = ?`,
-            [game.result, game.white_score, game.black_score, game.completed_at, JSON.stringify(game.moves || []), game.id]);
+        // Persist scores and MOVES to Firestore
+        await db.updateGame(game.id, {
+            winner: game.result,
+            white_score: game.white_score,
+            black_score: game.black_score,
+            completed_at: game.completed_at,
+            moves: JSON.stringify(game.moves || []),
+        });
         // Update participant scores
         if (whitePart) {
-            await db.run(`UPDATE tournament_participants SET score = ?, wins = ?, draws = ?, losses = ? WHERE tournament_id = ? AND user_id = ?`,
-                [whitePart.score, whitePart.wins, whitePart.draws, whitePart.losses, tid, whitePart.user_id]);
+            await db.updateParticipantScore(tid, whitePart.user_id, {
+                score: whitePart.score, wins: whitePart.wins, draws: whitePart.draws, losses: whitePart.losses,
+            });
         }
         if (blackPart) {
-            await db.run(`UPDATE tournament_participants SET score = ?, wins = ?, draws = ?, losses = ? WHERE tournament_id = ? AND user_id = ?`,
-                [blackPart.score, blackPart.wins, blackPart.draws, blackPart.losses, tid, blackPart.user_id]);
+            await db.updateParticipantScore(tid, blackPart.user_id, {
+                score: blackPart.score, wins: blackPart.wins, draws: blackPart.draws, losses: blackPart.losses,
+            });
         }
 
         // Knockout: eliminate losers
@@ -643,8 +633,7 @@ async function advanceRound(tournamentId) {
     }
 
     t.current_round += 1;
-    const db = getTournamentsDb();
-    await db.run(`UPDATE tournaments SET current_round = ? WHERE id = ?`, [t.current_round, tournamentId]);
+    await db.updateTournament(tournamentId, { current_round: t.current_round });
 
     logger.info('Tournament', `${tournamentId} advancing to round ${t.current_round}/${maxRounds}`);
     await startNextRound(tournamentId);
@@ -665,19 +654,14 @@ async function completeTournament(tournamentId) {
     t.completed_at = Date.now();
     t.remove_at    = t.completed_at + 5 * 60 * 60 * 1000; // remove 5 hours after completion
 
-    const db = getTournamentsDb();
-    await db.run(
-        `UPDATE tournaments SET status = 'completed', completed_at = ?, remove_at = ? WHERE id = ?`,
-        [t.completed_at, t.remove_at, tournamentId]
-    );
+    await db.updateTournament(tournamentId, {
+        status: 'completed', completed_at: t.completed_at, remove_at: t.remove_at,
+    });
 
     // Increment nb_tournaments_finished for all participants
-    try {
-        const usersDb = getUsersDb();
-        for (const p of t.participants) {
-            await usersDb.run(`UPDATE users SET nb_tournaments_finished = nb_tournaments_finished + 1 WHERE id = ?`, [p.user_id]);
-        }
-    } catch (_) {}
+    for (const p of t.participants) {
+        await db.incrementUserField(p.user_id, 'nb_tournaments_finished', 1);
+    }
 
     const standings = computeStandings(t.participants, t.games, t.format);
     logger.info('Tournament', `${tournamentId} COMPLETED. Winner: ${standings[0]?.username || 'N/A'}`);
@@ -697,8 +681,7 @@ async function cancelTournament(tournamentId) {
     if (!t) return;
 
     t.status = 'cancelled';
-    const db = getTournamentsDb();
-    await db.run(`UPDATE tournaments SET status = 'cancelled' WHERE id = ?`, [tournamentId]);
+    await db.updateTournament(tournamentId, { status: 'cancelled' });
     activeTournaments.delete(tournamentId);
 
     logger.info('Tournament', `${tournamentId} CANCELLED.`);
@@ -727,7 +710,6 @@ async function abortArenaExpiredGames(tournamentId) {
     t._arenaAborted = true;
 
     const now = Date.now();
-    const db = getTournamentsDb();
     const pendingGames = t.games.filter(g => !g.result);
 
     if (pendingGames.length > 0) {
@@ -739,10 +721,7 @@ async function abortArenaExpiredGames(tournamentId) {
         game.completed_at = now;
 
         // Persist 'aborted' result so pairIdleArenaPlayers won't re-pair these players
-        await db.run(
-            `UPDATE tournament_games SET result = 'aborted', completed_at = ? WHERE id = ?`,
-            [now, game.id]
-        );
+        await db.updateGame(game.id, { winner: 'aborted', completed_at: now });
 
         // Notify the game room (GameBoard.jsx listens for this)
         if (_ioRef) {
@@ -933,19 +912,57 @@ function getTournamentById(id) {
 }
 
 // ─── Row → Object helpers ───────────────────────────────────────────────────
-// (rowsToObjects is imported from db.js)
 
 
 async function getTournamentGamesJson(tournamentId) {
     try {
-        const db = getTournamentGamesDb();
-        const res = await db.runAndReadAll(`SELECT * FROM tournament_games WHERE tournament_id = ? ORDER BY started_at ASC`, [tournamentId]);
-        const games = rowsToObjects(res);
+        const games = await db.getGamesForTournament(tournamentId);
         return JSON.stringify(games, null, 2);
     } catch (e) {
         logger.error('Tournament', `Failed to export games for ${tournamentId}:`, e.message);
         return '[]';
     }
+}
+
+
+// ─── Reconnect to Tournament ─────────────────────────────────────────────────
+/**
+ * Reconnect a player to their active tournament after a disconnection.
+ *
+ * - Clears the `suspended` flag so they are paired again.
+ * - Knockout: if eliminated (double-disconnection counts as a loss), they cannot rejoin.
+ * - Returns { ok, tournamentId, eliminated, message }.
+ */
+async function reconnectToTournament(userId) {
+    for (const [tid, t] of activeTournaments) {
+        if (t.status !== 'active') continue;
+        const p = t.participants.find(pp => pp.user_id === userId);
+        if (!p) continue;
+
+        // Found the tournament this player belongs to
+        if (p.eliminated) {
+            return { ok: false, tournamentId: tid, eliminated: true, message: 'You were eliminated from this tournament.' };
+        }
+
+        if (!p.suspended) {
+            // Already active — just return their tournament so the client can enter the room
+            return { ok: true, tournamentId: tid, eliminated: false, message: 'Already active.' };
+        }
+
+        // Unsuspend
+        p.suspended = false;
+        logger.info('Tournament', `${userId} reconnected to tournament ${tid}.`);
+
+        // For arena: immediately try to pair them again
+        if (t.format === 'arena') {
+            setTimeout(() => pairIdleArenaPlayers(tid), 500);
+        }
+
+        broadcastTournamentUpdate(tid);
+        return { ok: true, tournamentId: tid, eliminated: false, message: 'Reconnected.' };
+    }
+
+    return { ok: false, tournamentId: null, eliminated: false, message: 'You are not in any active tournament.' };
 }
 
 
@@ -957,6 +974,7 @@ module.exports = {
     joinTournament,
     leaveTournament,
     onGameComplete,
+    reconnectToTournament,
     cleanupExpired,
     checkArenaExpiry,
     getOpenTournaments,
