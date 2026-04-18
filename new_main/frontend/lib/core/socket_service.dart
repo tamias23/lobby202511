@@ -1,0 +1,107 @@
+import 'dart:async';
+import 'package:socket_io_client/socket_io_client.dart' as io;
+import 'config.dart';
+
+/// Singleton Socket.io client service.
+/// Mirrors the legacy `socket.js` — wraps socket_io_client with JWT auth,
+/// reconnection strategy, and a simple listen/emit API.
+class SocketService {
+  SocketService._internal();
+  static final SocketService instance = SocketService._internal();
+  factory SocketService() => instance;
+
+  io.Socket? _socket;     // nullable — avoids LateInitializationError
+  bool _initialized = false;
+
+  bool get _ready => _socket != null;
+
+  // ── Initialization ──────────────────────────────────────────────────────────
+
+  void init({String? token}) {
+    if (_initialized) return;
+
+    final url = AppConfig.socketUrl;
+    final opts = io.OptionBuilder()
+        .setTransports(['websocket', 'polling'])
+        .disableAutoConnect()   // connect() is called explicitly
+        .enableReconnection()
+        .setReconnectionAttempts(99999)  // effectively unlimited; double.infinity.toInt() == 0 on web
+        .setReconnectionDelay(1000)
+        .setReconnectionDelayMax(5000)
+        .build();
+
+    _socket = io.io(url, opts);
+
+    // Set auth separately — avoids null value in the options map
+    if (token != null) {
+      _socket!.auth = {'token': token};
+    }
+
+    _initialized = true;
+  }
+
+  // ── Auth ────────────────────────────────────────────────────────────────────
+
+  /// Update JWT token and force a reconnect so the server sees the new token.
+  void setToken(String? token) {
+    if (!_ready) return;
+    _socket!.auth = {'token': token};
+    if (_socket!.connected) {
+      _socket!.disconnect();
+      _socket!.connect();
+    }
+  }
+
+  // ── Connection ──────────────────────────────────────────────────────────────
+
+  void connect() {
+    if (!_ready) return;
+    if (!_socket!.connected) _socket!.connect();
+  }
+
+  void disconnect() {
+    if (!_ready) return;
+    _socket!.disconnect();
+  }
+
+  bool get isConnected => _socket?.connected ?? false;
+
+  // ── Emit ────────────────────────────────────────────────────────────────────
+
+  void emit(String event, [dynamic data]) {
+    if (!_ready) return;   // silently drop if socket not initialized
+    _socket!.emit(event, data);
+  }
+
+  // ── Listen ──────────────────────────────────────────────────────────────────
+
+  void on(String event, Function(dynamic) handler) {
+    if (!_ready) return;
+    _socket!.on(event, handler);
+  }
+
+  void off(String event, [Function(dynamic)? handler]) {
+    if (!_ready) return;
+    if (handler != null) {
+      _socket!.off(event, handler);
+    } else {
+      _socket!.off(event);
+    }
+  }
+
+  void once(String event, Function(dynamic) handler) {
+    if (!_ready) return;
+    _socket!.once(event, handler);
+  }
+
+  // ── Connection state stream ──────────────────────────────────────────────────
+
+  Stream<bool> get connectionStream {
+    final controller = StreamController<bool>.broadcast();
+    if (_ready) {
+      _socket!.onConnect((_) => controller.add(true));
+      _socket!.onDisconnect((_) => controller.add(false));
+    }
+    return controller.stream;
+  }
+}

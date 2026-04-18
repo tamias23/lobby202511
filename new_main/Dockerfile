@@ -21,17 +21,20 @@ WORKDIR /app/backend/rust-napi
 RUN npm install
 RUN npm run build
 
-# --- STAGE 2: Build React Frontend ---
-FROM node:20-slim AS frontend-builder
-WORKDIR /app
-# We need the package files for install
-COPY frontend/package*.json ./frontend/
+# --- STAGE 2: Build Flutter Web Frontend ---
+FROM ghcr.io/cirruslabs/flutter:stable AS frontend-builder
 WORKDIR /app/frontend
-RUN npm install
-# Copy the rest of the frontend source
+
+# Copy pubspec files first (layer cache)
+COPY frontend/pubspec.yaml frontend/pubspec.lock ./
+RUN flutter pub get
+
+# Copy the full Flutter source
 COPY frontend/ ./
-# Run the Vite build to produce the 'dist' folder
-RUN npm run build
+
+# Build Flutter web (production — API_URL baked in at build time)
+RUN flutter build web --dart-define=API_URL=https://dedalthegame.com
+# Output: build/web/
 
 # --- STAGE 3: Production Runtime ---
 FROM node:20-slim
@@ -62,7 +65,7 @@ COPY --from=rust-builder /app/backend/rust-napi/package.json ./
 
 # 3. Setup Frontend
 WORKDIR /app/frontend
-COPY --from=frontend-builder /app/frontend/dist ./dist
+COPY --from=frontend-builder /app/frontend/build/web ./build/web
 
 # 4. Final Prep
 WORKDIR /app/backend

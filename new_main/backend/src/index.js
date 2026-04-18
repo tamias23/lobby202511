@@ -413,7 +413,8 @@ async function triggerBotMoveIfNeeded(gameId) {
                     // Mark turn as mid-flight so the next bot call knows it's continuing, not starting a new turn
                     currentGame.isNewTurn = false;
                     // Record the setup move
-                    currentGame.moves.push({ turn_number: 0, active_side: currentGame.turn, phase: 'setup', chosen_color: '', piece_id: botMove.piece, target_id: botMove.target, timestamp_ms: Date.now() });
+                    const _now1 = Date.now();
+                    currentGame.moves.push({ turn_number: 0, active_side: currentGame.turn, phase: 'setup', chosen_color: '', piece_id: botMove.piece, target_id: botMove.target, timestamp_ms: _now1, elapsed_ms: _now1 - (currentGame.moves.at(-1)?.timestamp_ms ?? currentGame.gameStartTimestamp ?? _now1) });
 
                     // Refresh clock so the game_update contains live time, preventing frontend "flash"
                     updateClocks(currentGame, true);
@@ -589,7 +590,8 @@ async function triggerBotMoveIfNeeded(gameId) {
             freshGame.movesThisTurn = response.movesThisTurn;
             freshGame.lockedSequencePiece = response.lockedSequencePiece;
             freshGame.heroeTakeCounter = response.heroeTakeCounter;
-            freshGame.moves.push({ turn_number: freshGame.turnCounter, active_side: oldTurn, phase: 'playing', chosen_color: freshGame.colorChosen?.[oldTurn] || '', piece_id: botMove.piece, target_id: botMove.target, timestamp_ms: Date.now() });
+            const _now2 = Date.now();
+            freshGame.moves.push({ turn_number: freshGame.turnCounter, active_side: oldTurn, phase: 'playing', chosen_color: freshGame.colorChosen?.[oldTurn] || '', piece_id: botMove.piece, target_id: botMove.target, timestamp_ms: _now2, elapsed_ms: _now2 - (freshGame.moves.at(-1)?.timestamp_ms ?? freshGame.gameStartTimestamp ?? _now2) });
 
             io.to(gameId).emit('game_update', {
                 pieces: freshGame.pieces, turn: freshGame.turn,
@@ -864,26 +866,81 @@ app.get('/api/boards/:boardId', (req, res) => {
 // the main backend so the SPA Tutorial page doesn't need a separate server.
 
 // POST /api/tutorial/moves — return legal targets for a piece
+// Converts tutorial piece format {id, type, pos} ↔ NAPI format {id, type, side, position}.
+// Sets phase=Playing + colorChosen={white:'grey', black:'grey'} so any piece can
+// move freely regardless of whose turn the engine would normally compute.
 app.post('/api/tutorial/moves', (req, res) => {
     try {
-        const result = getLegalMovesNapi(req.body);
-        res.json(result);
+        const { pieceId, pieces, board } = req.body;
+        const piece = (pieces || []).find(p => p.id === pieceId);
+        // Derive active side from piece id prefix (e.g. 'white_goddess_0' → 'white')
+        const turn = piece?.id?.startsWith('white') ? 'white' : 'black';
+        // Convert tutorial pieces {id, type, pos} → NAPI {id, type, side, position}
+        const napiPieces = (pieces || []).map(p => ({
+            id:       p.id,
+            type:     p.type,
+            side:     p.id?.startsWith('white') ? 'white' : 'black',
+            position: p.pos,
+        }));
+        const result = getLegalMovesNapi({
+            boardJson:         JSON.stringify(board || {}),
+            piecesJson:        JSON.stringify(napiPieces),
+            pieceId,
+            turn,
+            phase:             'Playing',
+            setupStep:         5,           // past all setup steps
+            colorChosen:       { white: 'grey', black: 'grey' },
+            colorsEverChosen:  ['grey', 'green', 'blue', 'orange'],
+            turnCounter:       1,
+            isNewTurn:         true,
+            movesThisTurn:     0,
+            heroeTakeCounter:  0,
+        });
+        res.json({ targets: result.targets || [] });
     } catch (e) {
         logger.error('Tutorial', '/api/tutorial/moves error:', e.message);
-        res.status(400).json({ error: e.name + ': ' + e.message });
+        res.status(400).json({ error: e.name + ': ' + e.message, targets: [] });
     }
 });
 
-// POST /api/tutorial/apply — apply a move and return updated piece positions
+// POST /api/tutorial/apply — apply a move and return updated tutorial pieces
 app.post('/api/tutorial/apply', (req, res) => {
     try {
-        const result = applyMoveNapi(req.body);
-        res.json(result);
+        const { pieceId, targetId, pieces, board } = req.body;
+        const piece = (pieces || []).find(p => p.id === pieceId);
+        const turn = piece?.id?.startsWith('white') ? 'white' : 'black';
+        const napiPieces = (pieces || []).map(p => ({
+            id:       p.id,
+            type:     p.type,
+            side:     p.id?.startsWith('white') ? 'white' : 'black',
+            position: p.pos,
+        }));
+        const result = applyMoveNapi({
+            boardJson:         JSON.stringify(board || {}),
+            piecesJson:        JSON.stringify(napiPieces),
+            pieceId,
+            targetPoly:        targetId,
+            turn,
+            phase:             'Playing',
+            setupStep:         5,
+            colorChosen:       { white: 'grey', black: 'grey' },
+            colorsEverChosen:  ['grey', 'green', 'blue', 'orange'],
+            turnCounter:       1,
+            isNewTurn:         true,
+            movesThisTurn:     0,
+            heroeTakeCounter:  0,
+        });
+        // Convert NAPI pieces {id, type, side, position} back to tutorial format {id, type, pos}
+        const updatedPieces = JSON.parse(result.piecesJson).map(p => ({
+            id: p.id, type: p.type, pos: p.position,
+        }));
+        res.json({ pieces: updatedPieces });
     } catch (e) {
         logger.error('Tutorial', '/api/tutorial/apply error:', e.message);
-        res.status(400).json({ error: e.name + ': ' + e.message });
+        res.status(400).json({ error: e.name + ': ' + e.message, pieces: req.body.pieces || [] });
     }
 });
+
 
 
 // GET /api/boards/random/:count — return N random boards with polygon data for SVG preview
@@ -1533,6 +1590,8 @@ async function createTournamentGame(whitePlayer, blackPlayer, timeControl, board
     }
 
     logger.info('Game', `Tournament game ${hash} wired: white=${whitePlayer.userId}${whiteIsBot?' (BOT)':''}, black=${blackPlayer.userId}${blackIsBot?' (BOT)':''}`);
+    // Immediately push the new game to all lobby clients so it shows in Active Games.
+    broadcastLobbyUpdate(io);
     return result;
 }
 
@@ -1831,17 +1890,30 @@ io.on('connection', (socket) => {
                 status: tournament.status,
             });
 
-            // Invite bots if requested
+            // Invite bots if requested — only invite IDLE bots (not already in another tournament).
+            // Iterate all availableBots and skip any that are already participating in another
+            // open or active tournament, so we always fill the requested slot count.
             if (tournament.invited_bots > 0 && availableBots.length > 0) {
-                const botsToInvite = availableBots.slice(0, tournament.invited_bots);
-                for (const bot of botsToInvite) {
-                    const botId = `bot_${bot.agent_type}_${bot.model_name}`;
+                let invitedCount = 0;
+                for (const bot of availableBots) {
+                    if (invitedCount >= tournament.invited_bots) break;
+                    const botId   = `bot_${bot.agent_type}_${bot.model_name}`;
                     const botName = makeBotDisplayName(bot.agent_type, bot.model_name);
+                    // Pre-check: skip bots already locked in another tournament (in-memory, no DB hit)
+                    const existingT = await tournamentManager.getUserActiveTournament(botId);
+                    if (existingT) {
+                        logger.debug('Tournament', `Bot ${botId} busy in ${existingT}, skipping.`);
+                        continue;
+                    }
                     try {
                         await tournamentManager.joinTournament(tournament.id, botId, botName, null, true);
+                        invitedCount++;
                     } catch (e) {
                         logger.warn('Tournament', `Bot ${botId} could not join: ${e.message}`);
                     }
+                }
+                if (invitedCount < tournament.invited_bots) {
+                    logger.warn('Tournament', `Only ${invitedCount}/${tournament.invited_bots} bot slot(s) filled — not enough idle bots.`);
                 }
             }
 
@@ -2126,7 +2198,7 @@ io.on('connection', (socket) => {
             for (const p of game.pieces) {
                 const old = oldPieces.find(op => op.id === p.id);
                 if (old && old.position === 'returned' && p.position !== 'returned') {
-                    game.moves.push({ turn_number: 0, active_side: game.turn, phase: 'setup', chosen_color: '', piece_id: p.id, target_id: p.position, timestamp_ms: randTs });
+                    game.moves.push({ turn_number: 0, active_side: game.turn, phase: 'setup', chosen_color: '', piece_id: p.id, target_id: p.position, timestamp_ms: randTs, elapsed_ms: 0 });
                 }
             }
 
@@ -2489,7 +2561,8 @@ io.on('connection', (socket) => {
                 
                 game.pieces[pieceIndex] = { ...piece, position: targetPoly };
                 // Record setup placement move
-                game.moves.push({ turn_number: 0, active_side: game.turn, phase: 'setup', chosen_color: '', piece_id: pieceId, target_id: targetPoly, timestamp_ms: Date.now() });
+                const _now4 = Date.now();
+                game.moves.push({ turn_number: 0, active_side: game.turn, phase: 'setup', chosen_color: '', piece_id: pieceId, target_id: targetPoly, timestamp_ms: _now4, elapsed_ms: _now4 - (game.moves.at(-1)?.timestamp_ms ?? game.gameStartTimestamp ?? _now4) });
 
                 // Track how many pieces have been placed this turn so the
                 // "End Turn" guard (movesThisTurn === 0) works for human players.
@@ -2592,7 +2665,8 @@ io.on('connection', (socket) => {
                 game.lockedSequencePiece = response.lockedSequencePiece;
                 game.heroeTakeCounter = response.heroeTakeCounter;
                 
-                game.moves.push({ turn_number: game.turnCounter, active_side: oldTurn, phase: 'playing', chosen_color: game.colorChosen?.[oldTurn] || '', piece_id: pieceId, target_id: targetPoly, timestamp_ms: Date.now() });
+                const _now5 = Date.now();
+                game.moves.push({ turn_number: game.turnCounter, active_side: oldTurn, phase: 'playing', chosen_color: game.colorChosen?.[oldTurn] || '', piece_id: pieceId, target_id: targetPoly, timestamp_ms: _now5, elapsed_ms: _now5 - (game.moves.at(-1)?.timestamp_ms ?? game.gameStartTimestamp ?? _now5) });
 
                 io.to(gameId).emit('game_update', {
                     pieces: game.pieces,
@@ -2708,6 +2782,9 @@ io.on('connection', (socket) => {
 
 // --- PRODUCTION STATIC SERVING ---
 const possibleDistPaths = [
+    // Flutter web build output (new frontend)
+    path.join(__dirname, '../../frontend/build/web'),
+    // Legacy Vite/React build output (frontend_legacy — kept as fallback)
     path.join(__dirname, '../../frontend/dist'),
     path.join(__dirname, '../dist'),
     path.join(__dirname, '../../dist'),
@@ -2731,7 +2808,7 @@ if (distPath) {
         res.sendFile(path.join(distPath, 'index.html'));
     });
 } else {
-    logger.warn('Server', 'Production frontend assets (dist) not found in expected locations.');
+    logger.warn('Server', 'Production frontend assets not found in expected locations (checked: build/web, dist).');
 }
 
 server.listen(PORT, '0.0.0.0', () => {

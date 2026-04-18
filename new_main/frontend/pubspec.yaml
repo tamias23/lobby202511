@@ -1,0 +1,65 @@
+name: dedal_app
+description: "Dedal — A high-strategy polygonal board game."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management — Riverpod 3
+  flutter_riverpod: ^3.0.0
+  riverpod_annotation: ^3.0.0
+
+  # Routing
+  go_router: ^14.0.0
+
+  # Real-time comms (Socket.io)
+  socket_io_client: ^3.0.2
+
+  # HTTP client
+  dio: ^5.7.0
+
+  # Local storage (JWT, prefs)
+  shared_preferences: ^2.3.0
+
+  # Simple HTTP client for analysis/tutorial one-off fetches
+  http: ^1.2.0
+
+  # Google Fonts (Inter + Outfit)
+  google_fonts: ^6.2.0
+  flutter_svg: ^2.0.10+1
+
+  # Immutable models + JSON serialization
+  freezed_annotation: ^3.0.0
+  json_annotation: ^4.9.0
+
+  # Rust engine bridge — FFI on Android, WASM on Web
+  flutter_rust_bridge: ^2.9.0
+
+  # Icons
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # Linting
+  flutter_lints: ^6.0.0
+
+  # Code generation
+  build_runner: ^2.4.0
+  freezed: ^3.0.0
+  json_serializable: ^6.8.0
+  riverpod_generator: ^3.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/sounds/
+    - assets/tutorial_translations.json
+

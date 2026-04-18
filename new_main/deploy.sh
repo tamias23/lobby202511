@@ -23,7 +23,8 @@ podman image prune
 cd /home/mat/Bureau/lobby202511/rust && cargo build --release --bin rust 2>&1
 cd /home/mat/Bureau/lobby202511/new_main/bot-server && cargo build --release
 cd /home/mat/Bureau/lobby202511/new_main/backend && npm run build:napi
-cd /home/mat/Bureau/lobby202511/new_main/frontend && npm run build:wasm
+FLUTTER=/home/mat/Bureau/standalone/flutter_linux_3.41.7-stable/flutter/bin/flutter
+cd /home/mat/Bureau/lobby202511/new_main/frontend && $FLUTTER build web --dart-define=API_URL=https://dedalthegame.com
 
 # ── Build & push nd6-app ──
 cd /home/mat/Bureau/lobby202511/new_main
@@ -43,9 +44,9 @@ gcloud run deploy nd6-app \
     --region europe-west1 \
     --allow-unauthenticated \
     --timeout=3600 \
-    --min-instances 1 \
+    --min-instances 0 \
     --max-instances 1 \
-    --no-cpu-throttling \
+    --cpu-throttling \
     --concurrency 800 \
     --network default \
     --subnet default \
@@ -67,9 +68,9 @@ gcloud run deploy nd6-bot-server \
     --region europe-west1 \
     --ingress internal \
     --timeout=3600 \
-    --min-instances 1 \
+    --min-instances 0 \
     --max-instances 1 \
-    --no-cpu-throttling \
+    --cpu-throttling \
     --memory 1Gi \
     --cpu 2 \
     --port 8080 \

@@ -1,12 +1,12 @@
 #!/bin/bash
-# Launch script for local development (no Vite server needed)
+# Launch script for local development.
 #
 # PRE-REQUISITES (run once when Rust code changes):
 #   cd /home/mat/Bureau/lobby202511/new_main/bot-server && cargo build --release
 #   cd /home/mat/Bureau/lobby202511/new_main/backend    && npm run build:napi
-#   cd /home/mat/Bureau/lobby202511/new_main/frontend   && npm run build:wasm
 # This script:
-#   1. Builds the frontend static assets (relative-URL mode, no VITE_API_URL baked in)
+#   1. Builds the Flutter web frontend (relative-URL mode, no API_URL baked in)
+#      Output: frontend/build/web/  — served by the Game Server on port 4000
 #   2. Starts Bot Server on port 5001
 #   3. Starts Game Server on port 4000 (which also serves the built frontend)
 #
@@ -54,13 +54,12 @@ fuser -k 4000/tcp 2>/dev/null || true
 fuser -k 5001/tcp 2>/dev/null || true
 sleep 1
 
-# --- 1. Build frontend static assets ---
-# IMPORTANT: override VITE_API_URL to empty so the production value
-# (https://dedalthegame.com from .env.production) is NOT baked into
-# the bundle. Fetch calls will use relative URLs, served by localhost:4000.
-echo "==> Building frontend for local use (VITE_API_URL='')..."
+# --- 1. Build Flutter web frontend ---
+# API_URL is left empty so all requests use relative URLs — served by localhost:4000.
+FLUTTER=/home/mat/Bureau/standalone/flutter_linux_3.41.7-stable/flutter/bin/flutter
+echo "==> Building Flutter web frontend (relative URLs)..."
 cd "${SCRIPT_DIR}/frontend"
-VITE_API_URL="" npm run build
+$FLUTTER build web --dart-define=API_URL=
 
 # Disable set -e for background processes (they run independently)
 set +e
