@@ -136,26 +136,32 @@ const saveMatchResult = async (
     tournamentId = null, tournamentRoundInfo = null
 ) => {
     try {
-        // ── 1. Persist game record ──
-        await db.saveGame({
-            game_id: gameId,
-            timestamp,
-            white_name: whiteName,
-            black_name: blackName,
-            white_player_id: whitePlayerId,
-            black_player_id: blackPlayerId,
-            board_id: boardId,
-            winner,
-            moves: JSON.stringify(moves),
-            tournament_id: tournamentId,
-            tournament_round_info: tournamentRoundInfo,
-        });
-
-        logger.info('Storage', `Match ${gameId} stored (winner=${winner}).`);
-
-        // ── 2. Update Glicko-2 ratings (serialised) ──
         const isRegistered = (id) => id && !id.startsWith('guest_');
-        if (!isRegistered(whitePlayerId) || !isRegistered(blackPlayerId)) return;
+        const bothRegistered = isRegistered(whitePlayerId) && isRegistered(blackPlayerId);
+
+        // ── 1. Persist game record (registered players only) ──
+        // Guest games are not stored — no history, no rating change.
+        if (bothRegistered) {
+            await db.saveGame({
+                game_id: gameId,
+                timestamp,
+                white_name: whiteName,
+                black_name: blackName,
+                white_player_id: whitePlayerId,
+                black_player_id: blackPlayerId,
+                board_id: boardId,
+                winner,
+                moves: JSON.stringify(moves),
+                tournament_id: tournamentId,
+                tournament_round_info: tournamentRoundInfo,
+            });
+            logger.info('Storage', `Match ${gameId} stored (winner=${winner}).`);
+        } else {
+            logger.debug('Storage', `Match ${gameId} not stored — guest player involved.`);
+            return; // No rating update either
+        }
+
+        // ── 2. Update Glicko-2 ratings (serialised, registered only) ──
 
         // Fire-and-forget into the queue (don't await — lets the socket handler return fast)
         ratingQueue.enqueue(async () => {

@@ -1271,7 +1271,7 @@ setInterval(() => {
             
             const diff = now - disconAt;
             const role = game[`${playerType}Role`];
-            const limit = role === 'guest' ? 5000 : 30000;
+            const limit = 30000; // 30s for all players (guest or registered)
 
             if (diff >= limit) {
                 logger.info('Game', `Game Over: ${gameId} - ${playerType} abandoned (${role})`);
