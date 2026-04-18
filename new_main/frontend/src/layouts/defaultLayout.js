@@ -10,7 +10,7 @@
  * Panels: board · info · actions (contains color + mage inline) · tournament · spectator
  */
 
-export const LAYOUT_VERSION = 13;
+export const LAYOUT_VERSION = 14;
 
 const LAYOUT_KEY_LANDSCAPE = 'gamePanelLayout_landscape';
 const LAYOUT_KEY_PORTRAIT  = 'gamePanelLayout_portrait';
@@ -23,7 +23,7 @@ const LAYOUT_KEY_PORTRAIT  = 'gamePanelLayout_portrait';
 export const DEFAULT_LANDSCAPE = [
   { i: 'board',      x: 5,  y: 0, w: 14, h: 24, minW: 6, minH: 8 },
   { i: 'info',       x: 0,  y: 7, w: 5,  h: 10, minW: 4, minH: 5 },
-  { i: 'actions',    x: 19, y: 7, w: 5,  h: 10, minW: 4, minH: 6 },
+  { i: 'actions',    x: 19, y: 0, w: 5,  h: 15, minW: 4, minH: 6 },
   { i: 'tournament', x: 0,  y: 0, w: 5,  h: 7,  minW: 4, minH: 4 },
 ];
 
@@ -31,7 +31,7 @@ export const DEFAULT_LANDSCAPE = [
 export const DEFAULT_PORTRAIT = [
   { i: 'board',      x: 0,  y: 0,  w: 24, h: 12, minW: 12, minH: 8 },
   { i: 'info',       x: 4,  y: 12, w: 16, h: 5,  minW: 12, minH: 4 },
-  { i: 'actions',    x: 4,  y: 17, w: 16, h: 7,  minW: 12, minH: 5 },
+  { i: 'actions',    x: 4,  y: 17, w: 16, h: 10, minW: 12, minH: 5 },
   { i: 'tournament', x: 2,  y: 24, w: 20, h: 5,  minW: 12, minH: 4 },
 ];
 

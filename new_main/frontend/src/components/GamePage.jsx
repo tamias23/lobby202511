@@ -173,6 +173,7 @@ const GamePage = ({ user }) => {
       )}
 
       <GameBoard
+        gameId={hash}
         side={gameInfo.spectator ? 'spectator' : gameInfo.side}
         opponent={gameInfo.opponent}
         playerName={user?.username || user?.id || 'Guest'}

@@ -57,7 +57,12 @@ const saveMatchResult = async (gameId, timestamp, whiteName, blackName, whitePla
     const roundInfo = game?.roundInfo || null;
 
     // 2. Persist to main games log
-    await _saveMatchResult(gameId, timestamp, whiteName, blackName, whitePlayerId, blackPlayerId, boardId, winner, moves, io, tournamentId, roundInfo);
+    // For tournament games, the tournament system already persists via onGameComplete
+    // (using the tournament's UUID game_id). Calling saveMatchResult here would
+    // create a DUPLICATE record under the hash game_id. So we skip it.
+    if (!tournamentId) {
+        await _saveMatchResult(gameId, timestamp, whiteName, blackName, whitePlayerId, blackPlayerId, boardId, winner, moves, io, null, null);
+    }
 
     // 3. Hook: if this game belongs to a tournament, update it
     if (TOURNAMENTS_ENABLED) {
@@ -431,7 +436,7 @@ async function triggerBotMoveIfNeeded(gameId) {
 
                 }
                 // Continue placing pieces (small delay so the human sees each one)
-                valkeySync.syncGameUpdated(gameId, currentGame);
+                syncGameUpdated(gameId, currentGame);
                 setTimeout(() => triggerBotMoveIfNeeded(gameId), BOT_MOVE_DELAY_MS);
                 return;
 
@@ -486,7 +491,7 @@ async function triggerBotMoveIfNeeded(gameId) {
 
                 // If still the bot's turn (more setup steps or just transitioned to Playing)
                 // If the next turn is a bot's turn, trigger it
-                valkeySync.syncGameUpdated(gameId, currentGame);
+                syncGameUpdated(gameId, currentGame);
                 setImmediate(() => triggerBotMoveIfNeeded(gameId));
                 return;
             }
@@ -549,7 +554,7 @@ async function triggerBotMoveIfNeeded(gameId) {
                         moves: freshGame.moves || [],
             });
             // Bot may need to make more moves in same turn
-            valkeySync.syncGameUpdated(gameId, freshGame);
+            syncGameUpdated(gameId, freshGame);
             setTimeout(() => triggerBotMoveIfNeeded(gameId), BOT_MOVE_DELAY_MS);
 
         } else if (botMove.action === 'move' && botMove.piece && botMove.target) {
@@ -616,7 +621,7 @@ async function triggerBotMoveIfNeeded(gameId) {
                 broadcastLobbyUpdate(io);
             } else {
                 // Bot might need to continue its turn (chaining)
-                valkeySync.syncGameUpdated(gameId, freshGame);
+                syncGameUpdated(gameId, freshGame);
                 setTimeout(() => triggerBotMoveIfNeeded(gameId), BOT_MOVE_DELAY_MS);
             }
 
@@ -660,7 +665,7 @@ async function triggerBotMoveIfNeeded(gameId) {
                         moves: freshGame.moves || [],
             });
             // Bot ended turn by passing — trigger next bot move if applicable
-            valkeySync.syncGameUpdated(gameId, freshGame);
+            syncGameUpdated(gameId, freshGame);
             setImmediate(() => triggerBotMoveIfNeeded(gameId));
         }
     } catch (err) {
@@ -1196,6 +1201,18 @@ function noActiveSocketsInRoom(gameId) {
 }
 
 /**
+ * Wrapper around valkeySync.syncGameUpdated that skips bot-vs-bot games.
+ * Bot vs bot games have no human watchers on other instances — only the
+ * final game:deleted (on game over) needs to be synced.
+ * This avoids ~8 unnecessary Valkey pub/sub messages per second when
+ * background bot matches are running.
+ */
+function syncGameUpdated(gameId, game) {
+    if (game && game.whiteRole === 'bot' && game.blackRole === 'bot') return;
+    valkeySync.syncGameUpdated(gameId, game);
+}
+
+/**
  * Handle an abandoned game (stale sweep helper).
  *
  * Rules:
@@ -1256,15 +1273,17 @@ setInterval(() => {
 
         // Condition 3: No socket in room for ≥ 60s (ghost game — nobody watching)
         // Applies to ALL phases including Setup.
-        if (game.gameStartTimestamp && (now - game.gameStartTimestamp) >= STALE_GAME_LIMIT_MS && noActiveSocketsInRoom(gameId)) {
+        // EXCEPTION: bot-vs-bot games never have sockets — they are managed entirely
+        // server-side by triggerBotMoveIfNeeded(). Skip them here.
+        const isBotVsBot = game.whiteRole === 'bot' && game.blackRole === 'bot';
+        if (!isBotVsBot && game.gameStartTimestamp && (now - game.gameStartTimestamp) >= STALE_GAME_LIMIT_MS && noActiveSocketsInRoom(gameId)) {
             logger.info('Game', `Stale game ${gameId}: no socket in room for ${Math.round((now - game.gameStartTimestamp) / 1000)}s (phase=${game.phase}). Purging.`);
             handleAbandonedGame(gameId, game, 'abandoned', 'Game abandoned.');
             continue;
         }
 
         // --- DISCONNECTION HANDLING ---
-        // Guest: Remove after 5s
-        // Registered: Forfeit after 30s
+        // 30s for all players (guest or registered)
         const checkDiscon = (playerType) => {
             const disconAt = game[`${playerType}DisconnectedAt`];
             if (!disconAt) return false;
@@ -2067,7 +2086,7 @@ io.on('connection', (socket) => {
                 moves: game.moves || [],
             });
             logger.debug('Move', `Color '${color}' set for ${game.turn} by ${side} in ${gameId}. isNewTurn=${game.isNewTurn}`);
-            valkeySync.syncGameUpdated(gameId, game);
+            syncGameUpdated(gameId, game);
         } catch (error) {
             logger.error('Move', 'Error selecting color:', error);
         }
@@ -2142,7 +2161,7 @@ io.on('connection', (socket) => {
                 moves: game.moves || [],
             });
             logger.debug('Setup', `randomize_setup result: turn=${game.turn}, phase=${game.phase}, step=${game.setupStep}`);
-            valkeySync.syncGameUpdated(gameId, game);
+            syncGameUpdated(gameId, game);
 
             // Trigger bot if it's its turn
             setImmediate(() => triggerBotMoveIfNeeded(gameId));
@@ -2204,7 +2223,7 @@ io.on('connection', (socket) => {
                 moves: game.moves || [],
                 });
                 logger.debug('Setup', `Turn ended in ${gameId}: now ${game.turn}'s turn`);
-                valkeySync.syncGameUpdated(gameId, game);
+                syncGameUpdated(gameId, game);
 
                 // Always try to trigger bot if applicable
                 setImmediate(() => triggerBotMoveIfNeeded(gameId));
@@ -2288,7 +2307,7 @@ io.on('connection', (socket) => {
                     passCount: game.passCount
                 });
                 logger.debug('Move', `Turn passed in ${gameId}: now ${game.turn}'s turn (${passingSide} passCount: ${game.passCount[passingSide]})`);
-                valkeySync.syncGameUpdated(gameId, game);
+                syncGameUpdated(gameId, game);
 
                 // Always try to trigger bot if applicable
                 setImmediate(() => triggerBotMoveIfNeeded(gameId));
@@ -2358,7 +2377,7 @@ io.on('connection', (socket) => {
                 passCount:           game.passCount
             });
             logger.debug('Move', `end_heroe_bonus in ${gameId}: turn → ${game.turn}`);
-            valkeySync.syncGameUpdated(gameId, game);
+            syncGameUpdated(gameId, game);
             setImmediate(() => triggerBotMoveIfNeeded(gameId));
         } catch (e) {
             logger.error('Move', 'Error in end_heroe_bonus:', e);
@@ -2529,7 +2548,7 @@ io.on('connection', (socket) => {
                 });
 
                 // Always try to trigger bot if applicable
-                valkeySync.syncGameUpdated(gameId, game);
+                syncGameUpdated(gameId, game);
                 setImmediate(() => triggerBotMoveIfNeeded(gameId));
 
             } else {
@@ -2613,7 +2632,7 @@ io.on('connection', (socket) => {
                     broadcastLobbyUpdate(io);
                 } else {
                     // Try to trigger bot if applicable
-                    valkeySync.syncGameUpdated(gameId, game);
+                    syncGameUpdated(gameId, game);
                     setImmediate(() => triggerBotMoveIfNeeded(gameId));
                 }
 

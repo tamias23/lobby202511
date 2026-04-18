@@ -44,7 +44,7 @@ gcloud run deploy nd6-app \
     --allow-unauthenticated \
     --timeout=3600 \
     --min-instances 1 \
-    --max-instances 3 \
+    --max-instances 1 \
     --no-cpu-throttling \
     --concurrency 800 \
     --network default \

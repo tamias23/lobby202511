@@ -973,7 +973,7 @@ svg polygon:hover {
 .rgl-panel {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;   /* let resize handle render outside the box */
   border-radius: 10px;
   box-shadow: 0 0 0 1px rgba(255,255,255,0.10), 0 4px 16px rgba(0,0,0,0.25);
   /* subtle glass bg so items are visible even without inner .glass-panel */
@@ -1040,6 +1040,15 @@ svg polygon:hover {
   /* CSS container queries — content adapts to the panel's width */
   container-type: inline-size;
   container-name: panel;
+  /* Android/Capacitor: allow the browser to synthesize click from touch.
+     react-grid-layout sets touch-action:none on resizable items, which
+     prevents taps from producing click events. Override here. */
+  touch-action: manipulation;
+}
+
+/* Ensure all buttons inside panels receive touch taps on Android */
+.panel-content button {
+  touch-action: manipulation;
 }
 
 .panel-content::-webkit-scrollbar {
@@ -1067,6 +1076,8 @@ svg polygon:hover {
   cursor: ne-resize;
   opacity: 0.5;
   transition: opacity 0.2s;
+  z-index: 10;  /* above panel content so it’s always visible */
+  touch-action: none; /* resize handle itself should suppress scroll */
 }
 .react-resizable-handle-ne:hover { opacity: 1; }
 

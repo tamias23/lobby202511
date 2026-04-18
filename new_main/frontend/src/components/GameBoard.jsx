@@ -1547,8 +1547,18 @@ const GameBoard = ({
                       socket.emit('pass_turn_playing', { gameId });
                     }
                   }}
-                  onMouseOver={e=>turn===side&&(e.target.style.transform='scale(1.03)')}
-                  onMouseOut={e=>turn===side&&(e.target.style.transform='scale(1)')}
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    if (turn !== side) return;
+                    if (phase === 'Setup') {
+                      if (movesThisTurn === 0) { const el=document.getElementById('pass-warning-toast'); if(el){el.style.opacity='1';setTimeout(()=>{if(el)el.style.opacity='0';},2500);} return; }
+                      socket.emit('end_turn_setup', { gameId });
+                    } else {
+                      const myPassCount = passCount[side]||0;
+                      if(myPassCount===2){if(!passWarningShown){setPassWarningShown(true);return;}setPassWarningShown(false);}else{setPassWarningShown(false);}
+                      socket.emit('pass_turn_playing', { gameId });
+                    }
+                  }}
                   style={{ ...buttonStyle, backgroundColor:turn!==side?'#7f8c8d':(passWarningShown?'#c0392b':(phase==='Setup'?'#2ecc71':'#e67e22')), boxShadow:turn!==side?'none':(passWarningShown?'0 2px 8px rgba(192,57,43,0.5)':phase==='Setup'?'0 2px 8px rgba(46,204,113,0.3)':'0 2px 8px rgba(230,126,34,0.3)'), opacity:turn!==side?0.35:1, cursor:turn!==side?'not-allowed':'pointer', pointerEvents:turn!==side?'none':'auto', width:'100%', padding:'8px', transition:'all 0.2s' }}
                 >{turn!==side?'Waiting for opponent…':(passWarningShown?'&#9888;&#65039; Confirm Pass':'End Turn')}</button>
               )}
@@ -1556,8 +1566,7 @@ const GameBoard = ({
               {phase === 'Setup' && (
                 <button
                   onClick={() => { if(turn===side)socket.emit('randomize_setup',{gameId,side}); }}
-                  onMouseOver={e=>turn===side&&(e.target.style.transform='scale(1.03)')}
-                  onMouseOut={e=>turn===side&&(e.target.style.transform='scale(1)')}
+                  onTouchEnd={(e) => { e.preventDefault(); if(turn===side)socket.emit('randomize_setup',{gameId,side}); }}
                   style={{ ...buttonStyle, backgroundColor:turn!==side?'#7f8c8d':'#9b59b6', boxShadow:turn!==side?'none':'0 2px 8px rgba(155,89,182,0.3)', opacity:turn!==side?0.35:1, cursor:turn!==side?'not-allowed':'pointer', pointerEvents:turn!==side?'none':'auto', width:'100%', padding:'8px' }}
                 >{turn!==side?'Waiting for opponent…':'Random Setup'}</button>
               )}
@@ -1565,11 +1574,11 @@ const GameBoard = ({
               {!spectatorMode && phase!=='GameOver' && (
                 resignConfirm ? (
                   <div style={{ display:'flex', gap:'6px', width:'100%' }}>
-                    <button onClick={() => { socket.emit('resign',{gameId}); setResignConfirm(false); }} style={{ ...buttonStyle, flex:1, backgroundColor:'#c0392b', boxShadow:'0 2px 8px rgba(192,57,43,0.4)', padding:'8px 4px', fontSize:'12px' }}>Yes, resign</button>
-                    <button onClick={() => setResignConfirm(false)} style={{ ...buttonStyle, flex:1, backgroundColor:'#2c3e50', boxShadow:'0 2px 8px rgba(44,62,80,0.3)', padding:'8px 4px', fontSize:'12px' }}>Cancel</button>
+                    <button onClick={() => { socket.emit('resign',{gameId}); setResignConfirm(false); }} onTouchEnd={(e) => { e.preventDefault(); socket.emit('resign',{gameId}); setResignConfirm(false); }} style={{ ...buttonStyle, flex:1, backgroundColor:'#c0392b', boxShadow:'0 2px 8px rgba(192,57,43,0.4)', padding:'8px 4px', fontSize:'12px' }}>Yes, resign</button>
+                    <button onClick={() => setResignConfirm(false)} onTouchEnd={(e) => { e.preventDefault(); setResignConfirm(false); }} style={{ ...buttonStyle, flex:1, backgroundColor:'#2c3e50', boxShadow:'0 2px 8px rgba(44,62,80,0.3)', padding:'8px 4px', fontSize:'12px' }}>Cancel</button>
                   </div>
                 ) : (
-                  <button onClick={() => setResignConfirm(true)} onMouseOver={e=>(e.target.style.transform='scale(1.03)')} onMouseOut={e=>(e.target.style.transform='scale(1)')} style={{ ...buttonStyle, backgroundColor:'#922b21', boxShadow:'0 2px 8px rgba(146,43,33,0.3)', width:'100%', padding:'8px' }}>Resign</button>
+                  <button onClick={() => setResignConfirm(true)} onTouchEnd={(e) => { e.preventDefault(); setResignConfirm(true); }} style={{ ...buttonStyle, backgroundColor:'#922b21', boxShadow:'0 2px 8px rgba(146,43,33,0.3)', width:'100%', padding:'8px' }}>Resign</button>
                 )
               )}
               {/* Settings accordion */}
