@@ -193,6 +193,9 @@ async function saveGame(data) {
             black_score: data.black_score || 0,
             started_at: data.started_at || data.timestamp,
             completed_at: data.completed_at || null,
+            // Time control (stored as separate fields for portability)
+            time_control_minutes: data.time_control_minutes || null,
+            time_control_increment: data.time_control_increment || null,
         });
         logger.debug('DB', `Game ${data.game_id} saved.`);
     } catch (e) {

@@ -183,7 +183,12 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
                   sliver: SliverToBoxAdapter(
-                    child: _showBotPanel ? _buildBotPanel(lobby) : _buildCustomForm(),
+                    child: Center(
+                      child: SizedBox(
+                        width: MediaQuery.of(context).size.width * 0.5,
+                        child: _showBotPanel ? _buildBotPanel(lobby) : _buildCustomForm(),
+                      ),
+                    ),
                   ),
                 ),
               // ── Bottom panels (4 cols or 2×2 or stacked) ─────────────────
@@ -452,7 +457,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                 onChange: (v) => setState(() => _customMin = v),
                 min: 1, max: 120,
               )),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
               Expanded(child: _LabeledNumberField(
                 label: 'INC (s)', value: _customInc,
                 onChange: (v) => setState(() => _customInc = v),
@@ -564,16 +569,16 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
       count: lobby.openTournaments.length,
       emptyLine1: 'No open tournaments.',
       emptyLine2: 'Create one!',
-      children: lobby.openTournaments.map((t) => _RequestCard(
+      children: lobby.openTournaments.map((t) => _TournamentOpenCard(
         username: t.name ?? formatLabel[t.format] ?? t.format,
         tc: 'by ${t.creatorUsername ?? 'System'} · ${t.timeControl['minutes']}+${t.timeControl['increment']}',
-        timeAgo: '${t.currentCount}/${t.maxParticipants}${t.hasPassword ? ' 🔒' : ''}',
-        isMine: false,
-        acceptLabel: 'Join',
-        onAccept: auth == null ? null : () => ref.read(lobbyProvider.notifier).joinTournament(t.id),
+        info: '${t.currentCount ?? 0}/${t.maxParticipants ?? '?'}${t.hasPassword ? ' 🔒' : ''}',
+        onView: () => context.go('/tournament/${t.id}'),
+        onJoin: auth == null ? null : () => ref.read(lobbyProvider.notifier).joinTournament(t.id),
       )).toList(),
     );
   }
+
 
   Widget _buildActiveTournamentsPanel(BuildContext context, LobbyState lobby) {
     final formatLabel = {'swiss': '🏔️ Swiss', 'arena': '⚔️ Arena', 'knockout': '🥊 KO', 'round_robin': '🔄 RR'};
@@ -1319,6 +1324,63 @@ class _BgToggleState extends State<_BgToggle> {
             ),
           ),
           child: Text(widget.bg.emoji, style: const TextStyle(fontSize: 15)),
+        ),
+      ),
+    );
+  }
+}
+// ── Open tournament card (View + optional Join) ───────────────────────────────
+
+class _TournamentOpenCard extends StatefulWidget {
+  final String  username;
+  final String  tc;
+  final String  info;
+  final VoidCallback  onView;
+  final VoidCallback? onJoin;
+  const _TournamentOpenCard({
+    required this.username, required this.tc, required this.info,
+    required this.onView, this.onJoin,
+  });
+  @override
+  State<_TournamentOpenCard> createState() => _TournamentOpenCardState();
+}
+
+class _TournamentOpenCardState extends State<_TournamentOpenCard> {
+  bool _hovered = false;
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit:  (_) => setState(() => _hovered = false),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          decoration: BoxDecoration(
+            color: _hovered ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.03),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: _hovered ? _kBlue.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.08),
+            ),
+          ),
+          child: Row(children: [
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(widget.username,
+                style: DTheme.body.copyWith(fontWeight: FontWeight.w600, fontSize: 13)),
+              const SizedBox(height: 2),
+              Text(widget.tc,
+                style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w700, color: _kBlue)),
+              Text(widget.info, style: DTheme.bodyMuted.copyWith(fontSize: 11)),
+            ])),
+            // View button — always present
+            _MiniGradBtn(label: 'View', onTap: widget.onView),
+            // Join button — only for logged-in non-participant users
+            if (widget.onJoin != null) ...[
+              const SizedBox(width: 6),
+              _MiniGreenBtn(label: 'Join', isMe: false, onTap: widget.onJoin!),
+            ],
+          ]),
         ),
       ),
     );

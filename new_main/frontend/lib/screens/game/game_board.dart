@@ -380,6 +380,12 @@ class _GameBoardState extends ConsumerState<GameBoard> {
                 onTap: () => ref.read(bgProvider.notifier).cycle(),
               ),
             ),
+            // ── Spectator banner — top left ────────────────────────────────
+            if (widget.side == 'spectator')
+              Positioned(
+                top: 8, left: 200, // offset from the left panel
+                child: _SpectatorBanner(tournamentId: widget.tournamentId),
+              ),
           ],
         ),
       ),
@@ -1029,6 +1035,80 @@ class _GameBgToggleState extends State<_GameBgToggle> {
             ),
           ),
           child: Text(widget.bg.emoji, style: const TextStyle(fontSize: 15)),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Spectator Banner ─────────────────────────────────────────────────────────
+
+class _SpectatorBanner extends StatelessWidget {
+  final String? tournamentId;
+  const _SpectatorBanner({this.tournamentId});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (tournamentId != null) ...[
+          _NavBtn(
+            label: '← Tournament',
+            onTap: () => context.go('/tournament/$tournamentId'),
+            isPrimary: true,
+          ),
+          const SizedBox(width: 8),
+        ],
+        _NavBtn(
+          label: tournamentId != null ? 'Lobby' : '← Lobby',
+          onTap: () => context.go('/'),
+          isPrimary: false,
+        ),
+      ],
+    );
+  }
+}
+
+class _NavBtn extends StatefulWidget {
+  final String label;
+  final VoidCallback onTap;
+  final bool isPrimary;
+  const _NavBtn({required this.label, required this.onTap, this.isPrimary = false});
+
+  @override
+  State<_NavBtn> createState() => _NavBtnState();
+}
+
+class _NavBtnState extends State<_NavBtn> {
+  bool _hovered = false;
+  @override
+  Widget build(BuildContext context) {
+    final color = widget.isPrimary ? DTheme.primary : Colors.white;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit:  (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: _hovered ? color.withValues(alpha: 0.15) : color.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: _hovered ? color.withValues(alpha: 0.4) : color.withValues(alpha: 0.15),
+            ),
+          ),
+          child: Text(
+            widget.label,
+            style: GoogleFonts.outfit(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: _hovered ? color : color.withValues(alpha: 0.7),
+            ),
+          ),
         ),
       ),
     );

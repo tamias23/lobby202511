@@ -2721,7 +2721,7 @@ as int?,
 /// @nodoc
 mixin _$GameOverInfo {
 
- String? get winner;// 'white' | 'black' | 'draw'
+@JsonKey(name: 'winnerSide') String? get winner;// 'white' | 'black' | 'draw'
  String? get reason;// 'time' | 'resign' | 'goddess_captured' | 'draw'
  String? get winnerId;
 /// Create a copy of GameOverInfo
@@ -2756,7 +2756,7 @@ abstract mixin class $GameOverInfoCopyWith<$Res>  {
   factory $GameOverInfoCopyWith(GameOverInfo value, $Res Function(GameOverInfo) _then) = _$GameOverInfoCopyWithImpl;
 @useResult
 $Res call({
- String? winner, String? reason, String? winnerId
+@JsonKey(name: 'winnerSide') String? winner, String? reason, String? winnerId
 });
 
 
@@ -2863,7 +2863,7 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String? winner,  String? reason,  String? winnerId)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@JsonKey(name: 'winnerSide')  String? winner,  String? reason,  String? winnerId)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _GameOverInfo() when $default != null:
 return $default(_that.winner,_that.reason,_that.winnerId);case _:
@@ -2884,7 +2884,7 @@ return $default(_that.winner,_that.reason,_that.winnerId);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String? winner,  String? reason,  String? winnerId)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@JsonKey(name: 'winnerSide')  String? winner,  String? reason,  String? winnerId)  $default,) {final _that = this;
 switch (_that) {
 case _GameOverInfo():
 return $default(_that.winner,_that.reason,_that.winnerId);case _:
@@ -2904,7 +2904,7 @@ return $default(_that.winner,_that.reason,_that.winnerId);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String? winner,  String? reason,  String? winnerId)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@JsonKey(name: 'winnerSide')  String? winner,  String? reason,  String? winnerId)?  $default,) {final _that = this;
 switch (_that) {
 case _GameOverInfo() when $default != null:
 return $default(_that.winner,_that.reason,_that.winnerId);case _:
@@ -2919,10 +2919,10 @@ return $default(_that.winner,_that.reason,_that.winnerId);case _:
 @JsonSerializable()
 
 class _GameOverInfo implements GameOverInfo {
-  const _GameOverInfo({this.winner, this.reason, this.winnerId});
+  const _GameOverInfo({@JsonKey(name: 'winnerSide') this.winner, this.reason, this.winnerId});
   factory _GameOverInfo.fromJson(Map<String, dynamic> json) => _$GameOverInfoFromJson(json);
 
-@override final  String? winner;
+@override@JsonKey(name: 'winnerSide') final  String? winner;
 // 'white' | 'black' | 'draw'
 @override final  String? reason;
 // 'time' | 'resign' | 'goddess_captured' | 'draw'
@@ -2961,7 +2961,7 @@ abstract mixin class _$GameOverInfoCopyWith<$Res> implements $GameOverInfoCopyWi
   factory _$GameOverInfoCopyWith(_GameOverInfo value, $Res Function(_GameOverInfo) _then) = __$GameOverInfoCopyWithImpl;
 @override @useResult
 $Res call({
- String? winner, String? reason, String? winnerId
+@JsonKey(name: 'winnerSide') String? winner, String? reason, String? winnerId
 });
 
 

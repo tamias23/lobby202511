@@ -181,7 +181,7 @@ abstract class TournamentSummary with _$TournamentSummary {
 @freezed
 abstract class GameOverInfo with _$GameOverInfo {
   const factory GameOverInfo({
-    String? winner,   // 'white' | 'black' | 'draw'
+    @JsonKey(name: 'winnerSide') String? winner,   // 'white' | 'black' | 'draw'
     String? reason,   // 'time' | 'resign' | 'goddess_captured' | 'draw'
     String? winnerId,
   }) = _GameOverInfo;

@@ -261,14 +261,14 @@ Map<String, dynamic> _$TournamentSummaryToJson(_TournamentSummary instance) =>
 
 _GameOverInfo _$GameOverInfoFromJson(Map<String, dynamic> json) =>
     _GameOverInfo(
-      winner: json['winner'] as String?,
+      winner: json['winnerSide'] as String?,
       reason: json['reason'] as String?,
       winnerId: json['winnerId'] as String?,
     );
 
 Map<String, dynamic> _$GameOverInfoToJson(_GameOverInfo instance) =>
     <String, dynamic>{
-      'winner': instance.winner,
+      'winnerSide': instance.winner,
       'reason': instance.reason,
       'winnerId': instance.winnerId,
     };

@@ -37,18 +37,46 @@ class GameOverOverlay extends StatelessWidget {
     final winner = gameOverInfo?.winner;
     final reason = gameOverInfo?.reason ?? '';
 
-    final isWinner = (side == 'white' && winner == 'white') ||
-        (side == 'black' && winner == 'black');
+    final isSpectator = side == 'spectator';
+
+    final isWinner = !isSpectator && (
+        (side == 'white' && winner == 'white') ||
+        (side == 'black' && winner == 'black') ||
+        (gameOverInfo?.winnerId != null && ratingDelta != null &&
+         ((side == 'white' && gameOverInfo?.winnerId == ratingDelta?.whitePlayerId) ||
+          (side == 'black' && gameOverInfo?.winnerId == ratingDelta?.blackPlayerId))));
     final isDraw = winner == 'draw';
 
-    final icon    = isDraw
-        ? Icons.handshake_outlined
-        : (isWinner ? Icons.emoji_events : Icons.sentiment_very_dissatisfied);
-    final headline = isDraw
-        ? 'Draw!'
-        : (isWinner ? 'You Win!' : (winner != null ? '${winner == "white" ? "White" : "Black"} Wins' : 'Game Over'));
-    final sub = _reasonLabel(reason);
-    final headlineColor = isWinner ? DTheme.success : (isDraw ? DTheme.accent : DTheme.danger);
+    // Spectators see a neutral icon regardless of result
+    final IconData icon;
+    final String headline;
+    final Color headlineColor;
+    if (isSpectator) {
+      icon = isDraw ? Icons.handshake_outlined : Icons.flag_outlined;
+      headline = isDraw ? 'Draw!'
+          : winner != null ? '${winner == "white" ? "White" : "Black"} Wins'
+          : 'Game Over';
+      headlineColor = isDraw ? DTheme.accent : DTheme.primary;
+    } else {
+      icon = isDraw
+          ? Icons.handshake_outlined
+          : (isWinner ? Icons.emoji_events : Icons.sentiment_very_dissatisfied);
+      headline = isDraw
+          ? 'Draw!'
+          : (isWinner ? 'You Win!' : (winner != null ? '${winner == "white" ? "White" : "Black"} Wins' : 'Game Over'));
+      headlineColor = isWinner ? DTheme.success : (isDraw ? DTheme.accent : DTheme.danger);
+    }
+
+    // Reason subtitle — neutral for spectators (no "you" references)
+    final sub = isSpectator
+        ? _reasonLabelNeutral(reason)
+        : _reasonLabel(reason, isWinner);
+    // Resolve the winner's display name from GameState
+    final winnerName = winner == 'white'
+        ? (gameState.whiteName ?? 'White')
+        : winner == 'black'
+            ? (gameState.blackName ?? 'Black')
+            : null;
 
     return Positioned.fill(
       child: Container(
@@ -62,6 +90,12 @@ class GameOverOverlay extends StatelessWidget {
                 Icon(icon, size: 52, color: headlineColor),
                 const SizedBox(height: 12),
                 Text(headline, style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: headlineColor)),
+                if (winnerName != null && !isDraw) ...[
+                  const SizedBox(height: 4),
+                  Text('($winnerName)', style: TextStyle(
+                    fontSize: 15, color: headlineColor.withValues(alpha: 0.75),
+                    fontWeight: FontWeight.w500)),
+                ],
                 if (sub.isNotEmpty) ...[
                   const SizedBox(height: 6),
                   Text(sub, style: DTheme.bodyMuted),
@@ -151,14 +185,31 @@ class GameOverOverlay extends StatelessWidget {
     );
   }
 
-  String _reasonLabel(String reason) {
+  String _reasonLabel(String reason, bool isWinner) {
     switch (reason) {
-      case 'time':               return 'Time out';
-      case 'resign':             return 'Resignation';
-      case 'goddess_captured':   return 'Goddess captured';
-      case 'aborted':            return 'Game aborted (tournament ended)';
-      case 'draw':               return 'Agreement';
-      default:                   return reason;
+      case 'time':
+        return isWinner ? 'Victory on time! Your speed was superior.' : 'Ran out of time. The clock is a cruel master.';
+      case 'resign':
+        return isWinner ? 'Opponent has surrendered to your might.' : 'You have chosen to withdraw from the field.';
+      case 'goddess_captured':
+        return isWinner ? 'Victory! The enemy Goddess has been captured.' : 'Your Goddess has been captured. Defeat.';
+      case 'aborted':
+        return 'Game aborted (tournament ended)';
+      case 'draw':
+        return 'A hard-fought draw. Peace is restored.';
+      default:
+        return reason;
+    }
+  }
+
+  String _reasonLabelNeutral(String reason) {
+    switch (reason) {
+      case 'time':         return 'Victory on time.';
+      case 'resign':       return 'One side has resigned.';
+      case 'goddess_captured': return 'The Goddess has been captured.';
+      case 'aborted':      return 'Game aborted (tournament ended)';
+      case 'draw':         return 'A hard-fought draw.';
+      default:             return reason;
     }
   }
 

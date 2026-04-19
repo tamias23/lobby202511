@@ -501,6 +501,8 @@ async function createTournamentGame(tournament, whiteId, blackId, timeControl) {
             white_name: whitePlayer.username,
             black_name: blackPlayer.username,
             timestamp: gameEntry.started_at,
+            time_control_minutes: timeControl.minutes || null,
+            time_control_increment: timeControl.increment || null,
         });
 
         // Notify players
@@ -843,6 +845,10 @@ function broadcastTournamentUpdate(tournamentId) {
 }
 
 async function getUserActiveTournament(userId) {
+    return getUserActiveTournamentSync(userId);
+}
+
+function getUserActiveTournamentSync(userId) {
     for (const [tid, t] of activeTournaments) {
         if (t.status !== 'open' && t.status !== 'active') continue;
         if (t.participants.find(p => p.user_id === userId)) return tid;
@@ -867,6 +873,7 @@ function getOpenTournaments() {
                 id: t.id,
                 name: t.name || 'Tournament',
                 format: t.format,
+                status: 'open',
                 hasPassword: t.has_password === 1,
                 currentCount: t.current_count,
                 maxParticipants: t.max_participants,
@@ -981,6 +988,8 @@ module.exports = {
     getActiveTournamentsList,
     getTournamentById,
     getUserActiveTournament,
+    getUserActiveTournamentSync,
+    activeTournaments,
     pairIdleArenaPlayers,
     FORMAT_LIMITS,
     getTournamentGamesJson,

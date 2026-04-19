@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme.dart';
+import '../../core/file_utils.dart';
 import '../../providers/socket_provider.dart';
 import '../../providers/auth_provider.dart';
 
@@ -48,8 +49,8 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
     socket.emit('enter_tournament_room', {'tournamentId': widget.tournamentId});
 
     socket.on('tournament_update', (data) {
-      final d = data as Map<String,dynamic>;
       if (!mounted) return;
+      final d = Map<String,dynamic>.from(data as Map);
       if (d['id'] == widget.tournamentId || d['id'] == null) {
         setState(() => _tournament = d);
         _maybeStartTick(d);
@@ -121,17 +122,12 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
   }
 
   void _triggerDownload(String jsonStr) {
-    // Web download via anchor element
-    // ignore: undefined_prefixed_name, avoid_web_libraries_in_flutter
-    try {
-      // On Flutter web, use dart:html
-      // This is intentional — analysis/tournament download targets web
-      // ignore: unused_local_variable
-      final anchor = Uri.dataFromString(jsonStr, mimeType: 'application/json')
-          .toString();
-      // We can't use dart:html directly in this file without conditional imports.
-      // Instead expose a simple alert or copy to clipboard as fallback.
-    } catch (_) {}
+    if (jsonStr.isEmpty) return;
+    final tName = (_tournament?['name'] as String? ?? widget.tournamentId)
+        .replaceAll(RegExp(r'[^\w\s-]'), '')
+        .replaceAll(' ', '_');
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    downloadFile(jsonStr, 'tournament_${tName}_$timestamp.json');
   }
 
   String _formatTimeLeft(dynamic endAt) {
@@ -304,7 +300,7 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
                 ),
                 ...standings.asMap().entries.map((e) {
                   final i  = e.key;
-                  final s  = e.value as Map<String,dynamic>;
+                  final s  = Map<String,dynamic>.from(e.value as Map);
                   final isMe = auth != null && s['user_id'] == auth.id;
                   String rankStr;
                   if (isCompleted && i == 0) rankStr = '🥇';
@@ -367,8 +363,8 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
       scrollDirection: Axis.horizontal,
       child: Row(crossAxisAlignment: CrossAxisAlignment.start,
         children: bracket.map((round) {
-          final r = round as Map<String,dynamic>;
-          final matches = r['matches'] as List<dynamic>? ?? [];
+          final r = Map<String,dynamic>.from(round as Map);
+          final matches = (r['matches'] as List<dynamic>?) ?? [];
           return Padding(
             padding: const EdgeInsets.only(right: 16),
             child: Column(children: [
@@ -376,9 +372,9 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
                 color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
               ...matches.map((m) {
-                final match  = m as Map<String,dynamic>;
-                final white  = match['white']  as Map<String,dynamic>?;
-                final black  = match['black']  as Map<String,dynamic>?;
+                final match  = Map<String,dynamic>.from(m as Map);
+                final white  = match['white'] != null ? Map<String,dynamic>.from(match['white'] as Map) : null;
+                final black  = match['black'] != null ? Map<String,dynamic>.from(match['black'] as Map) : null;
                 final result = match['result'] as String?;
                 final hash   = match['gameHash'] as String?;
                 final wId    = white?['user_id'] as String?;
@@ -427,13 +423,17 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
         style: GoogleFonts.outfit(color: Colors.white38),
         textAlign: TextAlign.center));
     return Column(children: games.map((g) {
-      final game  = g as Map<String,dynamic>;
+      final game  = Map<String,dynamic>.from(g as Map);
       final wId   = game['white_id'] as String?;
       final bId   = game['black_id'] as String?;
-      final wName = standings.firstWhere(
-        (s) => (s as Map)['user_id'] == wId, orElse: () => {'username': wId})['username'] as String? ?? wId ?? '?';
-      final bName = standings.firstWhere(
-        (s) => (s as Map)['user_id'] == bId, orElse: () => {'username': bId})['username'] as String? ?? bId ?? '?';
+      final wName = (standings.firstWhere(
+        (s) => Map<String,dynamic>.from(s as Map)['user_id'] == wId,
+        orElse: () => <String,dynamic>{'username': wId}
+      ) as Map)['username'] as String? ?? wId ?? '?';
+      final bName = (standings.firstWhere(
+        (s) => Map<String,dynamic>.from(s as Map)['user_id'] == bId,
+        orElse: () => <String,dynamic>{'username': bId}
+      ) as Map)['username'] as String? ?? bId ?? '?';
       final result = game['result'] as String?;
       final hash   = game['game_hash'] as String?;
       final isMe   = auth != null && (wId == auth.id || bId == auth.id);

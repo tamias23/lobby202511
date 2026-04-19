@@ -13,17 +13,23 @@ from google.cloud import firestore
 # Configuration
 PROJECT_ID = "mylittleproject00"
 # Set this to True if you want to use your local Podman emulator
-USE_EMULATOR = False 
+USE_EMULATOR = True 
 
 
-os.chdir('/home/mat/Bureau/lobby202511/parquet')
+os.chdir('/home/mat/Bureau/lobby202511/parquet/temp')
 
 if USE_EMULATOR:
-    os.environ["FIRESTORE_EMULATOR_HOST"] = "localhost:8200"
+    os.environ["FIRESTORE_EMULATOR_HOST"] = "localhost:8080"
 
 def export_firestore_to_parquet():
     # 1. Initialize Client
-    db = firestore.Client(project=PROJECT_ID)
+    db = ''
+    if USE_EMULATOR:
+        os.environ["FIRESTORE_EMULATOR_HOST"] = "localhost:8080"
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "my-local-firestore"
+        db = firestore.Client()
+    else:
+        db = firestore.Client(project=PROJECT_ID)
     
     # 2. List all top-level collections (tables)
     collections = db.collections()
@@ -52,17 +58,17 @@ def export_firestore_to_parquet():
 
         # 5. Save to Parquet (.paq)
         # We use engine='pyarrow' to ensure complex types are handled
-        filename = f"{coll_name}.paq"
-        df.to_parquet(filename, engine='pyarrow', index=False)
-        
+        filename = f"{coll_name}"
+        df.to_parquet(filename + '.parquet', engine='pyarrow', index=False)
+        with pd.ExcelWriter(filename + '.xlsx', engine='xlsxwriter') as writer:
+            df.to_excel(writer, sheet_name='data', index=False, startrow=0 , startcol=0)
+            
         print(f" - Success! Saved {len(data)} rows to {filename}")
 
 # if __name__ == "__main__":
 #     export_firestore_to_parquet()
 
 export_firestore_to_parquet()
-
-
 
 
 

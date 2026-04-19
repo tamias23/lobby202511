@@ -590,7 +590,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
   Future<void> _onBoardTap(String polyName) async {
     if (_polygons == null) return;
 
-    // If a piece is selected and this polygon is a target
+    // If a piece is selected and this polygon is a target → apply move
     if (_selected != null && _targets.contains(polyName)) {
       await _applyMove(_selected!, polyName);
       return;
@@ -599,6 +599,13 @@ class _TutorialScreenState extends State<TutorialScreen> {
     // Try to select a piece on this polygon
     final piece = _pieces.where((p) => p['pos'] == polyName).firstOrNull;
     if (piece == null) { setState(() { _selected = null; _targets = []; }); return; }
+
+    // Toggle off if tapping the already-selected piece
+    if (piece['id'] == _selected) {
+      setState(() { _selected = null; _targets = []; });
+      return;
+    }
+
     await _fetchMoves(piece['id']!);
   }
 
@@ -927,6 +934,10 @@ class _TutorialScreenState extends State<TutorialScreen> {
     );
   }
 
+  // Drag state
+  String? _draggingId;
+  Offset _dragOffset = Offset.zero;
+
   Widget _buildPieceOverlay(Map<String, String> piece) {
     final pos  = piece['pos'] ?? '';
     final poly = _polygons?[pos];
@@ -935,17 +946,67 @@ class _TutorialScreenState extends State<TutorialScreen> {
     final cy = poly.center[1] * _scale + _offsetY;
     final sz = (_scale * 36.0).clamp(24.0, 90.0);
     final isSelected = piece['id'] == _selected;
+    final isDragging = piece['id'] == _draggingId;
     final side = piece['id']?.startsWith('white') == true ? 'white' : 'black';
+    final pieceId = piece['id'] ?? '';
+
+    final left = isDragging ? _dragOffset.dx - sz / 2 : cx - sz / 2;
+    final top  = isDragging ? _dragOffset.dy - sz / 2 : cy - sz / 2;
+
     return Positioned(
-      left: cx - sz / 2, top: cy - sz / 2, width: sz, height: sz,
-      child: Container(
-        decoration: isSelected
-            ? BoxDecoration(shape: BoxShape.circle,
-                boxShadow: [BoxShadow(color: DTheme.primary.withValues(alpha: 0.8), blurRadius: 10, spreadRadius: 2)])
-            : null,
-        child: SvgPicture.string(
-          buildPieceSvg(piece['type'] ?? 'soldier', side, isSelected: isSelected),
-          fit: BoxFit.contain,
+      left: left, top: top, width: sz, height: sz,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          // Toggle off if tapping the already-selected piece
+          if (_selected == pieceId) {
+            setState(() { _selected = null; _targets = []; });
+          } else {
+            _fetchMoves(pieceId);
+          }
+        },
+        onPanStart: (_) {
+          // Select the piece and start dragging
+          _fetchMoves(pieceId);
+          setState(() {
+            _draggingId = pieceId;
+            _dragOffset = Offset(cx, cy);
+          });
+        },
+        onPanUpdate: (d) {
+          if (_draggingId == pieceId) {
+            setState(() => _dragOffset += d.delta);
+          }
+        },
+        onPanEnd: (_) {
+          if (_draggingId != pieceId) return;
+          // Convert drag position to board coords and find target polygon
+          final bx = (_dragOffset.dx - _offsetX) / _scale;
+          final by = (_dragOffset.dy - _offsetY) / _scale;
+          String? hitPoly;
+          for (final e in _polygons!.entries) {
+            if (_pointInPolygon(bx, by, e.value.points)) {
+              hitPoly = e.key;
+              break;
+            }
+          }
+          setState(() => _draggingId = null);
+          if (hitPoly != null && _targets.contains(hitPoly)) {
+            _applyMove(pieceId, hitPoly);
+          }
+        },
+        child: Container(
+          decoration: isSelected || isDragging
+              ? BoxDecoration(shape: BoxShape.circle,
+                  boxShadow: [BoxShadow(color: DTheme.primary.withValues(alpha: 0.8), blurRadius: 10, spreadRadius: 2)])
+              : null,
+          child: Opacity(
+            opacity: isDragging ? 0.85 : 1.0,
+            child: SvgPicture.string(
+              buildPieceSvg(piece['type'] ?? 'soldier', side, isSelected: isSelected || isDragging),
+              fit: BoxFit.contain,
+            ),
+          ),
         ),
       ),
     );

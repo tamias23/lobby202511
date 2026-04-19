@@ -17,6 +17,7 @@ import '../game/painters/piece_svg.dart';
 import '../game/widgets/board_widget.dart';
 import '../../providers/bg_provider.dart';
 import '../game/widgets/clock_widget.dart';
+import '../../core/file_utils.dart';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -58,6 +59,10 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
   bool _autoPlaying = false;
   bool _replayLoading = false;
   bool _dragActive = false;
+
+  // Multi-game (tournament) support
+  List<Map<String,dynamic>> _allGames = [];
+  int _selectedGameIdx = 0;
 
   // Board geometry
   Map<String,dynamic>? _rawBoard; // raw JSON from server
@@ -137,9 +142,10 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
   void _goTo(int idx) {
     final next = idx.clamp(0, _totalSteps - 1);
     if (next == _stepIdx) return;
-    setState(() => _stepIdx = next);
+    _stepIdx = next; // Update index first (no setState yet)
     _fetchReplayState(next);
     _scrollToActive();
+    if (mounted) setState(() {}); // Trigger single rebuild for everything
   }
 
   void _startAutoPlay() {
@@ -215,7 +221,7 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
     final boardId   = _record!['board_id'] as String?;
     final movesJson = jsonEncode(_record!['moves'] ?? []);
     if (boardId == null) return;
-    setState(() => _replayLoading = true);
+    _replayLoading = true;
     try {
       final base = AppConfig.apiUrl.isEmpty ? '' : AppConfig.apiUrl;
       final res  = await http.post(
@@ -235,7 +241,8 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
     } catch (e) {
       debugPrint('Analysis: replay fetch error: $e');
     } finally {
-      if (mounted) setState(() => _replayLoading = false);
+      _replayLoading = false;
+      if (mounted) setState(() {});
     }
   }
 
@@ -243,25 +250,112 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
 
   void _tryLoadJson(String text) {
     try {
-      final data = jsonDecode(text) as Map<String,dynamic>;
+      final decoded = jsonDecode(text);
+
+      // Tournament file: array of game objects
+      if (decoded is List) {
+        if (decoded.isEmpty) {
+          _showError('Empty tournament file.');
+          return;
+        }
+        final allGames = decoded
+            .whereType<Map<String,dynamic>>()
+            .map(_normalizeTournamentGame)
+            .toList();
+        if (allGames.isEmpty) {
+          _showError('No games found in this file.');
+          return;
+        }
+        // Find the first game with actual moves to auto-select
+        final firstPlayable = allGames.indexWhere(
+            (g) => (g['moves'] as List?)?.isNotEmpty == true);
+        final startIdx = firstPlayable >= 0 ? firstPlayable : 0;
+        setState(() {
+          _allGames = allGames;
+          _selectedGameIdx = startIdx;
+        });
+        _loadRecord(allGames[startIdx]);
+        return;
+      }
+
+      // Single game file
+      final data = decoded as Map<String,dynamic>;
       setState(() {
-        _record  = data;
-        _stepIdx = 0;
-        _pieces  = [];
-        _currentTurn  = 'white';
-        _currentPhase = '';
-        _colorChosen  = {};
+        _allGames = [];
+        _selectedGameIdx = 0;
       });
-      final boardId = data['board_id'] as String?;
-      if (boardId != null) {
-        _fetchBoard(boardId).then((_) => _fetchReplayState(0));
-      }
+      _loadRecord(data);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Invalid game JSON: $e'),
-            backgroundColor: DTheme.danger));
-      }
+      _showError('Invalid game JSON: $e');
+    }
+  }
+
+  /// Resolve timeControl from various field naming conventions.
+  /// Priority: explicit object > individual DB fields > null.
+  Map<String,dynamic>? _resolveTimeControl(Map<String,dynamic> raw) {
+    // 1. Already a proper object (from live game or game-over overlay)
+    if (raw['timeControl'] is Map) return raw['timeControl'] as Map<String,dynamic>;
+    if (raw['time_control'] is Map) return raw['time_control'] as Map<String,dynamic>;
+
+    // 2. Individual fields from DB export (tournament games)
+    final minutes   = raw['time_control_minutes']   ?? raw['timeControlMinutes'];
+    final increment = raw['time_control_increment']  ?? raw['timeControlIncrement'];
+    if (minutes != null) {
+      return {'minutes': minutes, 'increment': increment ?? 0};
+    }
+
+    return null;
+  }
+
+  /// Normalize tournament-export field names to the analysis-compatible format.
+  Map<String,dynamic> _normalizeTournamentGame(Map<String,dynamic> raw) {
+    // Parse moves from JSON string if needed
+    dynamic moves = raw['moves'];
+    if (moves is String) {
+      try { moves = jsonDecode(moves); } catch (_) { moves = []; }
+    }
+    moves ??= [];
+
+    return {
+      'board_id':    raw['board_id'] ?? raw['boardId'],
+      'whiteName':   raw['white_name'] ?? raw['whiteName'] ?? '?',
+      'blackName':   raw['black_name'] ?? raw['blackName'] ?? '?',
+      'winner':      raw['winner'],
+      'reason':      raw['reason'] ?? raw['end_reason'],
+      'moves':       moves is List ? moves : [],
+      'timeControl': _resolveTimeControl(raw),
+      // Preserve tournament metadata for display
+      'tournament_round_info': raw['tournament_round_info'],
+      'game_id':     raw['game_id'],
+    };
+  }
+
+  void _loadRecord(Map<String,dynamic> data) {
+    setState(() {
+      _record  = data;
+      _stepIdx = 0;
+      _pieces  = [];
+      _currentTurn  = 'white';
+      _currentPhase = '';
+      _colorChosen  = {};
+    });
+    final boardId = data['board_id'] as String?;
+    if (boardId != null) {
+      _fetchBoard(boardId).then((_) => _fetchReplayState(0));
+    }
+  }
+
+  void _selectGame(int idx) {
+    if (idx < 0 || idx >= _allGames.length || idx == _selectedGameIdx) return;
+    _stopAutoPlay();
+    setState(() => _selectedGameIdx = idx);
+    _loadRecord(_allGames[idx]);
+  }
+
+  void _showError(String msg) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: DTheme.danger));
     }
   }
 
@@ -302,13 +396,17 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
                     ? _buildUploadZone()
                     : wide
                          ? Row(children: [
-                            SizedBox(width: 130, child: _buildAnalysisPlayerPanel()),
+                             SizedBox(width: 200, child: _buildAnalysisPlayerPanel()),
                             Expanded(child: _buildBoardColumn()),
-                            SizedBox(width: 160, child: _buildSidebar()),
+                            SizedBox(width: 240, child: _buildSidebar()),
+                            if (_allGames.length > 1)
+                              SizedBox(width: 240, child: _buildGameListPanel()),
                           ])
                         : Column(children: [
+                            if (_allGames.length > 1)
+                              SizedBox(height: 56, child: _buildGameStrip()),
                             Expanded(child: _buildBoardColumn()),
-                            SizedBox(height: 200, child: _buildSidebar()),
+                            SizedBox(height: 280, child: _buildSidebar()),
                           ])),
               ]),
               // Background toggle — top right
@@ -344,8 +442,11 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
         ),
         const SizedBox(width: 16),
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Analysis Room', style: GoogleFonts.outfit(
-            fontSize: 16, fontWeight: FontWeight.w700, color: DTheme.textMainDark)),
+          Text(_allGames.isNotEmpty
+              ? 'Analysis Room · Game ${_selectedGameIdx + 1}/${_allGames.length}'
+              : 'Analysis Room',
+            style: GoogleFonts.outfit(
+              fontSize: 16, fontWeight: FontWeight.w700, color: DTheme.textMainDark)),
           if (_record != null)
             Text('${_record!['whiteName'] ?? '?'} vs ${_record!['blackName'] ?? '?'}',
               style: GoogleFonts.outfit(color: Colors.white54, fontSize: 12)),
@@ -355,37 +456,47 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
         if (_record != null)
           _TopBtn('⬇ Download', () => _downloadRecord()),
         const SizedBox(width: 8),
-        _TopBtn('📂 Load File', () => _showLoadDialog()),
+        _TopBtn('📂 Load File', () => _pickFile()),
+        const SizedBox(width: 8),
+        _TopBtn('📋 Paste', () => _showLoadDialog()),
       ]),
     );
   }
 
   void _downloadRecord() {
     if (_record == null) return;
-    final json = jsonEncode(_record);
-    // Flutter web: create download via data URI — shown as copyable text
-    showDialog(context: context, builder: (_) => AlertDialog(
-      backgroundColor: const Color(0xFF1E293B),
-      title: Text('Game JSON', style: GoogleFonts.outfit(color: Colors.white)),
-      content: SizedBox(
-        width: 500, height: 300,
-        child: SelectableText(json, style: const TextStyle(color: Colors.white70, fontSize: 11))),
-      actions: [
-        TextButton(
-          onPressed: () { Clipboard.setData(ClipboardData(text: json)); Navigator.pop(context); },
-          child: Text('Copy to clipboard', style: GoogleFonts.outfit(color: DTheme.primary))),
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text('Close', style: GoogleFonts.outfit(color: Colors.white54))),
-      ],
-    ));
+    final json = const JsonEncoder.withIndent('  ').convert(_record);
+    final boardName = _record!['board_id'] ?? _record!['boardName'] ?? 'game';
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    downloadFile(json, 'dedal_${boardName}_$timestamp.json');
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Game record downloaded to disk'))
+      );
+    }
+  }
+
+  Future<void> _pickFile() async {
+    final content = await pickJsonFile();
+    if (content != null && content.trim().isNotEmpty) {
+      _tryLoadJson(content);
+    }
   }
 
   void _showLoadDialog() {
     final ctrl = TextEditingController();
     showDialog(context: context, builder: (_) => AlertDialog(
       backgroundColor: const Color(0xFF1E293B),
-      title: Text('Paste Game JSON', style: GoogleFonts.outfit(color: Colors.white, fontSize: 16)),
+      title: Row(children: [
+        Text('Load Game Record', style: GoogleFonts.outfit(color: Colors.white, fontSize: 16)),
+        const Spacer(),
+        IconButton(
+          icon: const Icon(Icons.file_open, color: DTheme.primary),
+          onPressed: () { Navigator.pop(context); _pickFile(); },
+          tooltip: 'Select file from disk',
+        ),
+      ]),
       content: SizedBox(
         width: 500, height: 250,
         child: TextField(
@@ -393,7 +504,7 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
           maxLines: null, expands: true,
           style: const TextStyle(color: Colors.white, fontSize: 12),
           decoration: const InputDecoration(
-            hintText: 'Paste game JSON here…',
+            hintText: 'Paste game JSON here or click the folder icon to browse…',
             hintStyle: TextStyle(color: Colors.white38),
             border: InputBorder.none),
         )),
@@ -413,7 +524,7 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
   Widget _buildUploadZone() {
     return Center(
       child: GestureDetector(
-        onTap: _showLoadDialog,
+        onTap: _pickFile,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           width: 420, height: 260,
@@ -426,12 +537,12 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
               width: _dragActive ? 2 : 1),
           ),
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            const Text('📋', style: TextStyle(fontSize: 48)),
+            const Text('📂', style: TextStyle(fontSize: 48)),
             const SizedBox(height: 16),
             Text('Load a Dedal game JSON', style: GoogleFonts.outfit(
               fontSize: 18, fontWeight: FontWeight.w600, color: DTheme.textMainDark)),
             const SizedBox(height: 8),
-            Text('Click to paste JSON · keyboard: ← → Space',
+            Text('Click to browse your files · keyboard: ← → Space',
               style: GoogleFonts.outfit(color: Colors.white38, fontSize: 13)),
           ]),
         ),
@@ -525,29 +636,26 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           // Top player
-          Padding(
-            padding: const EdgeInsets.fromLTRB(5, 0, 5, 0),
-            child: _AnalysisPlayerCard(
-              side: topSide, name: topName, clockMs: topClock, isActive: topActive,
-              nameOnTop: false,
-            ),
+          _AnalysisPlayerCard(
+            side: topSide, name: topName, clockMs: topClock, isActive: topActive,
+            nameOnTop: false,
           ),
           // Phase badge
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.symmetric(vertical: 10),
             child: Text(
               _currentPhase.isEmpty ? 'ANALYSIS'
                   : _currentPhase == 'GameOver' ? 'END'
                   : _currentPhase.toUpperCase(),
               style: GoogleFonts.outfit(
-                fontSize: 9, color: Colors.white38,
+                fontSize: 11, color: Colors.white38,
                 fontWeight: FontWeight.w700, letterSpacing: 1),
               textAlign: TextAlign.center,
             ),
           ),
           // Bottom player
           Padding(
-            padding: const EdgeInsets.fromLTRB(5, 0, 5, 0),
+            padding: EdgeInsets.zero,
             child: _AnalysisPlayerCard(
               side: bottomSide, name: bottomName, clockMs: bottomClock, isActive: bottomActive,
               nameOnTop: true,
@@ -558,10 +666,133 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
     );
   }
 
+  // ── Captured pieces column (left panel, wide screens) ─────────────────────
+  // In Dedal the engine sets captured pieces to position='returned' (they go
+  // back to the player's reserve). 'graveyard' is never actually assigned.
+  // We only show these during Playing/GameOver to avoid confusing them with
+  // un-placed setup pieces (which also start as 'returned').
+
+  Widget _buildCapturedPieces({required String capturedBy}) {
+    // During setup all pieces are 'returned' — skip to avoid noise
+    if (_currentPhase != 'Playing' && _currentPhase != 'GameOver') {
+      return const SizedBox(height: 6);
+    }
+    final opponentSide = capturedBy == 'white' ? 'black' : 'white';
+    final captured = _pieces.where((p) {
+      final pos  = p['position'] as String? ?? '';
+      final side = p['side']     as String? ?? '';
+      return (pos == 'returned' || pos == 'graveyard') && side == opponentSide;
+    }).toList();
+
+    if (captured.isEmpty) return const SizedBox(height: 6);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Column(children: [
+        Text('captured', style: GoogleFonts.outfit(
+          color: Colors.white24, fontSize: 9, letterSpacing: 0.5)),
+        const SizedBox(height: 3),
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 2,
+          runSpacing: 2,
+          children: captured.map((p) {
+            final pieceType = p['type'] as String? ?? 'soldier';
+            final pieceSide = p['side'] as String? ?? 'white';
+            return Tooltip(
+              message: pieceType,
+              child: SvgPicture.string(
+                buildPieceSvg(pieceType, pieceSide),
+                width: 26,
+                height: 26,
+              ),
+            );
+          }).toList(),
+        ),
+      ]),
+    );
+  }
+  // ── Sidebar captured pieces (two-row, always visible) ────────────────────
+  // Engine uses 'returned' for off-board pieces (both un-placed and captured).
+  // Only show during Playing/GameOver to avoid listing setup-phase pieces.
+
+  Widget _buildSidebarCapturedPieces() {
+    // During setup all pieces are 'returned' — nothing meaningful to show
+    if (_currentPhase != 'Playing' && _currentPhase != 'GameOver') {
+      return const SizedBox.shrink();
+    }
+
+    final whiteOffBoard = _pieces.where((p) {
+      final pos = p['position'] as String? ?? '';
+      return (pos == 'returned' || pos == 'graveyard') &&
+             (p['side'] as String?) == 'white';
+    }).toList();
+    final blackOffBoard = _pieces.where((p) {
+      final pos = p['position'] as String? ?? '';
+      return (pos == 'returned' || pos == 'graveyard') &&
+             (p['side'] as String?) == 'black';
+    }).toList();
+
+    if (whiteOffBoard.isEmpty && blackOffBoard.isEmpty) return const SizedBox.shrink();
+
+    Widget pieceRow(String side, List<Map<String,dynamic>> pieces) {
+      return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // Side dot
+        Padding(
+          padding: const EdgeInsets.only(top: 6, right: 5),
+          child: Container(
+            width: 9, height: 9,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: side == 'white' ? Colors.white : Colors.black,
+              border: Border.all(color: Colors.white38, width: 0.8)),
+          ),
+        ),
+        // Piece icons
+        Expanded(child: Wrap(
+          spacing: 2, runSpacing: 2,
+          children: pieces.map((p) {
+            final pieceType = p['type'] as String? ?? 'soldier';
+            return Tooltip(
+              message: pieceType,
+              child: SvgPicture.string(
+                buildPieceSvg(pieceType, side),
+                width: 22, height: 22,
+              ),
+            );
+          }).toList(),
+        )),
+      ]);
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        color: Colors.white.withValues(alpha: 0.04),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Off Board', style: GoogleFonts.outfit(
+          fontSize: 10, color: Colors.white38, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+        const SizedBox(height: 5),
+        if (blackOffBoard.isNotEmpty) ...[
+          pieceRow('black', blackOffBoard),
+          const SizedBox(height: 3),
+        ],
+        if (whiteOffBoard.isNotEmpty)
+          pieceRow('white', whiteOffBoard),
+      ]),
+    );
+  }
+
   // ── Board column ──────────────────────────────────────────────────────────────────────────────
 
+  double _boardPieceSize = 40; // updated by BoardWidget.onGeometry
+
   Widget _buildBoardColumn() {
-    // Convert Map pieces → BoardPieceData (on-board only; off-board rendered by BoardWidget)
+    // On-board only for BoardWidget (it ignores returned/graveyard anyway)
     final displayPieces = _pieces
         .where((p) =>
             (p['position'] as String?) != 'graveyard' &&
@@ -574,21 +805,56 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
             ))
         .toList();
 
+    // Off-board pieces grouped by side, sorted by ID for stable ordering
+    final whiteOff = _pieces.where((p) =>
+        (p['position'] as String?) == 'returned' &&
+        (p['side'] as String?) == 'white').toList()
+      ..sort((a, b) => (a['id'] as String? ?? '').compareTo(b['id'] as String? ?? ''));
+    final blackOff = _pieces.where((p) =>
+        (p['position'] as String?) == 'returned' &&
+        (p['side'] as String?) == 'black').toList()
+      ..sort((a, b) => (a['id'] as String? ?? '').compareTo(b['id'] as String? ?? ''));
+
+    // Only show side pieces during Playing/GameOver (in Setup, all pieces are 'returned')
+    final showSide = _currentPhase == 'Playing' || _currentPhase == 'GameOver';
+    final pSize = _boardPieceSize;
+
     return Column(children: [
       Expanded(
-        child: BoardWidget(
-          polygons:         _polygons,
-          allEdges:         _allEdges,
-          legalMoveTargets: const {},  // analysis is read-only
-          selectedPolygon:  null,
-          isFlipped:        _isFlipped,
-          colorTheme:       'default',
-          pieces:           displayPieces,
-          overlays: [
-            if (_replayLoading)
-              Container(
-                color: Colors.black.withValues(alpha: 0.2),
-                child: const Center(child: CircularProgressIndicator())),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // ── White off-board pieces (left side) ──────────────────────────
+            if (showSide && whiteOff.isNotEmpty)
+              _buildSidePieceColumn(whiteOff, 'white', pSize),
+
+            // ── Board ───────────────────────────────────────────────────────
+            Expanded(
+              child: RepaintBoundary(
+                child: BoardWidget(
+                  polygons:         _polygons,
+                  allEdges:         _allEdges,
+                  legalMoveTargets: const {},  // analysis is read-only
+                  selectedPolygon:  null,
+                  isFlipped:        _isFlipped,
+                  colorTheme:       'default',
+                  pieces:           displayPieces,
+                  overlays: const [],
+                  onGeometry: (scale, ox, oy, cx, cy) {
+                    final newSize = (scale * 36.0).clamp(28.0, 90.0);
+                    if ((newSize - _boardPieceSize).abs() > 1) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) setState(() => _boardPieceSize = newSize);
+                      });
+                    }
+                  },
+                ),
+              ),
+            ),
+
+            // ── Black off-board pieces (right side) ─────────────────────────
+            if (showSide && blackOff.isNotEmpty)
+              _buildSidePieceColumn(blackOff, 'black', pSize),
           ],
         ),
       ),
@@ -596,37 +862,111 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
     ]);
   }
 
+  /// Renders off-board pieces on the side of the board, using the same
+  /// zigzag layout as the game screen when pieces are tightly packed.
+  Widget _buildSidePieceColumn(List<Map<String, dynamic>> pieces, String side, double pieceSize) {
+    return LayoutBuilder(builder: (context, constraints) {
+      final count = pieces.length;
+      if (count == 0) return const SizedBox.shrink();
+
+      final availH = constraints.maxHeight;
+      // Compute vertical step: fill available height, clamped to reasonable range
+      final rawStep = count <= 1 ? pieceSize : (availH - pieceSize) / (count - 1);
+      final vertStep = rawStep.clamp(pieceSize * 0.2, pieceSize);
+
+      // Zigzag horizontally when pieces overlap vertically
+      final bool zigzag = vertStep < pieceSize * 0.8;
+      final columnWidth = zigzag ? pieceSize * 1.6 : pieceSize;
+
+      // Center the column of pieces vertically
+      final totalH = pieceSize + (count - 1) * vertStep;
+      final startY = ((availH - totalH) / 2).clamp(0.0, double.infinity);
+
+      return SizedBox(
+        width: columnWidth,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: List.generate(count, (i) {
+            final p = pieces[i];
+            final pieceType = p['type'] as String? ?? 'soldier';
+            final pieceSide = p['side'] as String? ?? side;
+            final xOff = zigzag ? (i.isEven ? 0.0 : pieceSize * 0.55) : 0.0;
+
+            return Positioned(
+              top: startY + i * vertStep,
+              left: side == 'white' ? xOff : null,
+              right: side == 'black' ? xOff : null,
+              width: pieceSize,
+              height: pieceSize,
+              child: Tooltip(
+                message: pieceType,
+                child: SvgPicture.string(
+                  buildPieceSvg(pieceType, pieceSide),
+                  width: pieceSize,
+                  height: pieceSize,
+                ),
+              ),
+            );
+          }),
+        ),
+      );
+    });
+  }
+
 
   // ── Transport bar ─────────────────────────────────────────────────────────
 
   Widget _buildTransport() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08)))),
-      child: Row(children: [
-        _TransBtn('⏮', () { _stopAutoPlay(); _goTo(0); }),
-        _TransBtn('◀', () { _stopAutoPlay(); _goTo(_stepIdx - 1); }),
-        _TransBtn(_autoPlaying ? '⏸' : '▶',
+    return LayoutBuilder(builder: (context, constraints) {
+      final narrow = constraints.maxWidth < 600;
+
+      final btnFirst  = _TransBtn('⏮', () { _stopAutoPlay(); _goTo(0); });
+      final btnPrev   = _TransBtn('◀',  () { _stopAutoPlay(); _goTo(_stepIdx - 1); });
+      final btnPlay   = _TransBtn(_autoPlaying ? '⏸' : '▶',
           () => _autoPlaying ? _stopAutoPlay() : _startAutoPlay(),
-          active: _autoPlaying),
-        _TransBtn('▶', () { _stopAutoPlay(); _goTo(_stepIdx + 1); }),
-        _TransBtn('⏭', () { _stopAutoPlay(); _goTo(_totalSteps - 1); }),
-        const SizedBox(width: 8),
-        Expanded(child: Slider(
-          value: _stepIdx.toDouble(),
-          min: 0, max: (_totalSteps - 1).toDouble().clamp(0, 9999),
-          activeColor: DTheme.primary,
-          onChanged: (v) { _stopAutoPlay(); _goTo(v.round()); },
-        )),
-        const SizedBox(width: 8),
-        Text('$_stepIdx / ${_totalSteps - 1}',
-          style: GoogleFonts.outfit(color: Colors.white54, fontSize: 12)),
-        const SizedBox(width: 8),
-        _TransBtn('↕ Flip', () => setState(() => _isFlipped = !_isFlipped), wide: true),
-      ]),
-    );
+          active: _autoPlaying);
+      final btnNext   = _TransBtn('▶',  () { _stopAutoPlay(); _goTo(_stepIdx + 1); });
+      final btnLast   = _TransBtn('⏭', () { _stopAutoPlay(); _goTo(_totalSteps - 1); });
+      final btnFlip   = _TransBtn('↕ Flip', () => setState(() => _isFlipped = !_isFlipped), wide: true);
+      final stepText  = Text('$_stepIdx / ${_totalSteps - 1}',
+          style: GoogleFonts.outfit(color: Colors.white54, fontSize: 13));
+      final slider = Expanded(child: Slider(
+        value: _stepIdx.toDouble(),
+        min: 0, max: (_totalSteps - 1).toDouble().clamp(0, 9999),
+        activeColor: DTheme.primary,
+        onChanged: (v) { _stopAutoPlay(); _goTo(v.round()); },
+      ));
+
+      final gap = const SizedBox(width: 4);
+
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.05),
+          border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08)))),
+        child: narrow
+            // ── Two-row layout for phones ──────────────────────────────────
+            ? Column(mainAxisSize: MainAxisSize.min, children: [
+                Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  btnFirst, gap, btnPrev, gap, btnPlay, gap, btnNext, gap, btnLast,
+                  const SizedBox(width: 12),
+                  btnFlip,
+                ]),
+                const SizedBox(height: 6),
+                Row(children: [slider, const SizedBox(width: 8), stepText]),
+              ])
+            // ── Single-row layout for desktop/tablet ───────────────────────
+            : Row(children: [
+                btnFirst, gap, btnPrev, gap, btnPlay, gap, btnNext, gap, btnLast,
+                const SizedBox(width: 12),
+                slider,
+                const SizedBox(width: 8),
+                stepText,
+                const SizedBox(width: 12),
+                btnFlip,
+              ]),
+      );
+    });
   }
 
   // ── Sidebar ───────────────────────────────────────────────────────────────
@@ -696,6 +1036,7 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
         // Color chosen indicator
         _buildColorCircles(),
         const SizedBox(height: 10),
+
         // Move list header
         Text('Move List', style: GoogleFonts.outfit(
           fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white54, letterSpacing: 0.5)),
@@ -754,34 +1095,232 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
     );
   }
 
+  // ── Game list panel (desktop – right of sidebar) ───────────────────────────
+
+  Widget _buildGameListPanel() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.02),
+        border: Border(left: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        // Header
+        Container(
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06))),
+          ),
+          child: Row(children: [
+            const Text('🏆', style: TextStyle(fontSize: 14)),
+            const SizedBox(width: 6),
+            Text('Games', style: GoogleFonts.outfit(
+              fontSize: 13, fontWeight: FontWeight.w700, color: DTheme.textMainDark)),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                color: DTheme.primary.withValues(alpha: 0.15),
+              ),
+              child: Text('${_allGames.length}', style: GoogleFonts.outfit(
+                fontSize: 11, fontWeight: FontWeight.w700, color: DTheme.primary)),
+            ),
+          ]),
+        ),
+        // Game list
+        Expanded(child: ListView.builder(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          itemCount: _allGames.length,
+          itemBuilder: (_, i) => _buildGameCard(i),
+        )),
+      ]),
+    );
+  }
+
+  Widget _buildGameCard(int i) {
+    final g = _allGames[i];
+    final isActive = i == _selectedGameIdx;
+    final wName = g['whiteName'] as String? ?? '?';
+    final bName = g['blackName'] as String? ?? '?';
+    final winner = g['winner'] as String?;
+    final round = g['tournament_round_info'] as String? ?? '';
+    final moveCount = (g['moves'] as List?)?.length ?? 0;
+    final hasNoMoves = moveCount == 0;
+
+    return GestureDetector(
+      onTap: hasNoMoves ? null : () => _selectGame(i),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        margin: const EdgeInsets.only(bottom: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          color: isActive
+              ? DTheme.primary.withValues(alpha: 0.14)
+              : hasNoMoves
+                  ? Colors.white.withValues(alpha: 0.02)
+                  : Colors.white.withValues(alpha: 0.04),
+          border: Border.all(
+            color: isActive
+                ? DTheme.primary.withValues(alpha: 0.4)
+                : Colors.white.withValues(alpha: 0.06),
+            width: isActive ? 1.5 : 1),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // Row 1: Round + move count
+          Row(children: [
+            if (round.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(4),
+                  color: Colors.white.withValues(alpha: 0.08)),
+                child: Text(round, style: GoogleFonts.outfit(
+                  fontSize: 9, color: Colors.white38, fontWeight: FontWeight.w600)),
+              ),
+            const Spacer(),
+            Text('${moveCount}m', style: GoogleFonts.outfit(
+              fontSize: 9, color: hasNoMoves ? Colors.white24 : Colors.white38)),
+          ]),
+          const SizedBox(height: 4),
+          // Row 2: White player
+          Row(children: [
+            Container(width: 7, height: 7, decoration: BoxDecoration(
+              shape: BoxShape.circle, color: Colors.white,
+              border: Border.all(color: Colors.white38, width: 0.5))),
+            const SizedBox(width: 5),
+            Expanded(child: Text(wName, style: GoogleFonts.outfit(
+              fontSize: 11,
+              color: winner == 'white'
+                  ? DTheme.textMainDark
+                  : hasNoMoves ? Colors.white30 : Colors.white60,
+              fontWeight: winner == 'white' ? FontWeight.w700 : FontWeight.w400),
+              overflow: TextOverflow.ellipsis)),
+            if (winner == 'white')
+              const Text('👑', style: TextStyle(fontSize: 10)),
+          ]),
+          const SizedBox(height: 2),
+          // Row 3: Black player
+          Row(children: [
+            Container(width: 7, height: 7, decoration: BoxDecoration(
+              shape: BoxShape.circle, color: Colors.black,
+              border: Border.all(color: Colors.white38, width: 0.5))),
+            const SizedBox(width: 5),
+            Expanded(child: Text(bName, style: GoogleFonts.outfit(
+              fontSize: 11,
+              color: winner == 'black'
+                  ? DTheme.textMainDark
+                  : hasNoMoves ? Colors.white30 : Colors.white60,
+              fontWeight: winner == 'black' ? FontWeight.w700 : FontWeight.w400),
+              overflow: TextOverflow.ellipsis)),
+            if (winner == 'black')
+              const Text('👑', style: TextStyle(fontSize: 10)),
+          ]),
+        ]),
+      ),
+    );
+  }
+
+  // ── Game strip (mobile – horizontal scroll above board) ──────────────────
+
+  Widget _buildGameStrip() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.03),
+        border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+      ),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        itemCount: _allGames.length,
+        itemBuilder: (_, i) {
+          final g = _allGames[i];
+          final isActive = i == _selectedGameIdx;
+          final wName = g['whiteName'] as String? ?? '?';
+          final bName = g['blackName'] as String? ?? '?';
+          final winner = g['winner'] as String?;
+          final moveCount = (g['moves'] as List?)?.length ?? 0;
+          final hasNoMoves = moveCount == 0;
+          final winIcon = winner == 'white' ? '⚪'
+              : winner == 'black' ? '⚫'
+              : winner == 'draw' ? '🤝' : '';
+          return GestureDetector(
+            onTap: hasNoMoves ? null : () => _selectGame(i),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              width: 140,
+              margin: const EdgeInsets.only(right: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                color: isActive
+                    ? DTheme.primary.withValues(alpha: 0.14)
+                    : hasNoMoves
+                        ? Colors.white.withValues(alpha: 0.02)
+                        : Colors.white.withValues(alpha: 0.05),
+                border: Border.all(
+                  color: isActive
+                      ? DTheme.primary.withValues(alpha: 0.4)
+                      : Colors.white.withValues(alpha: 0.08)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Row(children: [
+                    Text('G${i + 1}', style: GoogleFonts.outfit(
+                      fontSize: 10, fontWeight: FontWeight.w700,
+                      color: isActive ? DTheme.primary : Colors.white38)),
+                    const Spacer(),
+                    if (winIcon.isNotEmpty)
+                      Text(winIcon, style: const TextStyle(fontSize: 9)),
+                  ]),
+                  const SizedBox(height: 2),
+                  Text('$wName vs $bName', style: GoogleFonts.outfit(
+                    fontSize: 9,
+                    color: hasNoMoves ? Colors.white30 : Colors.white60),
+                    overflow: TextOverflow.ellipsis, maxLines: 1),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildColorCircles() {
     final chosen = _colorChosen[_currentTurn] as String?;
     final colors = chosen != null ? [chosen] : ['grey', 'green', 'blue', 'orange'];
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
         color: Colors.white.withValues(alpha: 0.03),
         border: Border.all(color: Colors.white.withValues(alpha: 0.06))),
-      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Text(chosen != null ? 'Color: ' : 'No selection',
-          style: GoogleFonts.outfit(color: Colors.white38, fontSize: 11)),
-        const SizedBox(width: 6),
-        ...colors.map((c) {
-          final col = _polyHex[c] ?? Colors.grey;
-          return Container(
-            width: 20, height: 20,
-            margin: const EdgeInsets.only(left: 4),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: col.withValues(alpha: chosen != null ? 1.0 : 0.6),
-              border: Border.all(
-                color: chosen == c ? Colors.white : Colors.white.withValues(alpha: 0.1),
-                width: chosen == c ? 2 : 1),
-              boxShadow: chosen == c ? [BoxShadow(color: col.withValues(alpha: 0.6), blurRadius: 8)] : null,
-            ),
-          );
-        }),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Text(chosen != null ? 'Color:' : 'No color yet',
+          style: GoogleFonts.outfit(color: Colors.white54, fontSize: 12)),
+        const SizedBox(height: 6),
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 8,
+          runSpacing: 6,
+          children: colors.map((c) {
+            final col = _polyHex[c] ?? Colors.grey;
+            return Container(
+              width: 26, height: 26,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: col.withValues(alpha: chosen != null ? 1.0 : 0.6),
+                border: Border.all(
+                  color: chosen == c ? Colors.white : Colors.white.withValues(alpha: 0.15),
+                  width: chosen == c ? 2.5 : 1),
+                boxShadow: chosen == c ? [BoxShadow(color: col.withValues(alpha: 0.7), blurRadius: 10)] : null,
+              ),
+            );
+          }).toList(),
+        ),
       ]),
     );
   }
@@ -847,13 +1386,13 @@ class _TransBtn extends StatelessWidget {
   @override Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
     child: Container(
-      padding: EdgeInsets.symmetric(horizontal: wide ? 10 : 6, vertical: 5),
+      padding: EdgeInsets.symmetric(horizontal: wide ? 14 : 10, vertical: 8),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(6),
-        color: active ? DTheme.primary.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.06),
-        border: Border.all(color: active ? DTheme.primary.withValues(alpha: 0.4) : Colors.transparent)),
+        borderRadius: BorderRadius.circular(8),
+        color: active ? DTheme.primary.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.08),
+        border: Border.all(color: active ? DTheme.primary.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.12))),
       child: Text(label, style: GoogleFonts.outfit(
-        color: active ? DTheme.primary : Colors.white60, fontSize: 13))));
+        color: active ? DTheme.primary : Colors.white70, fontSize: 15, fontWeight: FontWeight.w600))));
 }
 
 class _TopBtn extends StatelessWidget {
@@ -912,11 +1451,11 @@ class _AnalysisPlayerCard extends StatelessWidget {
       initialMs: clockMs,
       isRunning: false,    // static display in analysis
       lastTurnTs: 0,
-      fontSize: 28,        // same relative size as game (scaled to 130px panel)
+      fontSize: 36,        // scaled for the 200px panel
     );
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
         color: isActive

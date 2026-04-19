@@ -55,13 +55,14 @@ const saveMatchResult = async (gameId, timestamp, whiteName, blackName, whitePla
     const game = lobby.activeGames.get(gameId);
     const tournamentId = game?.tournamentId || null;
     const roundInfo = game?.roundInfo || null;
+    const timeControl = game?.timeControl || null;
 
     // 2. Persist to main games log
     // For tournament games, the tournament system already persists via onGameComplete
     // (using the tournament's UUID game_id). Calling saveMatchResult here would
     // create a DUPLICATE record under the hash game_id. So we skip it.
     if (!tournamentId) {
-        await _saveMatchResult(gameId, timestamp, whiteName, blackName, whitePlayerId, blackPlayerId, boardId, winner, moves, io, null, null);
+        await _saveMatchResult(gameId, timestamp, whiteName, blackName, whitePlayerId, blackPlayerId, boardId, winner, moves, io, null, null, timeControl);
     }
 
     // 3. Hook: if this game belongs to a tournament, update it
@@ -228,22 +229,27 @@ async function startRandomBotMatch() {
         return;
     }
     
-    // Find idle bots
-    const idleBots = availableBots.filter(b => !busyBots.has(getBotKey(b.agent_type, b.model_name)));
+    // Pick 2 random bots — MUST be idle AND not in a tournament
+    const candidates = availableBots.filter(b => {
+        const botId = `bot_${b.agent_type}_${b.model_name}`;
+        const botKey = getBotKey(b.agent_type, b.model_name);
+        if (busyBots.has(botKey)) return false;
+        // Anti-preemption: don't use bots registered in tournaments
+        return !tournamentManager.getUserActiveTournamentSync(botId);
+    });
     
-    if (idleBots.length < 2) {
-        logger.debug('BotMatch', `Coin flip YES, but not enough idle bots (${idleBots.length}).`);
+    if (candidates.length < 2) {
+        logger.debug('BotMatch', `Coin flip YES, but not enough idle/available bots (${candidates.length}).`);
         return;
     }
     
-    // Pick 2 random bots
-    const shuffled = [...idleBots].sort(() => 0.5 - Math.random());
+    const shuffled = [...candidates].sort(() => 0.5 - Math.random());
     const bot1 = shuffled[0];
     const bot2 = shuffled[1];
     
     const bot1Key = getBotKey(bot1.agent_type, bot1.model_name);
     const bot2Key = getBotKey(bot2.agent_type, bot2.model_name);
-    
+
     const bot1Id = `bot_${bot1.agent_type}_${bot1.model_name}`;
     const bot1Name = makeBotDisplayName(bot1.agent_type, bot1.model_name);
     
@@ -291,12 +297,15 @@ function getBotsForLobby() {
         const ratingInfo = botRatingsCache.get(botId);
         // Always use our canonical display name (🤖 xxxx)
         const displayName = makeBotDisplayName(b.agent_type, b.model_name);
+        const inGame = busyBots.has(getBotKey(b.agent_type, b.model_name));
+        const inTournament = !!tournamentManager.getUserActiveTournamentSync(botId);
         return {
             ...b,
             display_name: displayName,
             rating: ratingInfo?.rating ?? 1500,
             ratingDeviation: ratingInfo?.ratingDeviation ?? 350,
-            busy: busyBots.has(getBotKey(b.agent_type, b.model_name)),
+            busy: inGame || inTournament,
+            inTournament,
         };
     });
 }
@@ -780,6 +789,7 @@ initDb()
     // Start background bot-vs-bot match scheduler
     setInterval(startRandomBotMatch, BOT_MATCH_INTERVAL_MS);
 
+
     // Initialize tournament system
     if (TOURNAMENTS_ENABLED) {
         tournamentManager.initConfig(process.env);
@@ -803,6 +813,9 @@ initDb()
         // Check for arena time-expiry every 5s (prompt game interruption)
         setInterval(() => tournamentManager.checkArenaExpiry(), 5 * 1000);
         logger.info('Tournament', 'System initialized.');
+
+        // Start background bot tournament invitation task (fill slots every 10s)
+        setInterval(fillTournamentBots, 10000);
     } else {
         logger.info('Tournament', 'Tournaments are DISABLED in config.');
     }
@@ -882,6 +895,13 @@ app.post('/api/tutorial/moves', (req, res) => {
             side:     p.id?.startsWith('white') ? 'white' : 'black',
             position: p.pos,
         }));
+
+        // Auto-detect the selected piece's polygon color so it's always eligible.
+        // This lets the tutorial user move any piece regardless of color.
+        const piecePos = piece?.pos || '';
+        const polyData = board?.allPolygons?.[piecePos];
+        const pieceColor = polyData?.color?.toLowerCase() || 'grey';
+
         const result = getLegalMovesNapi({
             boardJson:         JSON.stringify(board || {}),
             piecesJson:        JSON.stringify(napiPieces),
@@ -889,7 +909,7 @@ app.post('/api/tutorial/moves', (req, res) => {
             turn,
             phase:             'Playing',
             setupStep:         5,           // past all setup steps
-            colorChosen:       { white: 'grey', black: 'grey' },
+            colorChosen:       { white: pieceColor, black: pieceColor },
             colorsEverChosen:  ['grey', 'green', 'blue', 'orange'],
             turnCounter:       1,
             isNewTurn:         true,
@@ -915,6 +935,12 @@ app.post('/api/tutorial/apply', (req, res) => {
             side:     p.id?.startsWith('white') ? 'white' : 'black',
             position: p.pos,
         }));
+
+        // Auto-detect the piece's polygon color so moves from any color are accepted
+        const piecePos = piece?.pos || '';
+        const polyData = board?.allPolygons?.[piecePos];
+        const pieceColor = polyData?.color?.toLowerCase() || 'grey';
+
         const result = applyMoveNapi({
             boardJson:         JSON.stringify(board || {}),
             piecesJson:        JSON.stringify(napiPieces),
@@ -923,7 +949,7 @@ app.post('/api/tutorial/apply', (req, res) => {
             turn,
             phase:             'Playing',
             setupStep:         5,
-            colorChosen:       { white: 'grey', black: 'grey' },
+            colorChosen:       { white: pieceColor, black: pieceColor },
             colorsEverChosen:  ['grey', 'green', 'blue', 'orange'],
             turnCounter:       1,
             isNewTurn:         true,
@@ -1796,6 +1822,8 @@ io.on('connection', (socket) => {
         const agentType = botConfig?.type || 'greedy_jack';
         const modelName = botConfig?.modelName || 'rank_002_yYtlgZLn13';
         const botKey = getBotKey(agentType, modelName);
+        const botId = `bot_${agentType}_${modelName}`;
+        const botName = makeBotDisplayName(agentType, modelName);
 
         // Check if this bot is already in a game
         if (busyBots.has(botKey)) {
@@ -1803,8 +1831,13 @@ io.on('connection', (socket) => {
             return;
         }
 
-        const botId = `bot_${agentType}_${modelName}`;
-        const botName = makeBotDisplayName(agentType, modelName);
+        // Check if this bot is registered in a tournament
+        const activeT = tournamentManager.getUserActiveTournamentSync(botId);
+        if (activeT) {
+            socket.emit('bot_error', { message: `${agentType} is currently reserved for a tournament (${activeT}).` });
+            return;
+        }
+
         const isPlayerWhite = Math.random() > 0.5;
 
         const humanPlayer = { socketId: socket.id, userId: effectiveUserId, username: effectiveUsername, role: effectiveRole };
@@ -1890,32 +1923,7 @@ io.on('connection', (socket) => {
                 status: tournament.status,
             });
 
-            // Invite bots if requested — only invite IDLE bots (not already in another tournament).
-            // Iterate all availableBots and skip any that are already participating in another
-            // open or active tournament, so we always fill the requested slot count.
-            if (tournament.invited_bots > 0 && availableBots.length > 0) {
-                let invitedCount = 0;
-                for (const bot of availableBots) {
-                    if (invitedCount >= tournament.invited_bots) break;
-                    const botId   = `bot_${bot.agent_type}_${bot.model_name}`;
-                    const botName = makeBotDisplayName(bot.agent_type, bot.model_name);
-                    // Pre-check: skip bots already locked in another tournament (in-memory, no DB hit)
-                    const existingT = await tournamentManager.getUserActiveTournament(botId);
-                    if (existingT) {
-                        logger.debug('Tournament', `Bot ${botId} busy in ${existingT}, skipping.`);
-                        continue;
-                    }
-                    try {
-                        await tournamentManager.joinTournament(tournament.id, botId, botName, null, true);
-                        invitedCount++;
-                    } catch (e) {
-                        logger.warn('Tournament', `Bot ${botId} could not join: ${e.message}`);
-                    }
-                }
-                if (invitedCount < tournament.invited_bots) {
-                    logger.warn('Tournament', `Only ${invitedCount}/${tournament.invited_bots} bot slot(s) filled — not enough idle bots.`);
-                }
-            }
+            // Persistently fill missing bots via background task
 
             broadcastLobbyUpdate(io);
         } catch (e) {
@@ -2816,3 +2824,78 @@ server.listen(PORT, '0.0.0.0', () => {
     logger.info('Server', `Log level: ${process.env.LOG_LEVEL || 'info'}`);
 });
 module.exports = { sanitizeBigInt, makeBotDisplayName };
+
+/**
+ * Background task to fill missing bot slots in open tournaments.
+ * Runs every 10 seconds.
+ */
+async function fillTournamentBots() {
+    if (!TOURNAMENTS_ENABLED) return;
+    
+    for (const [tid, t] of tournamentManager.activeTournaments) {
+        if (t.status !== 'open') continue;
+        
+        const currentBots = t.participants.filter(p => p.is_bot).length;
+        const missingBots = t.invited_bots - currentBots;
+        
+        if (missingBots <= 0) continue;
+        if (availableBots.length === 0) continue;
+        
+        // Shuffle available bots for randomness
+        const candidates = [...availableBots].sort(() => 0.5 - Math.random());
+        let filled = 0;
+        
+        for (const bot of candidates) {
+            if (filled >= missingBots) break;
+            if (t.current_count >= t.max_participants) break;
+            
+            const botId = `bot_${bot.agent_type}_${bot.model_name}`;
+            const botKey = getBotKey(bot.agent_type, bot.model_name);
+            const botName = makeBotDisplayName(bot.agent_type, bot.model_name);
+            
+            // Bot must be idle (not in a game) AND not in any tournament
+            if (busyBots.has(botKey)) continue;
+            if (tournamentManager.getUserActiveTournamentSync(botId)) continue;
+            
+            try {
+                await tournamentManager.joinTournament(t.id, botId, botName, null, true);
+                filled++;
+                logger.info('Tournament', `Bot ${botId} joined ${tid} via background filler (${filled}/${missingBots}).`);
+            } catch (e) {
+                logger.warn('Tournament', `Bot ${botId} failed to join ${tid}: ${e.message}`);
+            }
+        }
+        
+        if (filled > 0) {
+            // Refresh tournament room with updated participant count
+            const standings = require('./tournament/standings').computeStandings(t.participants, t.games, t.format);
+            io.to(`tournament:${t.id}`).emit('tournament_update', {
+                id: t.id,
+                name: t.name || 'Tournament',
+                status: t.status,
+                format: t.format,
+                currentRound: t.current_round,
+                maxRounds: t.duration_value,
+                currentCount: t.current_count,
+                maxParticipants: t.max_participants,
+                timeControl: { minutes: t.time_control_minutes, increment: t.time_control_increment },
+                creatorId: t.creator_id,
+                creatorName: t.creator_username || t.creator_id,
+                createdAt: t.created_at,
+                launchMode: t.launch_mode,
+                launchAt: t.launch_at,
+                boardId: t.board_id,
+                ratingMin: t.rating_min,
+                ratingMax: t.rating_max,
+                durationValue: t.duration_value,
+                standings,
+                bracket: null,
+                games: [],
+                arenaEndAt: t.arenaEndAt || null,
+                hasPassword: t.has_password === 1,
+            });
+            // Refresh lobby panel counts
+            broadcastLobbyUpdate(io);
+        }
+    }
+}

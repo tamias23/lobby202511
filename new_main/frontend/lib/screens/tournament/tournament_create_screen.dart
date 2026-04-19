@@ -205,7 +205,9 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
       'invitedBots':          _invitedBots,
       'creatorPlays':         _creatorPlays,
       'launchMode':           _launchMode,
-      'launchDelayMinutes':   _launchDelay,
+      'launchAt':             (_launchMode == 'at_time' || _launchMode == 'both')
+          ? DateTime.now().millisecondsSinceEpoch + _launchDelay * 60 * 1000
+          : null,
     });
   }
 

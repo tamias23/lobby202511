@@ -133,7 +133,7 @@ function glicko2Update(r, rd, sigma, rJ, rdJ, score) {
 const saveMatchResult = async (
     gameId, timestamp, whiteName, blackName,
     whitePlayerId, blackPlayerId, boardId, winner, moves, io,
-    tournamentId = null, tournamentRoundInfo = null
+    tournamentId = null, tournamentRoundInfo = null, timeControl = null
 ) => {
     try {
         const isRegistered = (id) => id && !id.startsWith('guest_');
@@ -154,6 +154,8 @@ const saveMatchResult = async (
                 moves: JSON.stringify(moves),
                 tournament_id: tournamentId,
                 tournament_round_info: tournamentRoundInfo,
+                time_control_minutes: timeControl?.minutes || null,
+                time_control_increment: timeControl?.increment || null,
             });
             logger.info('Storage', `Match ${gameId} stored (winner=${winner}).`);
         } else {
