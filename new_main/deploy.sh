@@ -37,6 +37,8 @@ podman push ${REGISTRY}/nodejs6:${TAG}
 # --min-instances 0 \
 # --min-instances 1 \
 # --session-affinity \
+# --memory 1Gi \
+# --cpu 1 \
 
 gcloud run deploy nd6-app \
     --image ${REGISTRY}/nodejs6:${TAG} \
@@ -44,9 +46,9 @@ gcloud run deploy nd6-app \
     --region europe-west1 \
     --allow-unauthenticated \
     --timeout=3600 \
-    --min-instances 0 \
+    --min-instances 1 \
     --max-instances 1 \
-    --cpu-throttling \
+    --no-cpu-throttling \
     --concurrency 800 \
     --network default \
     --subnet default \
@@ -68,11 +70,9 @@ gcloud run deploy nd6-bot-server \
     --region europe-west1 \
     --ingress internal \
     --timeout=3600 \
-    --min-instances 0 \
+    --min-instances 1 \
     --max-instances 1 \
-    --cpu-throttling \
-    --memory 1Gi \
-    --cpu 2 \
+    --no-cpu-throttling \
     --port 8080 \
     --set-env-vars "MODELS_DIR=/app/models,RUST_LOG=warn"
 

@@ -72,7 +72,14 @@ class LobbyNotifier extends Notifier<LobbyState> {
   @override
   LobbyState build() {
     _registerListeners();
+    // Enter lobby now (buffered if socket not yet connected)
     _socket.emit('enter_lobby');
+    // Also re-enter lobby on every (re)connection so the new server-side
+    // socket joins the 'lobby' room again. Critical for mobile where
+    // reconnections are frequent (network changes, sleep/wake, LB timeouts).
+    _socket.onConnect(() {
+      _socket.emit('enter_lobby');
+    });
     ref.onDispose(_removeListeners);
     return const LobbyState();
   }

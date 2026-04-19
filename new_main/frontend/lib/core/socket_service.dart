@@ -94,6 +94,19 @@ class SocketService {
     _socket!.once(event, handler);
   }
 
+  /// Register a callback that fires on every (re)connection.
+  /// This is the right place to re-enter rooms (e.g. 'lobby').
+  void onConnect(void Function() handler) {
+    if (!_ready) return;
+    _socket!.onConnect((_) => handler());
+  }
+
+  /// Register a callback for reconnection events specifically.
+  void onReconnect(void Function() handler) {
+    if (!_ready) return;
+    _socket!.onReconnect((_) => handler());
+  }
+
   // ── Connection state stream ──────────────────────────────────────────────────
 
   Stream<bool> get connectionStream {

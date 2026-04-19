@@ -110,7 +110,7 @@ async function createTournament(opts) {
     if (existingT) throw new Error('You already have an active tournament.');
 
     // Check bot limit
-    const invitedBots = Math.min(10, Math.max(0, opts.invitedBots || 0));
+    const invitedBots = Math.min(CONFIG.MAX_BOTS_IN_TOURNAMENTS, Math.max(0, opts.invitedBots || 0));
     const currentBotCount = countBotsInTournaments();
     if (currentBotCount + invitedBots > CONFIG.MAX_BOTS_IN_TOURNAMENTS) {
         throw new Error(`Bot limit exceeded. Currently ${currentBotCount} bots in tournaments, max ${CONFIG.MAX_BOTS_IN_TOURNAMENTS}.`);

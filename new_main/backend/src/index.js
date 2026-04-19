@@ -2866,6 +2866,9 @@ async function fillTournamentBots() {
             }
         }
         
+        if (filled > 0 && filled < missingBots) {
+            logger.warn('Tournament', `${tid}: filled ${filled}/${missingBots} bots (not enough idle bots available).`);
+        }
         if (filled > 0) {
             // Refresh tournament room with updated participant count
             const standings = require('./tournament/standings').computeStandings(t.participants, t.games, t.format);

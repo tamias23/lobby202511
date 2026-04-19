@@ -209,6 +209,12 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
           ? DateTime.now().millisecondsSinceEpoch + _launchDelay * 60 * 1000
           : null,
     });
+    // Safety timeout: if no response in 10s, reset creating state
+    Future.delayed(const Duration(seconds: 10), () {
+      if (mounted && _creating) {
+        setState(() { _creating = false; _error = 'No response from server. Please try again.'; });
+      }
+    });
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
