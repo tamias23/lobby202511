@@ -821,15 +821,10 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
 
     return Column(children: [
       Expanded(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+        child: Stack(
           children: [
-            // ── White off-board pieces (left side) ──────────────────────────
-            if (showSide && whiteOff.isNotEmpty)
-              _buildSidePieceColumn(whiteOff, 'white', pSize),
-
-            // ── Board ───────────────────────────────────────────────────────
-            Expanded(
+            // ── Board (always takes full width) ──────────────────────────────
+            Positioned.fill(
               child: RepaintBoundary(
                 child: BoardWidget(
                   polygons:         _polygons,
@@ -852,9 +847,19 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
               ),
             ),
 
-            // ── Black off-board pieces (right side) ─────────────────────────
+            // ── White off-board pieces (left edge overlay) ──────────────────
+            if (showSide && whiteOff.isNotEmpty)
+              Positioned(
+                left: 0, top: 0, bottom: 0,
+                child: _buildSidePieceColumn(whiteOff, 'white', pSize),
+              ),
+
+            // ── Black off-board pieces (right edge overlay) ─────────────────
             if (showSide && blackOff.isNotEmpty)
-              _buildSidePieceColumn(blackOff, 'black', pSize),
+              Positioned(
+                right: 0, top: 0, bottom: 0,
+                child: _buildSidePieceColumn(blackOff, 'black', pSize),
+              ),
           ],
         ),
       ),

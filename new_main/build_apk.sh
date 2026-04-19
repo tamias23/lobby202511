@@ -10,6 +10,12 @@ API_URL="https://dedalthegame.com"
 
 cd /home/mat/Bureau/lobby202511/new_main/frontend
 
+echo "==> Cleaning previous build..."
+$FLUTTER clean
+
+echo "==> Getting dependencies..."
+$FLUTTER pub get
+
 echo "==> Building Flutter APK (release) for $API_URL ..."
 $FLUTTER build apk --release --dart-define=API_URL=$API_URL
 
