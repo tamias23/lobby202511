@@ -76,14 +76,6 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
         context.go('/tournament/${widget.tournamentId}');
       }
     });
-
-    socket.on('tournament_games_download_data', (data) {
-      final d = data as Map<String,dynamic>;
-      if (!mounted) return;
-      if (d['tournamentId'] != widget.tournamentId) return;
-      setState(() => _isDownloading = false);
-      _triggerDownload(d['json'] as String? ?? '');
-    });
   }
 
   void _leaveRoom() {
@@ -117,8 +109,21 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
   void _download() {
     if (_isDownloading) return;
     setState(() => _isDownloading = true);
-    ref.read(socketServiceProvider).emit(
-      'download_tournament_games', {'tournamentId': widget.tournamentId});
+
+    final socket = ref.read(socketServiceProvider);
+
+    // Use .once to ensure this handler only fires once for this specific request.
+    // This avoids duplicate downloads if the screen was rebuilt or stacked.
+    socket.once('tournament_games_download_data', (data) {
+      if (!mounted) return;
+      final d = data as Map<String, dynamic>;
+      if (d['tournamentId'] != widget.tournamentId) return;
+
+      setState(() => _isDownloading = false);
+      _triggerDownload(d['json'] as String? ?? '');
+    });
+
+    socket.emit('download_tournament_games', {'tournamentId': widget.tournamentId});
   }
 
   void _triggerDownload(String jsonStr) {
