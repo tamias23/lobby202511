@@ -11,6 +11,7 @@ const db = require('../db');
 const { swissPairings, roundRobinPairings, knockoutPairings, arenaPairings, knockoutTotalRounds } = require('./pairings');
 const { computeStandings, computeKnockoutBracket } = require('./standings');
 const logger = require('../utils/logger');
+const { updateRatings } = require('../utils/gameStorage');
 // Lazy import to avoid circular dependency (valkeySync → tournamentManager → valkeySync)
 let _valkeySync = null;
 function _getValkeySync() {
@@ -624,6 +625,11 @@ async function onGameComplete(gameHash, winnerSide, moves = []) {
         }
 
         logger.info('Tournament', `Game ${gameHash} in ${tid} completed: result=${game.result}`);
+
+        // ── Glicko-2 rating update (skipped for abandoned/aborted) ──
+        if (game.result !== 'abandoned' && game.result !== 'aborted') {
+            updateRatings(game.white_id, game.black_id, game.result, _ioRef, game.game_hash);
+        }
 
         // Check round completion
         if (t.format === 'arena') {

@@ -15,17 +15,13 @@ PROJECT_ID = "mylittleproject00"
 # Set this to True if you want to use your local Podman emulator
 USE_EMULATOR = True 
 
-
 os.chdir('/home/mat/Bureau/lobby202511/parquet/temp')
-
-if USE_EMULATOR:
-    os.environ["FIRESTORE_EMULATOR_HOST"] = "localhost:8080"
 
 def export_firestore_to_parquet():
     # 1. Initialize Client
     db = ''
     if USE_EMULATOR:
-        os.environ["FIRESTORE_EMULATOR_HOST"] = "localhost:8080"
+        os.environ["FIRESTORE_EMULATOR_HOST"] = "localhost:18080"
         os.environ["GOOGLE_CLOUD_PROJECT"] = "my-local-firestore"
         db = firestore.Client()
     else:

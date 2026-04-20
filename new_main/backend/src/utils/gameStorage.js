@@ -120,6 +120,67 @@ function glicko2Update(r, rd, sigma, rJ, rdJ, score) {
     };
 }
 
+// ─── updateRatings ────────────────────────────────────────────────────────────
+
+/**
+ * Enqueues a serial Glicko-2 rating update for both players.
+ *
+ * Can be called independently (e.g. for tournament games where the game
+ * record is already persisted by the tournament system).
+ *
+ * @param {string} whitePlayerId
+ * @param {string} blackPlayerId
+ * @param {string} winner         - 'white' | 'black' | 'draw'
+ * @param {object|null} io        - socket.io instance (optional, for rating_updated emit)
+ * @param {string|null} gameId    - used only for logging / socket room emit
+ */
+const updateRatings = (whitePlayerId, blackPlayerId, winner, io = null, gameId = null) => {
+    const isRegistered = (id) => id && !id.startsWith('guest_');
+    if (!isRegistered(whitePlayerId) || !isRegistered(blackPlayerId)) return;
+
+    // Fire-and-forget into the queue (don't await — lets the caller return fast)
+    ratingQueue.enqueue(async () => {
+        const white = await db.getUser(whitePlayerId);
+        const black = await db.getUser(blackPlayerId);
+        if (!white || !black) return;
+
+        const whiteR     = Number(white.rating) || 1500;
+        const whiteRd    = Number(white.rating_deviation) || 350;
+        const whiteSigma = Number(white.rating_volatility) || 0.06;
+        const blackR     = Number(black.rating) || 1500;
+        const blackRd    = Number(black.rating_deviation) || 350;
+        const blackSigma = Number(black.rating_volatility) || 0.06;
+
+        const whiteScore = winner === 'white' ? 1 : (winner === 'draw' ? 0.5 : 0);
+        const newWhite = glicko2Update(whiteR, whiteRd, whiteSigma, blackR, blackRd, whiteScore);
+        const newBlack = glicko2Update(blackR, blackRd, blackSigma, whiteR, whiteRd, 1 - whiteScore);
+
+        await db.updateUserRating(whitePlayerId, newWhite.r, newWhite.rd, newWhite.sigma);
+        await db.updateUserRating(blackPlayerId, newBlack.r, newBlack.rd, newBlack.sigma);
+
+        logger.info('Rating',
+            `Glicko-2 update${gameId ? ` for ${gameId}` : ''}: ` +
+            `white ${whiteR.toFixed(0)}→${newWhite.r.toFixed(0)} ` +
+            `(RD ${whiteRd.toFixed(0)}→${newWhite.rd.toFixed(0)}), ` +
+            `black ${blackR.toFixed(0)}→${newBlack.r.toFixed(0)} ` +
+            `(RD ${blackRd.toFixed(0)}→${newBlack.rd.toFixed(0)})`
+        );
+
+        // Emit rating update to the game room (if a socket room is known)
+        if (io && gameId) {
+            io.to(gameId).emit('rating_updated', {
+                whitePlayerId,
+                blackPlayerId,
+                whiteRating: Math.round(newWhite.r),
+                blackRating: Math.round(newBlack.r),
+                whiteRatingOld: Math.round(whiteR),
+                blackRatingOld: Math.round(blackR),
+            });
+        }
+    }).catch(err => logger.error('Rating', 'Rating update failed:', err));
+};
+
+
 // ─── saveMatchResult ─────────────────────────────────────────────────────────
 
 /**
@@ -164,47 +225,7 @@ const saveMatchResult = async (
         }
 
         // ── 2. Update Glicko-2 ratings (serialised, registered only) ──
-
-        // Fire-and-forget into the queue (don't await — lets the socket handler return fast)
-        ratingQueue.enqueue(async () => {
-            const white = await db.getUser(whitePlayerId);
-            const black = await db.getUser(blackPlayerId);
-            if (!white || !black) return;
-
-            const whiteR     = Number(white.rating) || 1500;
-            const whiteRd    = Number(white.rating_deviation) || 350;
-            const whiteSigma = Number(white.rating_volatility) || 0.06;
-            const blackR     = Number(black.rating) || 1500;
-            const blackRd    = Number(black.rating_deviation) || 350;
-            const blackSigma = Number(black.rating_volatility) || 0.06;
-
-            const whiteScore = winner === 'white' ? 1 : (winner === 'draw' ? 0.5 : 0);
-            const newWhite = glicko2Update(whiteR, whiteRd, whiteSigma, blackR, blackRd, whiteScore);
-            const newBlack = glicko2Update(blackR, blackRd, blackSigma, whiteR, whiteRd, 1 - whiteScore);
-
-            await db.updateUserRating(whitePlayerId, newWhite.r, newWhite.rd, newWhite.sigma);
-            await db.updateUserRating(blackPlayerId, newBlack.r, newBlack.rd, newBlack.sigma);
-
-            logger.info('Rating',
-                `Glicko-2 update for ${gameId}: ` +
-                `white ${whiteR.toFixed(0)}→${newWhite.r.toFixed(0)} ` +
-                `(RD ${whiteRd.toFixed(0)}→${newWhite.rd.toFixed(0)}), ` +
-                `black ${blackR.toFixed(0)}→${newBlack.r.toFixed(0)} ` +
-                `(RD ${blackRd.toFixed(0)}→${newBlack.rd.toFixed(0)})`
-            );
-
-            // Emit rating update to all sockets in the game room
-            if (io) {
-                io.to(gameId).emit('rating_updated', {
-                    whitePlayerId,
-                    blackPlayerId,
-                    whiteRating: Math.round(newWhite.r),
-                    blackRating: Math.round(newBlack.r),
-                    whiteRatingOld: Math.round(whiteR),
-                    blackRatingOld: Math.round(blackR),
-                });
-            }
-        }).catch(err => logger.error('Rating', 'Rating update failed:', err));
+        updateRatings(whitePlayerId, blackPlayerId, winner, io, gameId);
 
     } catch (err) {
         logger.error('Storage', 'Error saving match result:', err);
@@ -212,4 +233,4 @@ const saveMatchResult = async (
     }
 };
 
-module.exports = { saveMatchResult };
+module.exports = { saveMatchResult, updateRatings };
