@@ -93,7 +93,7 @@ services:
       - RUST_LOG=warn
       - ORT_LOGGING_LEVEL=3
     healthcheck:
-      test: ["CMD-SHELL", "cat < /dev/tcp/localhost/8080 || exit 1"]
+      test: ["CMD", "bash", "-c", "cat < /dev/tcp/localhost/8080"]
       interval: 10s
       timeout: 3s
       retries: 5
