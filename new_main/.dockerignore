@@ -7,3 +7,6 @@
 **/.git
 **/.gitignore
 **/rust-napi/index.*.node
+**/podman-data
+docker-compose.podman.yml
+nginx-podman.conf
