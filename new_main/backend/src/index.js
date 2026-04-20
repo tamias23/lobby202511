@@ -1320,13 +1320,22 @@ function handleAbandonedGame(gameId, game, reason, message) {
 }
 
 // Global Timeout Check
-setInterval(() => {
+setInterval(async () => {
     const now = Date.now();
     for (const [gameId, game] of lobby.activeGames) {
         if (game.phase === 'GameOver') continue;
 
-        // Only the owner instance runs timeout checks to prevent duplicate game-over events
-        if (game.ownerInstanceId && game.ownerInstanceId !== valkeySync.getInstanceId()) continue;
+        // Only the owner instance runs timeout checks to prevent duplicate game-over events.
+        // Exception: if the owner's heartbeat has expired (it crashed), adopt the game.
+        if (game.ownerInstanceId && game.ownerInstanceId !== valkeySync.getInstanceId()) {
+            const ownerAlive = await valkeySync.isInstanceAlive(game.ownerInstanceId);
+            if (ownerAlive) continue;
+            // Owner is dead — adopt the game
+            logger.info('Game', `Instance ${game.ownerInstanceId.slice(0, 8)} is dead. Adopting game ${gameId}.`);
+            game.ownerInstanceId = valkeySync.getInstanceId();
+            valkeySync.syncGameUpdated(gameId, game); // inform peers of ownership transfer
+            // fall through to run timeout checks on this game
+        }
 
         // ── STALE-GAME SWEEPS ────────────────────────────────────────────────
         // These run before disconnect/clock checks and handle games that will

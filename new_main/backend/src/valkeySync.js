@@ -23,10 +23,16 @@ const path = require('path');
 
 const INSTANCE_ID = uuidv4();
 const SYNC_CHANNEL = 'nd6:sync';
-const STATE_KEY_GAMES = 'nd6:state:games';
+const STATE_KEY_GAMES_PREFIX = 'nd6:state:games:'; // per-instance: nd6:state:games:<instanceId>
 const STATE_KEY_REQUESTS = 'nd6:state:requests';
 const STATE_KEY_TOURNAMENTS = 'nd6:state:tournaments';
 const FULL_STATE_INTERVAL_MS = 30000; // Write full state to Valkey every 30s
+const HEARTBEAT_PREFIX = 'nd6:heartbeat:';       // nd6:heartbeat:<instanceId>
+const HEARTBEAT_TTL_S = 30;                      // key expires if instance goes silent
+const HEARTBEAT_INTERVAL_MS = 15000;             // write heartbeat every 15s
+// Local cache for isInstanceAlive() — avoids Valkey query every sweep tick
+const _aliveCache = new Map(); // instanceId → { alive: bool, checkedAt: number }
+const ALIVE_CACHE_TTL_MS = 10000;
 
 // ── References set during init() ─────────────────────────────────────────────
 let lobby = null;          // { gameRequests: [], activeGames: Map }
@@ -47,8 +53,12 @@ function init(lobbyRef, loadBoard, tournamentManagerRef) {
     // Subscribe to the sync channel
     valkey.subscribe(SYNC_CHANNEL, _onSyncMessage);
 
-    // Periodically write full state to Valkey keys for new-instance bootstrap
+    // Periodically write per-instance state snapshot for bootstrap
     setInterval(_writeFullState, FULL_STATE_INTERVAL_MS);
+
+    // Periodic heartbeat so other instances can detect crashes
+    setInterval(_heartbeat, HEARTBEAT_INTERVAL_MS);
+    setTimeout(_heartbeat, 1000); // write once early so we're immediately detectable
 
     // On first connect, try to read existing state from Valkey
     // (small delay to let the adapter connect first)
@@ -432,18 +442,21 @@ function _mergeMutableState(game, state) {
 // FULL STATE PERSISTENCE (for new-instance bootstrap)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Write full lobby state to Valkey keys so new instances can bootstrap. */
+/** Write per-instance lobby state to Valkey so new instances can bootstrap. */
 async function _writeFullState() {
     const client = valkey.getClient();
     if (!client || !lobby) return;
 
     try {
-        // Games: extract syncable state for each active game
+        // Games: only write games OWNED by this instance (avoids overwriting peer data).
+        // Per-instance key: nd6:state:games:<instanceId>  EX 120s (refreshed every 30s).
         const games = {};
         for (const [hash, game] of lobby.activeGames) {
-            games[hash] = _extractSyncableState(game);
+            if (!game.ownerInstanceId || game.ownerInstanceId === INSTANCE_ID) {
+                games[hash] = _extractSyncableState(game);
+            }
         }
-        await client.set(STATE_KEY_GAMES, JSON.stringify(games), { EX: 120 });
+        await client.set(`${STATE_KEY_GAMES_PREFIX}${INSTANCE_ID}`, JSON.stringify(games), { EX: 120 });
 
         // Requests: strip instance-local socketId
         const requests = lobby.gameRequests.map(r => {
@@ -456,29 +469,43 @@ async function _writeFullState() {
     }
 }
 
-/** Read full state from Valkey keys on startup (bootstrap from existing instances). */
+/** Write this instance's heartbeat key so peers can detect crashes. */
+async function _heartbeat() {
+    const client = valkey.getClient();
+    if (!client) return;
+    try {
+        await client.set(`${HEARTBEAT_PREFIX}${INSTANCE_ID}`, '1', { EX: HEARTBEAT_TTL_S });
+    } catch (e) {
+        logger.warn('Sync', 'Heartbeat write failed:', e.message);
+    }
+}
+
+/** Read full state from all instance keys on startup (bootstrap from existing peers). */
 async function _bootstrapFromValkey() {
     const client = valkey.getClient();
     if (!client || !lobby) return;
 
     try {
-        // Bootstrap games
-        const gamesRaw = await client.get(STATE_KEY_GAMES);
-        if (gamesRaw) {
-            const games = JSON.parse(gamesRaw);
-            let count = 0;
+        // Bootstrap games: merge all per-instance keys (nd6:state:games:*)
+        // KEYS is O(N total keys) — acceptable for our small key space (<1000).
+        const gameKeys = await client.keys(`${STATE_KEY_GAMES_PREFIX}*`);
+        let gameCount = 0;
+        for (const key of gameKeys) {
+            const raw = await client.get(key);
+            if (!raw) continue;
+            const games = JSON.parse(raw);
             for (const [hash, state] of Object.entries(games)) {
                 if (!lobby.activeGames.has(hash)) {
                     const game = _reconstructGame(state);
                     if (game) {
                         lobby.activeGames.set(hash, game);
-                        count++;
+                        gameCount++;
                     }
                 }
             }
-            if (count > 0) {
-                logger.info('Sync', `Bootstrapped ${count} active game(s) from Valkey.`);
-            }
+        }
+        if (gameCount > 0) {
+            logger.info('Sync', `Bootstrapped ${gameCount} active game(s) from ${gameKeys.length} instance key(s).`);
         }
 
         // Bootstrap requests
@@ -502,9 +529,45 @@ async function _bootstrapFromValkey() {
     }
 }
 
+/**
+ * Check whether a remote instance is still alive via its heartbeat key.
+ * Results are cached for ALIVE_CACHE_TTL_MS to avoid hammering Valkey
+ * on every timeout-sweep tick.
+ *
+ * @param {string} instanceId
+ * @returns {Promise<boolean>} true = alive (or Valkey unavailable → assume alive)
+ */
+async function isInstanceAlive(instanceId) {
+    // If same instance, always alive
+    if (instanceId === INSTANCE_ID) return true;
+
+    // Check cache
+    const cached = _aliveCache.get(instanceId);
+    if (cached && (Date.now() - cached.checkedAt) < ALIVE_CACHE_TTL_MS) {
+        return cached.alive;
+    }
+
+    const client = valkey.getClient();
+    if (!client) return true; // No Valkey = single-instance mode, never steal ownership
+
+    try {
+        const val = await client.get(`${HEARTBEAT_PREFIX}${instanceId}`);
+        const alive = val !== null;
+        _aliveCache.set(instanceId, { alive, checkedAt: Date.now() });
+        if (!alive) {
+            logger.info('Sync', `Instance ${instanceId.slice(0, 8)} heartbeat missing — presumed dead.`);
+        }
+        return alive;
+    } catch (e) {
+        logger.warn('Sync', `isInstanceAlive check failed for ${instanceId.slice(0, 8)}:`, e.message);
+        return true; // Conservative: don't steal ownership on Valkey error
+    }
+}
+
 module.exports = {
     init,
     getInstanceId,
+    isInstanceAlive,
     syncGameCreated,
     syncGameUpdated,
     syncGameDeleted,
