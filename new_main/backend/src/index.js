@@ -1167,7 +1167,7 @@ const lobby = {
 };
 
 // Initialize Valkey state sync (needs lobby reference)
-valkeySync.init(lobby, loadBoardByName);
+valkeySync.init(lobby, loadBoardByName, tournamentManager);
 
 function buildLobbyStats() {
     // Count unique users, not socket connections
@@ -1234,8 +1234,8 @@ function broadcastLobbyUpdate(io) {
         available_bots: getBotsForLobby(),
         tournaments: TOURNAMENTS_ENABLED ? {
             enabled: true,
-            openTournaments: tournamentManager.getOpenTournaments(),
-            activeTournaments: tournamentManager.getActiveTournamentsList(),
+            openTournaments: tournamentManager.getOpenTournamentsCached(),
+            activeTournaments: tournamentManager.getActiveTournamentsListCached(),
         } : { enabled: false, openTournaments: [], activeTournaments: [] },
     };
     io.to('lobby').emit('lobby_update', sanitizeBigInt(payload));

@@ -11,6 +11,12 @@ const db = require('../db');
 const { swissPairings, roundRobinPairings, knockoutPairings, arenaPairings, knockoutTotalRounds } = require('./pairings');
 const { computeStandings, computeKnockoutBracket } = require('./standings');
 const logger = require('../utils/logger');
+// Lazy import to avoid circular dependency (valkeySync → tournamentManager → valkeySync)
+let _valkeySync = null;
+function _getValkeySync() {
+    if (!_valkeySync) _valkeySync = require('../valkeySync');
+    return _valkeySync;
+}
 
 // ─── Config (injected at init time from process.env) ────────────────────────
 let CONFIG = {
@@ -63,10 +69,24 @@ let _createGameFn = null;   // (whitePlayer, blackPlayer, timeControl, boardId?)
 let _ioRef = null;          // socket.io instance
 let _abortGameFn = null;    // (gameHash) → void — cleans up lobby.activeGames + releases bots
 
+// ── Cached lobby lists (updated by remote sync) ─────────────────────────────────────────
+// Only used to serve broadcastLobbyUpdate on instances that received a remote sync.
+// The authoritative activeTournaments Map is always kept in sync too.
+let _cachedOpenList = null;
+let _cachedActiveList = null;
+
 function setDependencies(createGameFn, io, abortGameFn) {
     _createGameFn = createGameFn;
     _ioRef = io;
     _abortGameFn = abortGameFn || null;
+}
+
+/** Publish current tournament lists to Valkey so all instances stay in sync. */
+function _syncToValkey() {
+    try {
+        const vs = _getValkeySync();
+        vs.syncTournamentList(getOpenTournaments(), getActiveTournamentsList());
+    } catch (_) { /* valkeySync may not be init yet on startup */ }
 }
 
 // ─── Load from DB on startup ────────────────────────────────────────────────
@@ -172,6 +192,7 @@ async function createTournament(opts) {
         await joinTournament(id, opts.creatorId, opts.creatorUsername, null, true);
     }
 
+    _syncToValkey();
     return tournament;
 }
 
@@ -237,6 +258,7 @@ async function joinTournament(tournamentId, userId, username, password, skipPass
     // Check if tournament should start
     await tryStartTournament(tournamentId);
 
+    _syncToValkey();
     return participant;
 }
 
@@ -267,6 +289,7 @@ async function leaveTournament(tournamentId, userId) {
         await cancelTournament(tournamentId);
     }
 
+    _syncToValkey();
     return true;
 }
 
@@ -321,6 +344,7 @@ async function startTournament(tournamentId) {
     }
 
     broadcastTournamentUpdate(tournamentId);
+    _syncToValkey();
     return true;
 }
 
@@ -669,10 +693,12 @@ async function completeTournament(tournamentId) {
     logger.info('Tournament', `${tournamentId} COMPLETED. Winner: ${standings[0]?.username || 'N/A'}`);
 
     broadcastTournamentUpdate(tournamentId);
+    _syncToValkey();
 
     // Clean up from active map after a delay (keep visible for 30min)
     setTimeout(() => {
         activeTournaments.delete(tournamentId);
+        _syncToValkey();
     }, 30 * 60 * 1000);
 }
 
@@ -690,6 +716,7 @@ async function cancelTournament(tournamentId) {
     if (_ioRef) {
         _ioRef.to(`tournament:${tournamentId}`).emit('tournament_update', { id: tournamentId, status: 'cancelled' });
     }
+    _syncToValkey();
 }
 
 
@@ -973,6 +1000,33 @@ async function reconnectToTournament(userId) {
 }
 
 
+// ── Apply remote tournament list (called by valkeySync when tournament:sync received) ──
+/**
+ * Receives the serialized open/active tournament lists from another instance
+ * and updates the cached lists used by broadcastLobbyUpdate.
+ * Does NOT replace activeTournaments (game logic stays authoritative on the owning instance).
+ */
+function applyRemoteTournamentList(openList, activeList) {
+    if (Array.isArray(openList))   _cachedOpenList   = openList;
+    if (Array.isArray(activeList)) _cachedActiveList = activeList;
+}
+
+/**
+ * Returns the open tournament list: Valkey-synced cache if available,
+ * otherwise falls back to local in-memory state.
+ */
+function getOpenTournamentsCached() {
+    return _cachedOpenList !== null ? _cachedOpenList : getOpenTournaments();
+}
+
+/**
+ * Returns the active tournament list: Valkey-synced cache if available,
+ * otherwise falls back to local in-memory state.
+ */
+function getActiveTournamentsListCached() {
+    return _cachedActiveList !== null ? _cachedActiveList : getActiveTournamentsList();
+}
+
 module.exports = {
     initConfig,
     loadFromDb,
@@ -986,6 +1040,9 @@ module.exports = {
     checkArenaExpiry,
     getOpenTournaments,
     getActiveTournamentsList,
+    getOpenTournamentsCached,
+    getActiveTournamentsListCached,
+    applyRemoteTournamentList,
     getTournamentById,
     getUserActiveTournament,
     getUserActiveTournamentSync,

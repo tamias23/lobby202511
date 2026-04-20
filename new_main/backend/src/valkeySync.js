@@ -25,11 +25,13 @@ const INSTANCE_ID = uuidv4();
 const SYNC_CHANNEL = 'nd6:sync';
 const STATE_KEY_GAMES = 'nd6:state:games';
 const STATE_KEY_REQUESTS = 'nd6:state:requests';
+const STATE_KEY_TOURNAMENTS = 'nd6:state:tournaments';
 const FULL_STATE_INTERVAL_MS = 30000; // Write full state to Valkey every 30s
 
 // ── References set during init() ─────────────────────────────────────────────
 let lobby = null;          // { gameRequests: [], activeGames: Map }
 let loadBoardFn = null;    // (boardName) => boardData  — loads board JSON from disk
+let _tournamentManager = null; // Reference to tournamentManager for remote list updates
 
 /**
  * Initialize the sync module.
@@ -37,9 +39,10 @@ let loadBoardFn = null;    // (boardName) => boardData  — loads board JSON fro
  * @param {object} lobbyRef      — reference to the lobby state (gameRequests + activeGames)
  * @param {Function} loadBoard   — function(boardName) => board JSON object
  */
-function init(lobbyRef, loadBoard) {
+function init(lobbyRef, loadBoard, tournamentManagerRef) {
     lobby = lobbyRef;
     loadBoardFn = loadBoard;
+    _tournamentManager = tournamentManagerRef || null;
 
     // Subscribe to the sync channel
     valkey.subscribe(SYNC_CHANNEL, _onSyncMessage);
@@ -93,6 +96,42 @@ function syncRequestRemoved(requestId) {
 /** A player disconnected — sync the disconnectedAt timestamp. */
 function syncDisconnect(hash, side, timestamp) {
     _publish({ type: 'game:disconnect', hash, side, timestamp });
+}
+
+/**
+ * Publish the current tournament list to Valkey so all instances stay in sync.
+ * Called after any mutation that changes open/active tournament lists.
+ * @param {Array} openTournaments   — from tournamentManager.getOpenTournaments()
+ * @param {Array} activeTournaments — from tournamentManager.getActiveTournamentsList()
+ */
+function syncTournamentList(openTournaments, activeTournaments) {
+    const payload = { open: openTournaments, active: activeTournaments };
+    // Write to Valkey key for bootstrap
+    const client = valkey.getClient();
+    if (client) {
+        client.set(STATE_KEY_TOURNAMENTS, JSON.stringify(payload), { EX: 3600 })
+            .catch(e => logger.warn('Sync', 'Failed to write tournament state:', e.message));
+    }
+    // Notify other instances immediately via pub/sub
+    _publish({ type: 'tournament:sync', payload });
+}
+
+/**
+ * Read the latest tournament list from Valkey.
+ * Returns null if Valkey is unavailable or no data.
+ * @returns {Promise<{open: Array, active: Array}|null>}
+ */
+async function getTournamentListFromValkey() {
+    const client = valkey.getClient();
+    if (!client) return null;
+    try {
+        const raw = await client.get(STATE_KEY_TOURNAMENTS);
+        if (!raw) return null;
+        return JSON.parse(raw);
+    } catch (e) {
+        logger.warn('Sync', 'Failed to read tournament state from Valkey:', e.message);
+        return null;
+    }
 }
 
 /** A player reconnected — clear the disconnectedAt timestamp. */
@@ -170,6 +209,9 @@ function _onSyncMessage(raw) {
             break;
         case 'game:reconnect':
             _applyReconnect(msg);
+            break;
+        case 'tournament:sync':
+            _applyTournamentSync(msg);
             break;
         default:
             logger.debug('Sync', `Unknown sync message type: ${msg.type}`);
@@ -251,6 +293,12 @@ function _applyReconnect(msg) {
     if (msg.side === 'white') game.whiteDisconnectedAt = null;
     else if (msg.side === 'black') game.blackDisconnectedAt = null;
     logger.debug('Sync', `Received game:reconnect ${msg.hash} ${msg.side} from ${msg.instanceId.slice(0, 8)}`);
+}
+
+function _applyTournamentSync(msg) {
+    if (!_tournamentManager || !msg.payload) return;
+    _tournamentManager.applyRemoteTournamentList(msg.payload.open, msg.payload.active);
+    logger.debug('Sync', `Received tournament:sync from ${msg.instanceId.slice(0, 8)}`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -465,4 +513,6 @@ module.exports = {
     syncDisconnect,
     syncReconnect,
     tryLockRequest,
+    syncTournamentList,
+    getTournamentListFromValkey,
 };
