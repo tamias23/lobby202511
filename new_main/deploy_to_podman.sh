@@ -141,15 +141,15 @@ if [[ -z "$REMOTE" ]]; then
     cd "${SCRIPT_DIR}"
     podman compose -f "$COMPOSE_FILE" down 2>/dev/null || true
 
-    # Start services
-    podman compose -f "$COMPOSE_FILE" up -d --scale nd6-app=${REPLICAS}
-
-    # Start tunnel if requested
+    # Start services (including tunnel profile if requested)
+    COMPOSE_ARGS="-f \"$COMPOSE_FILE\""
     if $TUNNEL; then
-        echo "==> Starting Cloudflare tunnel..."
+        echo "==> Starting with Cloudflare tunnel..."
         export CF_TUNNEL_TOKEN="$CF_TOKEN"
-        podman compose -f "$COMPOSE_FILE" --profile tunnel up -d
+        COMPOSE_ARGS="$COMPOSE_ARGS --profile tunnel"
     fi
+    eval podman compose $COMPOSE_ARGS up -d --scale nd6-app=${REPLICAS}
+
 
     echo ""
     echo "==> Waiting for services to be ready..."

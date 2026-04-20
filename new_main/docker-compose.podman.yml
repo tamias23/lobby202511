@@ -169,6 +169,8 @@ services:
     image: docker.io/cloudflare/cloudflared:latest
     container_name: dedal-tunnel
     restart: unless-stopped
+    # The origin URL is configured in the Cloudflare dashboard.
+    # Set it to: http://nginx:8080  (compose service name, same network)
     command: tunnel --no-autoupdate run --token ${CF_TUNNEL_TOKEN}
     depends_on:
       - nginx
