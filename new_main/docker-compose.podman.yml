@@ -59,6 +59,8 @@ services:
     restart: unless-stopped
     depends_on:
       - firestore
+    volumes:
+      - /home/mat/Bureau/dedalthegame/firestore_db:/opt/data:Z
     entrypoint: /bin/sh
     command:
       - -c
@@ -68,11 +70,16 @@ services:
         while true; do
           sleep 900
           echo "[$(date -u)] Triggering Firestore export..."
-          curl -sf -X POST "http://firestore:8080/emulator/v1/projects/my-local-firestore:export" \
+          if curl -sf -X POST "http://firestore:8080/emulator/v1/projects/my-local-firestore:export" \
             -H "Content-Type: application/json" \
-            -d '{"database":"projects/my-local-firestore/databases/(default)","export_directory":"/opt/data/export"}' \
-            && echo " Export OK" \
-            || echo " Export FAILED"
+            -d '{"database":"projects/my-local-firestore/databases/(default)","export_directory":"/opt/data/export"}'; then
+            echo " Export OK — pruning old snapshots..."
+            # Keep only the newest timestamped subdir; delete all others
+            ls -1dt /opt/data/export/firestore_export_* 2>/dev/null | tail -n +2 | xargs rm -rf
+            echo " Pruned. Kept: $(ls -1d /opt/data/export/firestore_export_* 2>/dev/null | tail -1)"
+          else
+            echo " Export FAILED"
+          fi
         done
 
   # ── Bot Server (Rust) ───────────────────────────────────────────────────
