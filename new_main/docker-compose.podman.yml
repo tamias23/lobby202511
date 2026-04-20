@@ -46,10 +46,11 @@ services:
     command:
       - -c
       - |
+        METADATA=$(ls -1t /opt/data/export/firestore_export_*/firestore_export_*.overall_export_metadata 2>/dev/null | head -1)
         ARGS="--host-port=0.0.0.0:8080 --project=my-local-firestore --export-on-exit=/opt/data/export"
-        if [ -f /opt/data/export/overall_export_metadata ]; then
-          echo "Found existing export data, importing..."
-          ARGS="$$ARGS --import-data=/opt/data/export/overall_export_metadata"
+        if [ -n "$$METADATA" ]; then
+          echo "Found existing export, importing from: $$METADATA"
+          ARGS="$$ARGS --import-data=$$METADATA"
         else
           echo "No existing export data found, starting fresh."
           mkdir -p /opt/data/export

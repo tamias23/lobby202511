@@ -54,7 +54,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     // Otherwise join by hash (direct URL open / rejoin / spectate)
     _socket.once('game_joined', (data) {
       if (!mounted) return;
-      final d = data as Map<String, dynamic>;
+      final d = Map<String, dynamic>.from(data as Map);
       if (d['error'] != null) {
         if (mounted) setState(() {}); // trigger rebuild to show error
         return;
@@ -62,7 +62,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       _side = d['side'] as String? ?? 'spectator';
       _spectator = _side == 'spectator';
       _tournamentId = d['tournamentId'] as String?;
-      final rawState = d['initialState'] as Map<String, dynamic>?;
+      final rawState = d['initialState'] != null
+          ? Map<String, dynamic>.from(d['initialState'] as Map)
+          : null;
       if (rawState != null) {
         ref.read(gameProvider(widget.hash).notifier)
             .applyInitialState(rawState, _spectator ? 'spectator' : (_side ?? 'spectator'));

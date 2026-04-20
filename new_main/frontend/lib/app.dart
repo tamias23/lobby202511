@@ -82,14 +82,14 @@ class _DedalAppState extends ConsumerState<DedalApp> {
     // Socket session_conflict → force logout
     final socket = ref.read(socketServiceProvider);
     socket.on('session_conflict', (data) {
-      final message = (data as Map<String, dynamic>)['message'] as String? ?? 'Session conflict.';
+      final message = Map<String, dynamic>.from(data as Map)['message'] as String? ?? 'Session conflict.';
       ref.read(authProvider.notifier).forceLogout();
       _router.go('/', extra: {'notification': message, 'notifType': 'error'});
     });
 
     // Rating updates → propagate to auth
     socket.on('rating_updated', (data) {
-      final d = data as Map<String, dynamic>;
+      final d = Map<String, dynamic>.from(data as Map);
       final whiteId = d['whitePlayerId'] as String?;
       final blackId = d['blackPlayerId'] as String?;
       final whiteRating = (d['whiteRating'] as num?)?.toDouble();

@@ -71,7 +71,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   }
 
   void _onGameCreated(dynamic data) {
-    final d = data as Map<String, dynamic>;
+    final d = Map<String, dynamic>.from(data as Map);
     final hash = d['hash'] as String;
     if (!mounted) return;
     context.go('/games/$hash', extra: {

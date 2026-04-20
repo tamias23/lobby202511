@@ -80,7 +80,7 @@ class GameNotifier extends Notifier<GameBoardState> {
   // ── Socket listeners ──────────────────────────────────────────────────────
 
   void _onGameUpdate(dynamic data) {
-    final d = data as Map<String, dynamic>;
+    final d = Map<String, dynamic>.from(data as Map);
     final gs = state.gameState;
     if (gs == null) return;
 
@@ -88,28 +88,34 @@ class GameNotifier extends Notifier<GameBoardState> {
     if (d['pieces'] != null) {
       updated = updated.copyWith(
         pieces: (d['pieces'] as List)
-            .map((e) => Piece.fromJson(e as Map<String, dynamic>))
+            .map((e) => Piece.fromJson(Map<String, dynamic>.from(e as Map)))
             .toList(),
       );
     }
     if (d['turn'] != null) updated = updated.copyWith(turn: d['turn'] as String);
     if (d['phase'] != null) updated = updated.copyWith(phase: d['phase'] as String);
-    if (d['setupStep'] != null) updated = updated.copyWith(setupStep: d['setupStep'] as int);
-    if (d['turnCounter'] != null) updated = updated.copyWith(turnCounter: d['turnCounter'] as int);
+    if (d['setupStep'] != null) updated = updated.copyWith(setupStep: (d['setupStep'] as num).toInt());
+    if (d['turnCounter'] != null) updated = updated.copyWith(turnCounter: (d['turnCounter'] as num).toInt());
     if (d['isNewTurn'] != null) updated = updated.copyWith(isNewTurn: d['isNewTurn'] as bool);
-    if (d['movesThisTurn'] != null) updated = updated.copyWith(movesThisTurn: d['movesThisTurn'] as int);
+    if (d['movesThisTurn'] != null) updated = updated.copyWith(movesThisTurn: (d['movesThisTurn'] as num).toInt());
     // Use containsKey so null properly clears lockedSequencePiece
     if (d.containsKey('lockedSequencePiece')) {
       updated = updated.copyWith(lockedSequencePiece: d['lockedSequencePiece'] as String?);
     }
-    if (d['heroeTakeCounter'] != null) updated = updated.copyWith(heroeTakeCounter: d['heroeTakeCounter'] as int);
-    if (d['clocks'] != null) updated = updated.copyWith(clocks: Map<String, int>.from(d['clocks'] as Map));
-    if (d['lastTurnTimestamp'] != null) updated = updated.copyWith(lastTurnTimestamp: d['lastTurnTimestamp'] as int?);
+    if (d['heroeTakeCounter'] != null) updated = updated.copyWith(heroeTakeCounter: (d['heroeTakeCounter'] as num).toInt());
+    if (d['clocks'] != null) updated = updated.copyWith(
+      clocks: (d['clocks'] as Map).map((k, v) => MapEntry(k as String, (v as num).toInt())),
+    );
+    if (d['lastTurnTimestamp'] != null) updated = updated.copyWith(lastTurnTimestamp: (d['lastTurnTimestamp'] as num).toInt());
     if (d['colorChosen'] != null) updated = updated.copyWith(colorChosen: Map<String, dynamic>.from(d['colorChosen'] as Map));
     if (d['colorsEverChosen'] != null) updated = updated.copyWith(colorsEverChosen: List<String>.from(d['colorsEverChosen'] as List));
     if (d['mageUnlocked'] != null) updated = updated.copyWith(mageUnlocked: d['mageUnlocked'] as bool);
-    if (d['passCount'] != null) updated = updated.copyWith(passCount: Map<String, int>.from(d['passCount'] as Map));
-    if (d['moves'] != null) updated = updated.copyWith(moves: List<Map<String, dynamic>>.from(d['moves'] as List));
+    if (d['passCount'] != null) updated = updated.copyWith(
+      passCount: (d['passCount'] as Map).map((k, v) => MapEntry(k as String, (v as num).toInt())),
+    );
+    if (d['moves'] != null) updated = updated.copyWith(
+      moves: (d['moves'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+    );
 
     debugPrint('[GameUpdate] turn=${updated.turn} phase=${updated.phase}'
         ' locked=${updated.lockedSequencePiece} colorChosen=${updated.colorChosen}');
@@ -120,7 +126,7 @@ class GameNotifier extends Notifier<GameBoardState> {
   }
 
   void _onLegalMoves(dynamic data) {
-    final d = data as Map<String, dynamic>;
+    final d = Map<String, dynamic>.from(data as Map);
     final pieceId = d['pieceId'] as String? ?? '';
     final targets = List<String>.from(d['targets'] as List? ?? []);
     debugPrint('[LegalMoves] received ${targets.length} targets for $pieceId: $targets');
@@ -144,7 +150,7 @@ class GameNotifier extends Notifier<GameBoardState> {
   }
 
   void _onGameOver(dynamic data) {
-    final d = data as Map<String, dynamic>;
+    final d = Map<String, dynamic>.from(data as Map);
     final info = GameOverInfo.fromJson(d);
     final gs = state.gameState?.copyWith(phase: 'GameOver');
     state = state.copyWith(gameState: gs, gameOverInfo: info);
@@ -164,7 +170,7 @@ class GameNotifier extends Notifier<GameBoardState> {
   }
 
   void _onRatingUpdated(dynamic data) {
-    final d = data as Map<String, dynamic>;
+    final d = Map<String, dynamic>.from(data as Map);
     state = state.copyWith(ratingDelta: RatingDelta.fromJson(d));
   }
 
@@ -273,18 +279,25 @@ class GameNotifier extends Notifier<GameBoardState> {
       pieces: pieces,
       turn: raw['turn'] as String? ?? 'white',
       phase: raw['phase'] as String? ?? 'Setup',
-      setupStep: raw['setupStep'] as int? ?? 0,
-      turnCounter: raw['turnCounter'] as int? ?? 0,
+      setupStep: (raw['setupStep'] as num?)?.toInt() ?? 0,
+      turnCounter: (raw['turnCounter'] as num?)?.toInt() ?? 0,
       isNewTurn: raw['isNewTurn'] as bool? ?? true,
-      movesThisTurn: raw['movesThisTurn'] as int? ?? 0,
+      movesThisTurn: (raw['movesThisTurn'] as num?)?.toInt() ?? 0,
       lockedSequencePiece: raw['lockedSequencePiece'] as String?,
-      heroeTakeCounter: raw['heroeTakeCounter'] as int? ?? 0,
-      clocks: raw['clocks'] != null ? Map<String, int>.from(raw['clocks'] as Map) : {'white': 900000, 'black': 900000},
-      lastTurnTimestamp: raw['lastTurnTimestamp'] as int?,
+      heroeTakeCounter: (raw['heroeTakeCounter'] as num?)?.toInt() ?? 0,
+      clocks: raw['clocks'] != null
+          ? (raw['clocks'] as Map).map((k, v) => MapEntry(k as String, (v as num).toInt()))
+          : {'white': 900000, 'black': 900000},
+      lastTurnTimestamp: (raw['lastTurnTimestamp'] as num?)?.toInt(),
       colorChosen: raw['colorChosen'] != null ? Map<String, dynamic>.from(raw['colorChosen'] as Map) : {},
       colorsEverChosen: raw['colorsEverChosen'] != null ? List<String>.from(raw['colorsEverChosen'] as List) : [],
       mageUnlocked: raw['mageUnlocked'] as bool? ?? false,
-      passCount: raw['passCount'] != null ? Map<String, int>.from(raw['passCount'] as Map) : {'white': 0, 'black': 0},
+      passCount: raw['passCount'] != null
+          ? (raw['passCount'] as Map).map((k, v) => MapEntry(k as String, (v as num).toInt()))
+          : {'white': 0, 'black': 0},
+      moves: raw['moves'] != null
+          ? (raw['moves'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList()
+          : [],
       timeControl: raw['timeControl'] as Map<String, dynamic>?,
       whiteName: raw['whiteName'] as String?,
       blackName: raw['blackName'] as String?,

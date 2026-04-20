@@ -47,14 +47,14 @@ class TournamentNotifier extends Notifier<TournamentState> {
   }
 
   void _onUpdate(dynamic data) {
-    final d = data as Map<String, dynamic>;
+    final d = Map<String, dynamic>.from(data as Map);
     if (d['id'] == _tournamentId || d['id'] == null) {
       state = state.copyWith(data: d);
     }
   }
 
   void _onGameStart(dynamic data) {
-    final d = data as Map<String, dynamic>;
+    final d = Map<String, dynamic>.from(data as Map);
     state = state.copyWith(pendingGameHash: d['hash'] as String?);
   }
 

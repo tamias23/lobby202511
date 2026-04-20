@@ -58,7 +58,7 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
     });
 
     socket.on('tournament_game_start', (data) {
-      final d = data as Map<String,dynamic>;
+      final d = Map<String,dynamic>.from(data as Map);
       if (!mounted) return;
       if (d['tournamentId'] == widget.tournamentId) {
         final auth = ref.read(authProvider).value;
@@ -70,7 +70,7 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
     });
 
     socket.on('tournament_game_aborted', (data) {
-      final d = data as Map<String,dynamic>;
+      final d = Map<String,dynamic>.from(data as Map);
       if (!mounted) return;
       if (d['tournamentId'] == widget.tournamentId) {
         context.go('/tournament/${widget.tournamentId}');
@@ -116,7 +116,7 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
     // This avoids duplicate downloads if the screen was rebuilt or stacked.
     socket.once('tournament_games_download_data', (data) {
       if (!mounted) return;
-      final d = data as Map<String, dynamic>;
+      final d = Map<String, dynamic>.from(data as Map);
       if (d['tournamentId'] != widget.tournamentId) return;
 
       setState(() => _isDownloading = false);
@@ -180,10 +180,10 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
   Widget _buildHeader(Map<String,dynamic> t) {
     final format    = t['format'] as String? ?? '';
     final status    = t['status'] as String? ?? 'open';
-    final curRound  = t['currentRound'] as int? ?? 0;
-    final maxRounds = t['maxRounds'] as int? ?? 0;
-    final curCount  = t['currentCount'] as int? ?? 0;
-    final maxP      = t['maxParticipants'] as int? ?? 0;
+    final curRound  = (t['currentRound']  as num?)?.toInt() ?? 0;
+    final maxRounds = (t['maxRounds']      as num?)?.toInt() ?? 0;
+    final curCount  = (t['currentCount']   as num?)?.toInt() ?? 0;
+    final maxP      = (t['maxParticipants'] as num?)?.toInt() ?? 0;
     final tc        = t['timeControl'] as Map<String,dynamic>?;
     final isActive  = status == 'active';
     final isArena   = format == 'arena';

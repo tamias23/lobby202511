@@ -3,6 +3,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/socket_service.dart';
 import '../models/models.dart';
 
+/// Recursively convert a Map<dynamic,dynamic> (as delivered by Socket.IO)
+/// to Map<String,dynamic> so that generated fromJson code doesn't throw
+/// in compiled dart2js mode.
+Map<String, dynamic> _deepMap(Map raw) {
+  return raw.map((k, v) {
+    final value = v is Map ? _deepMap(v) : (v is List ? _deepList(v) : v);
+    return MapEntry(k as String, value);
+  });
+}
+
+List<dynamic> _deepList(List raw) {
+  return raw.map((v) => v is Map ? _deepMap(v) : (v is List ? _deepList(v) : v)).toList();
+}
+
 // ── Lobby state ───────────────────────────────────────────────────────────────
 
 class LobbyState {
@@ -90,7 +104,7 @@ class LobbyNotifier extends Notifier<LobbyState> {
   void _onLobbyUpdate(dynamic data) => _applyLobbyData(data);
 
   void _onRequestCreated(dynamic data) {
-    final d = data as Map<String, dynamic>;
+    final d = Map<String, dynamic>.from(data as Map);
     state = state.copyWith(
       myRequestId: d['requestId'] as String?,
       notification: 'Game request posted! Waiting for an opponent…',
@@ -99,7 +113,7 @@ class LobbyNotifier extends Notifier<LobbyState> {
   }
 
   void _onRequestError(dynamic data) {
-    final d = data as Map<String, dynamic>;
+    final d = Map<String, dynamic>.from(data as Map);
     state = state.copyWith(
       notification: d['message'] as String? ?? 'Request error.',
       notifType: 'error',
@@ -107,7 +121,7 @@ class LobbyNotifier extends Notifier<LobbyState> {
   }
 
   void _onBotError(dynamic data) {
-    final d = data as Map<String, dynamic>;
+    final d = Map<String, dynamic>.from(data as Map);
     state = state.copyWith(
       notification: 'Bot: ${d['message'] ?? 'Bot error.'}',
       notifType: 'error',
@@ -169,10 +183,10 @@ class LobbyNotifier extends Notifier<LobbyState> {
         next = next.copyWith(
           tournamentsEnabled: t['enabled'] != false,
           openTournaments: ((t['openTournaments'] as List?) ?? [])
-              .map((e) => TournamentSummary.fromJson(Map<String, dynamic>.from(e as Map)))
+              .map((e) => TournamentSummary.fromJson(_deepMap(e as Map)))
               .toList(),
           activeTournaments: ((t['activeTournaments'] as List?) ?? [])
-              .map((e) => TournamentSummary.fromJson(Map<String, dynamic>.from(e as Map)))
+              .map((e) => TournamentSummary.fromJson(_deepMap(e as Map)))
               .toList(),
         );
       }

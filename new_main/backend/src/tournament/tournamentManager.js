@@ -97,14 +97,43 @@ async function loadFromDb() {
 
         for (const t of tournaments) {
             const participants = await db.getParticipantsForTournament(t.id);
-            const games = await db.getGamesForTournament(t.id);
-            activeTournaments.set(t.id, {
-                ...t,
-                participants,
-                games,
-            });
+            const rawGames    = await db.getGamesForTournament(t.id);
+
+            // Firestore stores games with a different schema than the in-memory
+            // objects the rest of the code uses.  Remap field names so that
+            // computeStandings, onGameComplete etc. all work correctly.
+            const games = rawGames.map(g => ({
+                id:           g.game_id,                  // UUID, used for DB updates
+                tournament_id: g.tournament_id,
+                round:        g.round || 0,
+                round_info:   g.tournament_round_info || null,
+                white_id:     g.white_player_id,          // renamed from white_player_id
+                black_id:     g.black_player_id,          // renamed from black_player_id
+                game_hash:    g.game_id,                  // no live hash after restart; id is the best proxy
+                result:       g.winner || null,            // renamed from winner
+                white_score:  g.white_score  || 0,
+                black_score:  g.black_score  || 0,
+                started_at:   g.started_at   || null,
+                completed_at: g.completed_at || null,
+            }));
+
+            activeTournaments.set(t.id, { ...t, participants, games });
         }
+
         logger.info('Tournament', `Loaded ${activeTournaments.size} active tournament(s) from DB.`);
+
+        // Any tournament that was `active` when the server stopped cannot be
+        // resumed — the game engine state (lobby.activeGames, clocks, bot
+        // assignments) is gone.  Finalize them immediately so they show a
+        // proper standings screen and Firestore is left in a clean state.
+        // `open` tournaments are left untouched; they can still fill and start.
+        for (const [tid, t] of activeTournaments) {
+            if (t.status === 'active') {
+                logger.info('Tournament',
+                    `${tid} (${t.format}) was active at restart — finalizing with current scores (unplayed games forfeited).`);
+                await completeTournament(tid);
+            }
+        }
     } catch (e) {
         logger.error('Tournament', 'Failed to load from DB:', e.message);
     }
