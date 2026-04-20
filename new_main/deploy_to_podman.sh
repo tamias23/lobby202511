@@ -112,7 +112,10 @@ if ! $SKIP_BUILD; then
 
     echo "==> [4/5] Building nd6-app container image..."
     cd "${SCRIPT_DIR}"
-    podman build --build-arg API_URL="${FLUTTER_API_URL}" -t node-docker06:${TAG} .
+    podman build \
+        --build-arg API_URL="${FLUTTER_API_URL}" \
+        --build-arg BUILD_TIMESTAMP="${TAG}" \
+        -t node-docker06:${TAG} .
     podman tag localhost/node-docker06:${TAG} localhost/node-docker06:latest
 
     echo "==> [5/5] Building bot-server container image..."

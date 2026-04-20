@@ -57,9 +57,10 @@ sleep 1
 # --- 1. Build Flutter web frontend ---
 # API_URL is left empty so all requests use relative URLs — served by localhost:4000.
 FLUTTER=/home/mat/Bureau/standalone/flutter_linux_3.41.7-stable/flutter/bin/flutter
-echo "==> Building Flutter web frontend (relative URLs)..."
+BUILD_TIMESTAMP=$(date -u +%Y%m%dT%H%M%S)
+echo "==> Building Flutter web frontend (relative URLs, timestamp: ${BUILD_TIMESTAMP})..."
 cd "${SCRIPT_DIR}/frontend"
-$FLUTTER build web --dart-define=API_URL=
+$FLUTTER build web --dart-define=API_URL= --dart-define=BUILD_TIMESTAMP=${BUILD_TIMESTAMP}
 
 # Disable set -e for background processes (they run independently)
 set +e

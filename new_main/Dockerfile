@@ -32,10 +32,11 @@ RUN flutter pub get
 # Copy the full Flutter source
 COPY frontend/ ./
 
-# Build Flutter web (API_URL baked in at build time)
+# Build Flutter web (API_URL + BUILD_TIMESTAMP baked in at build time)
 # Default: production domain. Override with --build-arg API_URL= for local/Podman deploys.
 ARG API_URL=https://dedalthegame.com
-RUN flutter build web --dart-define=API_URL=${API_URL}
+ARG BUILD_TIMESTAMP=dev
+RUN flutter build web --dart-define=API_URL=${API_URL} --dart-define=BUILD_TIMESTAMP=${BUILD_TIMESTAMP}
 # Output: build/web/
 
 # --- STAGE 3: Production Runtime ---

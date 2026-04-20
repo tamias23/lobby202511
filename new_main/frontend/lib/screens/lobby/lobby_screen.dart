@@ -165,17 +165,18 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 sliver: SliverToBoxAdapter(
-                  child: wide
-                      ? Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SizedBox(width: 140, child: _buildStatsPanel(lobby.stats)),
-                            const SizedBox(width: 20),
-                            Expanded(child: _buildTCSection(context, lobby, auth)),
-                            const SizedBox(width: 140),
-                          ],
-                        )
-                      : _buildTCSection(context, lobby, auth),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: wide ? 140 : 80,
+                        child: _buildStatsPanel(lobby.stats, compact: !wide),
+                      ),
+                      SizedBox(width: wide ? 20 : 10),
+                      Expanded(child: _buildTCSection(context, lobby, auth)),
+                      if (wide) const SizedBox(width: 140),
+                    ],
+                  ),
                 ),
               ),
               // ── Bot / Custom panel ────────────────────────────────────────
@@ -203,6 +204,11 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
             Positioned(
               top: 0, left: 0, right: 0,
               child: _buildTopBar(context, auth),
+            ),
+            // ── About link — bottom right ─────────────────────────────────────
+            Positioned(
+              bottom: 12, right: 16,
+              child: _AboutLink(onTap: () => context.go('/about')),
             ),
           ]),
         ),
@@ -278,26 +284,32 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
     );
   }
 
-  Widget _buildStatsPanel(LiveStats stats) {
+  Widget _buildStatsPanel(LiveStats stats, {bool compact = false}) {
+    final dotSize   = compact ? 6.0  : 8.0;
+    final vPad      = compact ? 10.0 : 18.0;
+    final hPad      = compact ? 8.0  : 14.0;
+    final valSize   = compact ? 16.0 : 22.0;
+    final lblSize   = compact ? 8.0  : 10.0;
+    final gap       = compact ? 6.0  : 10.0;
     return GlassPanel(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
+      padding: EdgeInsets.symmetric(horizontal: hPad, vertical: vPad),
       borderRadius: 18,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const SizedBox(height: 4),
+          SizedBox(height: compact ? 2 : 4),
           // Pulsing green dot
           Container(
-            width: 8, height: 8,
+            width: dotSize, height: dotSize,
             decoration: const BoxDecoration(
               color: DTheme.success, shape: BoxShape.circle,
               boxShadow: [BoxShadow(color: Color(0x9922C55E), blurRadius: 8)],
             ),
           ),
-          const SizedBox(height: 10),
-          _StatLine('${stats.activeGames}', 'live games'),
-          const SizedBox(height: 8),
-          _StatLine('${stats.onlineUsers}', 'online'),
+          SizedBox(height: gap),
+          _StatLine('${stats.activeGames}', 'live games', valSize: valSize, lblSize: lblSize),
+          SizedBox(height: compact ? 4 : 8),
+          _StatLine('${stats.onlineUsers}', 'online', valSize: valSize, lblSize: lblSize),
         ],
       ),
     );
@@ -609,16 +621,18 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
 class _StatLine extends StatelessWidget {
   final String value;
   final String label;
-  const _StatLine(this.value, this.label);
+  final double valSize;
+  final double lblSize;
+  const _StatLine(this.value, this.label, {this.valSize = 22, this.lblSize = 10});
   @override
   Widget build(BuildContext context) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(value,
-          style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.w800, color: DTheme.textMainDark)),
+          style: GoogleFonts.outfit(fontSize: valSize, fontWeight: FontWeight.w800, color: DTheme.textMainDark)),
         Text(label,
-          style: GoogleFonts.outfit(fontSize: 10, color: DTheme.textMutedDark, letterSpacing: 0.5)),
+          style: GoogleFonts.outfit(fontSize: lblSize, color: DTheme.textMutedDark, letterSpacing: 0.5)),
       ],
     );
   }
@@ -1381,6 +1395,45 @@ class _TournamentOpenCardState extends State<_TournamentOpenCard> {
               _MiniGreenBtn(label: 'Join', isMe: false, onTap: widget.onJoin!),
             ],
           ]),
+        ),
+      ),
+    );
+  }
+}
+
+// ── About link ────────────────────────────────────────────────────────────────
+
+class _AboutLink extends StatefulWidget {
+  final VoidCallback onTap;
+  const _AboutLink({required this.onTap});
+  @override
+  State<_AboutLink> createState() => _AboutLinkState();
+}
+
+class _AboutLinkState extends State<_AboutLink> {
+  bool _hovered = false;
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit:  (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 150),
+          opacity: _hovered ? 1.0 : 0.45,
+          child: Text(
+            'about',
+            style: GoogleFonts.outfit(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: DTheme.textMutedDark,
+              letterSpacing: 0.5,
+              decoration: TextDecoration.underline,
+              decorationColor: DTheme.textMutedDark,
+            ),
+          ),
         ),
       ),
     );

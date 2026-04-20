@@ -11,6 +11,7 @@ import 'screens/tournament/tournament_create_screen.dart';
 import 'screens/tournament/tournament_room_screen.dart';
 import 'screens/analysis/analysis_screen.dart';
 import 'screens/tutorial/tutorial_screen.dart';
+import 'screens/about/about_screen.dart';
 import 'core/theme.dart';
 import 'widgets/app_background.dart';
 
@@ -59,6 +60,10 @@ final _router = GoRouter(
         final id = state.pathParameters['id']!;
         return TournamentRoomScreen(tournamentId: id);
       },
+    ),
+    GoRoute(
+      path: '/about',
+      builder: (context, state) => const AboutScreen(),
     ),
   ],
 );

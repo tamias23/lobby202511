@@ -24,11 +24,11 @@ cd /home/mat/Bureau/lobby202511/rust && cargo build --release --bin rust 2>&1
 cd /home/mat/Bureau/lobby202511/new_main/bot-server && cargo build --release
 cd /home/mat/Bureau/lobby202511/new_main/backend && npm run build:napi
 FLUTTER=/home/mat/Bureau/standalone/flutter_linux_3.41.7-stable/flutter/bin/flutter
-cd /home/mat/Bureau/lobby202511/new_main/frontend && $FLUTTER build web --dart-define=API_URL=https://dedalthegame.com
+cd /home/mat/Bureau/lobby202511/new_main/frontend && $FLUTTER build web --dart-define=API_URL=https://dedalthegame.com --dart-define=BUILD_TIMESTAMP=${TAG}
 
 # ── Build & push nd6-app ──
 cd /home/mat/Bureau/lobby202511/new_main
-podman build -t node-docker06:${TAG} .
+podman build --build-arg API_URL=https://dedalthegame.com --build-arg BUILD_TIMESTAMP=${TAG} -t node-docker06:${TAG} .
 podman tag localhost/node-docker06:${TAG} ${REGISTRY}/nodejs6:${TAG}
 podman push ${REGISTRY}/nodejs6:${TAG}
 
