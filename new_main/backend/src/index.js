@@ -806,7 +806,7 @@ initDb()
             broadcastLobbyUpdate(io);
         };
 
-        tournamentManager.setDependencies(createTournamentGame, io, abortGameFn);
+        tournamentManager.setDependencies(createTournamentGame, io, abortGameFn, broadcastLobbyUpdate);
         await tournamentManager.loadFromDb();
         // Cleanup expired tournaments every 60s
         setInterval(() => tournamentManager.cleanupExpired(), 60 * 1000);
@@ -2879,33 +2879,6 @@ async function fillTournamentBots() {
             logger.warn('Tournament', `${tid}: filled ${filled}/${missingBots} bots (not enough idle bots available).`);
         }
         if (filled > 0) {
-            // Refresh tournament room with updated participant count
-            const standings = require('./tournament/standings').computeStandings(t.participants, t.games, t.format);
-            io.to(`tournament:${t.id}`).emit('tournament_update', {
-                id: t.id,
-                name: t.name || 'Tournament',
-                status: t.status,
-                format: t.format,
-                currentRound: t.current_round,
-                maxRounds: t.duration_value,
-                currentCount: t.current_count,
-                maxParticipants: t.max_participants,
-                timeControl: { minutes: t.time_control_minutes, increment: t.time_control_increment },
-                creatorId: t.creator_id,
-                creatorName: t.creator_username || t.creator_id,
-                createdAt: t.created_at,
-                launchMode: t.launch_mode,
-                launchAt: t.launch_at,
-                boardId: t.board_id,
-                ratingMin: t.rating_min,
-                ratingMax: t.rating_max,
-                durationValue: t.duration_value,
-                standings,
-                bracket: null,
-                games: [],
-                arenaEndAt: t.arenaEndAt || null,
-                hasPassword: t.has_password === 1,
-            });
             // Refresh lobby panel counts
             broadcastLobbyUpdate(io);
         }

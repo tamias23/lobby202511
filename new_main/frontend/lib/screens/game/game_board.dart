@@ -760,6 +760,7 @@ class _GameBoardState extends ConsumerState<GameBoard> {
             gameId: widget.gameId,
             phase: gs.phase,
             side: widget.side,
+            turn: gs.turn,
             myTurn: myTurn,
             isFlipped: _isFlipped,
             spectator: widget.side == 'spectator',

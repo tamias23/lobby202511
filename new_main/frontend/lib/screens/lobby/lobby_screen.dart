@@ -319,26 +319,28 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
     final mq        = MediaQuery.of(context).size;
     const spacing   = 10.0;
     const nCols   = 3;
-    const nRows   = 3;   // 6 preset + custom + vsBot + tourney = always 3 rows
 
-    final gridW = mq.width  * 0.5;
-    final gridH = mq.height * 0.5;
-
-    // childAspectRatio that makes n_rows × n_cols fill exactly gridW × gridH
+    // Use a reasonable clamped width for the grid (max 550 for good proportions)
+    final gridW = (mq.width * 0.5).clamp(320.0, 550.0);
+    
+    // Hardcode a strict aspect ratio so buttons never warp or stretch (2.0 = 2x wider than tall)
+    const ratio = 2.0; 
+    
+    // Calculate precise dimensions to derive font size naturally
     final btnW      = (gridW - (nCols - 1) * spacing) / nCols;
-    final btnH      = (gridH - (nRows - 1) * spacing) / nRows;
-    final ratio     = btnH > 0 ? btnW / btnH : 2.0;
-    // Label font = 35% of button height
+    final btnH      = btnW / ratio;
+    
+    // Scale text naturally based on the precise button height
     final labelSize = btnH * 0.35;
 
     return Column(
       children: [
-        // TC grid — exactly 50 % screen width × 50 % screen height
+        // TC grid
         Center(
           child: SizedBox(
             width: gridW,
-            height: gridH,
             child: GridView.count(
+              shrinkWrap: true,
               crossAxisCount: nCols,
               physics: const NeverScrollableScrollPhysics(),
               mainAxisSpacing: spacing,

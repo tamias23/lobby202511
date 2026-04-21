@@ -69,6 +69,7 @@ const activeTournaments = new Map();
 let _createGameFn = null;   // (whitePlayer, blackPlayer, timeControl, boardId?) → { hash, gameData }
 let _ioRef = null;          // socket.io instance
 let _abortGameFn = null;    // (gameHash) → void — cleans up lobby.activeGames + releases bots
+let _broadcastLobbyUpdateFn = null;
 
 // ── Cached lobby lists (updated by remote sync) ─────────────────────────────────────────
 // Only used to serve broadcastLobbyUpdate on instances that received a remote sync.
@@ -76,10 +77,11 @@ let _abortGameFn = null;    // (gameHash) → void — cleans up lobby.activeGam
 let _cachedOpenList = null;
 let _cachedActiveList = null;
 
-function setDependencies(createGameFn, io, abortGameFn) {
+function setDependencies(createGameFn, io, abortGameFn, broadcastLobbyUpdateFn) {
     _createGameFn = createGameFn;
     _ioRef = io;
     _abortGameFn = abortGameFn || null;
+    _broadcastLobbyUpdateFn = broadcastLobbyUpdateFn || null;
 }
 
 /** Publish current tournament lists to Valkey so all instances stay in sync. */
@@ -288,6 +290,9 @@ async function joinTournament(tournamentId, userId, username, password, skipPass
     // Check if tournament should start
     await tryStartTournament(tournamentId);
 
+    // Broadcast update so lobby shows new participants even if it didn't start yet
+    broadcastTournamentUpdate(tournamentId);
+
     _syncToValkey();
     return participant;
 }
@@ -312,6 +317,7 @@ async function leaveTournament(tournamentId, userId) {
 
         await db.removeParticipant(tournamentId, userId);
         await db.updateTournament(tournamentId, { current_count: t.current_count });
+        broadcastTournamentUpdate(tournamentId);
     }
 
     // If creator leaves an open tournament, cancel it
@@ -374,6 +380,7 @@ async function startTournament(tournamentId) {
     }
 
     broadcastTournamentUpdate(tournamentId);
+    if (_broadcastLobbyUpdateFn && _ioRef) _broadcastLobbyUpdateFn(_ioRef);
     _syncToValkey();
     return true;
 }
@@ -728,6 +735,7 @@ async function completeTournament(tournamentId) {
     logger.info('Tournament', `${tournamentId} COMPLETED. Winner: ${standings[0]?.username || 'N/A'}`);
 
     broadcastTournamentUpdate(tournamentId);
+    if (_broadcastLobbyUpdateFn && _ioRef) _broadcastLobbyUpdateFn(_ioRef);
     _syncToValkey();
 
     // Clean up from active map after a delay (keep visible for 30min)
@@ -751,6 +759,7 @@ async function cancelTournament(tournamentId) {
     if (_ioRef) {
         _ioRef.to(`tournament:${tournamentId}`).emit('tournament_update', { id: tournamentId, status: 'cancelled' });
     }
+    if (_broadcastLobbyUpdateFn && _ioRef) _broadcastLobbyUpdateFn(_ioRef);
     _syncToValkey();
 }
 

@@ -9,6 +9,7 @@ class ActionButtons extends StatefulWidget {
   final String gameId;
   final String phase;
   final String side;
+  final String turn;    // current turn: 'white' or 'black'
   final bool myTurn;
   final bool isFlipped;
   final bool spectator;
@@ -37,6 +38,7 @@ class ActionButtons extends StatefulWidget {
     required this.gameId,
     required this.phase,
     required this.side,
+    required this.turn,
     required this.myTurn,
     required this.isFlipped,
     required this.spectator,
@@ -81,7 +83,10 @@ class _ActionButtonsState extends State<ActionButtons> {
     final isGameOver = widget.phase == 'GameOver';
 
     final myChosenColor  = widget.colorChosen[widget.side]  as String?;
-    final oppColor       = widget.colorChosen[widget.side == 'white' ? 'black' : 'white'] as String?;
+    final oppSide        = widget.side == 'white' ? 'black' : 'white';
+    final oppColor       = widget.colorChosen[oppSide] as String?;
+    // For spectators, use the current turn's chosen color directly
+    final turnChosenColorGlobal = widget.colorChosen[widget.turn] as String?;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
@@ -202,9 +207,13 @@ class _ActionButtonsState extends State<ActionButtons> {
             const SizedBox(height: 10),
             Center(
               child: Text(
-                widget.myTurn
-                    ? (myChosenColor != null ? '◆ Your Color' : 'Choose Color')
-                    : (oppColor != null ? 'Opponent Color' : 'Opponent Deciding…'),
+                widget.spectator
+                    ? (turnChosenColorGlobal != null
+                        ? '${widget.turn == 'white' ? 'White' : 'Black'} Color'
+                        : '${widget.turn == 'white' ? 'White' : 'Black'} Deciding…')
+                    : widget.myTurn
+                        ? (myChosenColor != null ? '◆ Your Color' : 'Choose Color')
+                        : (oppColor != null ? 'Opponent Color' : 'Opponent Deciding…'),
                 style: const TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
@@ -216,8 +225,11 @@ class _ActionButtonsState extends State<ActionButtons> {
             const SizedBox(height: 10),
             // Legacy: colorChosen[turn] ? [colorChosen[turn]] : allColors
             // turnChosenColor = my color if myTurn, opponent's if !myTurn
+            // For spectators: always use the current turn's color
             Builder(builder: (_) {
-              final turnChosenColor = widget.myTurn ? myChosenColor : oppColor;
+              final turnChosenColor = widget.spectator
+                  ? turnChosenColorGlobal
+                  : (widget.myTurn ? myChosenColor : oppColor);
               final colorsToShow = turnChosenColor != null ? [turnChosenColor] : _allColors;
               final canPick = widget.myTurn && myChosenColor == null;
               return Wrap(

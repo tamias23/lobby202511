@@ -262,7 +262,7 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
       child: Wrap(spacing: 0, runSpacing: 0, children: [
         _DetailItem('Organizer',  t['creatorName'] as String? ?? t['creatorId'] as String? ?? 'System'),
         _DetailItem('Type',       (t['format'] as String? ?? 'standard').replaceAll('_', ' ')),
-        if (createdAt != null) _DetailItem('Created', '${createdAt.day}/${createdAt.month}/${createdAt.year}'),
+        if (createdAt != null) _DetailItem('Created', '${createdAt.day.toString().padLeft(2, '0')}/${createdAt.month.toString().padLeft(2, '0')}/${createdAt.year} ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}'),
         _DetailItem('Start Plan', launchStr),
         _DetailItem('Board',      t['boardId'] as String? ?? 'Random'),
         _DetailItem('Rating',     '${t['ratingMin'] ?? 0} – ${t['ratingMax'] ?? 5000}'),

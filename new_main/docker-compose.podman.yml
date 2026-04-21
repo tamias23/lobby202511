@@ -128,10 +128,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "1.0"
-          memory: 256M
+          cpus: "3.0"
+          memory: 128M
         reservations:
-          cpus: "0.1"
+          cpus: "0.5"
           memory: 128M
 
   # ── nd6-app (Node.js game server + Flutter frontend) ────────────────────
