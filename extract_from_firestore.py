@@ -7,6 +7,7 @@ Created on Sat Apr 18 10:46:01 2026
 """
 
 import os
+import json
 import pandas as pd
 from google.cloud import firestore
 
@@ -21,7 +22,7 @@ def export_firestore_to_parquet():
     # 1. Initialize Client
     db = ''
     if USE_EMULATOR:
-        os.environ["FIRESTORE_EMULATOR_HOST"] = "localhost:18080"
+        os.environ["FIRESTORE_EMULATOR_HOST"] = "localhost:8080"
         os.environ["GOOGLE_CLOUD_PROJECT"] = "my-local-firestore"
         db = firestore.Client()
     else:
@@ -51,15 +52,21 @@ def export_firestore_to_parquet():
 
         # 4. Convert to Pandas DataFrame
         df = pd.DataFrame(data)
-
+        for col in df.columns:
+            if df[col].apply(lambda x: isinstance(x, (dict, list))).any():
+                df[col] = df[col].apply(lambda x: json.dumps(x) if isinstance(x, (dict, list)) else x)
+        
         # 5. Save to Parquet (.paq)
         # We use engine='pyarrow' to ensure complex types are handled
         filename = f"{coll_name}"
-        df.to_parquet(filename + '.parquet', engine='pyarrow', index=False)
-        with pd.ExcelWriter(filename + '.xlsx', engine='xlsxwriter') as writer:
-            df.to_excel(writer, sheet_name='data', index=False, startrow=0 , startcol=0)
-            
-        print(f" - Success! Saved {len(data)} rows to {filename}")
+        try:
+            df.to_parquet(filename + '.parquet', engine='pyarrow', index=False)
+            with pd.ExcelWriter(filename + '.xlsx', engine='xlsxwriter') as writer:
+                df.to_excel(writer, sheet_name='data', index=False, startrow=0 , startcol=0)
+            print(f" - Success! Saved {len(data)} rows to {filename}")
+        except Exception as e:
+            print(f" - ko : {filename}")
+            print(e)
 
 # if __name__ == "__main__":
 #     export_firestore_to_parquet()

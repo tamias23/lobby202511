@@ -118,31 +118,4 @@ async function offloadOldGames(db) {
     }
 }
 
-/**
- * Start the periodic game offload job.
- * Call this AFTER initDb() is complete.
- */
-function startGameOffload(db) {
-    if (!isGcpMode) {
-        logger.debug('Offload', 'Local mode — game offload disabled.');
-        return;
-    }
-    if (!fs.existsSync(GCS_MOUNT)) {
-        logger.warn('Offload', `Mount point ${GCS_MOUNT} not found — game offload disabled.`);
-        return;
-    }
-
-    logger.info('Offload', `Game offload scheduled every ${GAME_OFFLOAD_INTERVAL_MS / 3600000}h (retention: ${GAME_RETENTION_DAYS}d).`);
-
-    // Run once on startup after a brief delay
-    setTimeout(() => offloadOldGames(db).catch(e => logger.error('Offload', 'Initial offload error:', e.message)), 60000);
-
-    const timer = setInterval(
-        () => offloadOldGames(db).catch(e => logger.error('Offload', 'Offload error:', e.message)),
-        GAME_OFFLOAD_INTERVAL_MS
-    );
-    // Don't prevent clean process exit
-    if (timer.unref) timer.unref();
-}
-
-module.exports = { startGameOffload };
+module.exports = { offloadOldGames };

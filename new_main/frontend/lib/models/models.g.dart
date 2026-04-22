@@ -12,6 +12,11 @@ _AppUser _$AppUserFromJson(Map<String, dynamic> json) => _AppUser(
   role: json['role'] as String? ?? 'guest',
   rating: (json['rating'] as num?)?.toDouble(),
   token: json['token'] as String?,
+  isSubscriber: json['isSubscriber'] as bool? ?? false,
+  isAdmin: json['isAdmin'] as bool? ?? false,
+  ratedGamesPlayedToday: (json['ratedGamesPlayedToday'] as num?)?.toInt() ?? 0,
+  botGamesPlayedToday: (json['botGamesPlayedToday'] as num?)?.toInt() ?? 0,
+  timezone: json['timezone'] as String? ?? 'UTC',
 );
 
 Map<String, dynamic> _$AppUserToJson(_AppUser instance) => <String, dynamic>{
@@ -20,6 +25,11 @@ Map<String, dynamic> _$AppUserToJson(_AppUser instance) => <String, dynamic>{
   'role': instance.role,
   'rating': instance.rating,
   'token': instance.token,
+  'isSubscriber': instance.isSubscriber,
+  'isAdmin': instance.isAdmin,
+  'ratedGamesPlayedToday': instance.ratedGamesPlayedToday,
+  'botGamesPlayedToday': instance.botGamesPlayedToday,
+  'timezone': instance.timezone,
 };
 
 _Piece _$PieceFromJson(Map<String, dynamic> json) => _Piece(

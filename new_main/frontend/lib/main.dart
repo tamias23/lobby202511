@@ -4,10 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/api_service.dart';
 import 'core/socket_service.dart';
+import 'package:timezone/data/latest_all.dart' as tz;
 import 'app.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  tz.initializeTimeZones();
 
   // Surface uncaught errors clearly in the browser console
   FlutterError.onError = (FlutterErrorDetails details) {

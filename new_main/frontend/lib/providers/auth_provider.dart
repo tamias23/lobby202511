@@ -73,4 +73,11 @@ class AuthNotifier extends AsyncNotifier<AppUser?> {
       state = AsyncData(user.copyWith(rating: newRating));
     }
   }
+
+  void updateTimezone(String newTimezone) {
+    final user = state.value;
+    if (user != null) {
+      state = AsyncData(user.copyWith(timezone: newTimezone));
+    }
+  }
 }

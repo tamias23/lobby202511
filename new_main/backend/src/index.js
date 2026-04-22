@@ -8,7 +8,7 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const { initDb, isDbUp, getUser, getUserByEmailOrUsername, getUserByVerificationToken, createUser, updateUser, updateUserRating } = require('./db');
-const { startGameOffload } = require('./gcsSync');
+// startGameOffload removed, replaced by jobs system
 const tournamentManager = require('./tournament/tournamentManager');
 const { generateGuestId } = require('./utils/auth');
 const fs = require('fs');
@@ -16,6 +16,7 @@ const path = require('path');
 const { sendVerificationEmail } = require('./utils/email');
 const valkeyAdapter = require('./valkeyAdapter');
 const valkeySync = require('./valkeySync');
+const permissions = require('./utils/permissions');
 let getLegalMovesNapi, applyMoveNapi, initGameStateNapi, randomizeSetupNapi, endTurnSetupNapi, passTurnPlayingNapi, endHeroeBonusNapi, selectColorNapi, replayToStepNapi;
 
 try {
@@ -822,7 +823,7 @@ initDb()
 
     // Start game offload to Parquet (no-op locally)
     const db = require('./db');
-    startGameOffload(db);
+    require('./jobs/jobRunner').start();
 
 }).catch(err => {
     logger.error('Server', 'Failed to initialize database:', err);
@@ -1116,6 +1117,11 @@ app.post('/login', async (req, res) => {
             rating: Math.round(user.rating || 1500),
             ratingDeviation: Math.round(user.rating_deviation || 350),
             ratingVolatility: user.rating_volatility || 0.06,
+            isSubscriber: user.is_subscriber === 1,
+            isAdmin: user.is_admin === 1,
+            ratedGamesPlayedToday: user.rated_games_played_today || 0,
+            botGamesPlayedToday: user.bot_games_played_today || 0,
+            timezone: user.timezone || 'UTC',
             token,
         });
     } catch (err) {
@@ -1145,6 +1151,11 @@ app.get('/api/me', async (req, res) => {
             rating: Math.round(user.rating || 1500),
             ratingDeviation: Math.round(user.rating_deviation || 350),
             ratingVolatility: user.rating_volatility || 0.06,
+            timezone: user.timezone || 'UTC',
+            isSubscriber: user.is_subscriber === 1,
+            isAdmin: user.is_admin === 1,
+            ratedGamesPlayedToday: user.rated_games_played_today || 0,
+            botGamesPlayedToday: user.bot_games_played_today || 0,
         });
     } catch (err) {
         if (err.name === 'TokenExpiredError') {
@@ -1706,13 +1717,35 @@ io.on('connection', (socket) => {
             return;
         }
 
-        lobby.gameRequests.push({
-            requestId,
-            socketId: socket.id,
-            userId: effectiveUserId,
-            username: username || effectiveUserId,
-            role: effectiveRole,
-            timeControl: timeControl || { minutes: 15, increment: 10 },
+        if (!permissions.canUser(effectiveRole, 'unrated_game_creator')) {
+            socket.emit('request_error', { message: 'You do not have permission to create games.' });
+            return;
+        }
+
+        if (effectiveRole !== 'guest') {
+            const limit = permissions.getLimit(effectiveRole, 'rated_games_per_24h');
+            if (limit !== -1) {
+                getUser(effectiveUserId).then(user => {
+                    if (user && user.rated_games_played_today >= limit) {
+                        socket.emit('request_error', { message: `Daily limit of ${limit} rated games reached. Upgrade to play more!` });
+                    } else {
+                        _finishCreateRequest();
+                    }
+                });
+                return;
+            }
+        }
+        
+        _finishCreateRequest();
+
+        function _finishCreateRequest() {
+            lobby.gameRequests.push({
+                requestId,
+                socketId: socket.id,
+                userId: effectiveUserId,
+                username: username || effectiveUserId,
+                role: effectiveRole,
+                timeControl: timeControl || { minutes: 15, increment: 10 },
             boardId: boardId || null,
             createdAt: Date.now(),
         });
@@ -1721,6 +1754,7 @@ io.on('connection', (socket) => {
         valkeySync.syncRequestCreated(lobby.gameRequests[lobby.gameRequests.length - 1]);
         broadcastLobbyUpdate(io);
         logger.debug('Game', `Game request ${requestId} by ${effectiveUserId} (${effectiveRole})${boardId ? ` board=${boardId}` : ''}`);
+        }
     });
 
     // --- CANCEL GAME REQUEST ---
@@ -1764,6 +1798,29 @@ io.on('connection', (socket) => {
             socket.emit('request_error', { message: 'You are already in an active game. Finish it before starting a new one.' });
             return;
         }
+
+        if (!permissions.canUser(acceptorRole, 'unrated_game_player')) {
+            socket.emit('request_error', { message: 'You do not have permission to play games.' });
+            return;
+        }
+
+        if (acceptorRole !== 'guest') {
+            const limit = permissions.getLimit(acceptorRole, 'rated_games_per_24h');
+            if (limit !== -1) {
+                getUser(effectiveAcceptorId).then(user => {
+                    if (user && user.rated_games_played_today >= limit) {
+                        socket.emit('request_error', { message: `Daily limit of ${limit} rated games reached. Upgrade to play more!` });
+                    } else {
+                        _finishAcceptRequest();
+                    }
+                });
+                return;
+            }
+        }
+
+        _finishAcceptRequest();
+
+        async function _finishAcceptRequest() {
 
         // Distributed lock: prevent two instances from accepting the same request
         const gotLock = await valkeySync.tryLockRequest(requestId);
@@ -1813,6 +1870,16 @@ io.on('connection', (socket) => {
 
         broadcastLobbyUpdate(io);
         logger.info('Game', `Created: ${hash} — ${whitePlayer.userId} (W) vs ${blackPlayer.userId} (B)`);
+
+        if (acceptorRole !== 'guest') {
+            const db = require('./db');
+            await db.incrementUserField(effectiveAcceptorId, 'rated_games_played_today', 1);
+        }
+        if (req.role !== 'guest') {
+            const db = require('./db');
+            await db.incrementUserField(req.userId, 'rated_games_played_today', 1);
+        }
+    }
     });
 
     // --- CREATE BOT GAME ---
@@ -1826,6 +1893,22 @@ io.on('connection', (socket) => {
         if (effectiveRole !== 'guest' && isUserInActiveGame(effectiveUserId)) {
             socket.emit('bot_error', { message: 'You are already in an active game. Finish it before starting a new one.' });
             return;
+        }
+
+        if (!permissions.canUser(effectiveRole, 'unrated_game_player')) {
+            socket.emit('bot_error', { message: 'You do not have permission to play games.' });
+            return;
+        }
+
+        if (effectiveRole !== 'guest') {
+            const limit = permissions.getLimit(effectiveRole, 'bot_games_per_24h');
+            if (limit !== -1) {
+                const user = await getUser(effectiveUserId);
+                if (user && user.bot_games_played_today >= limit) {
+                    socket.emit('bot_error', { message: `Daily limit of ${limit} bot games reached. Upgrade to play more!` });
+                    return;
+                }
+            }
         }
 
         const agentType = botConfig?.type || 'greedy_jack';
@@ -1889,6 +1972,11 @@ io.on('connection', (socket) => {
         // Trigger bot's first move if it's white
         if (gameData.whiteBotConfig) {
             setImmediate(() => triggerBotMoveIfNeeded(hash));
+        }
+
+        if (effectiveRole !== 'guest') {
+            const db = require('./db');
+            await db.incrementUserField(effectiveUserId, 'bot_games_played_today', 1);
         }
     });
 
@@ -2764,6 +2852,57 @@ io.on('connection', (socket) => {
         if (!gameId) return;
         socket.leave(gameId);
         logger.debug('Socket', `leave_game_room ${gameId}`);
+    });
+    // --- ADMIN ACTIONS ---
+    socket.on('admin:get_jobs', async (data, callback) => {
+        if (typeof data === 'function') {
+            callback = data;
+        }
+        if (!permissions.canUser(socket.userRole, 'manage_jobs')) {
+            return callback({ success: false, error: 'Forbidden' });
+        }
+        const db = require('./db');
+        const jobs = await db.getAllJobs();
+        callback({ success: true, data: jobs });
+    });
+
+    socket.on('admin:create_job', async (data, callback) => {
+        if (!permissions.canUser(socket.userRole, 'manage_jobs')) {
+            return callback({ success: false, error: 'Forbidden' });
+        }
+        const db = require('./db');
+        const { v4: uuidv4 } = require('uuid');
+        
+        const newJob = {
+            id: uuidv4(),
+            type: data.type,
+            status: 'SCHEDULED',
+            scheduled_at: data.scheduled_at, // unix timestamp ms
+            created_at: Date.now(),
+            payload: data.payload || {},
+            error: null
+        };
+        await db.saveJob(newJob);
+        callback({ success: true, data: newJob });
+    });
+
+    socket.on('admin:delete_job', async ({ jobId }, callback) => {
+        if (!permissions.canUser(socket.userRole, 'manage_jobs')) {
+            return callback({ success: false, error: 'Forbidden' });
+        }
+        const db = require('./db');
+        await db.deleteJobsByIds([jobId]);
+        callback({ success: true });
+    });
+
+    socket.on('update_timezone', async ({ timezone }) => {
+        if (!socket.userId || socket.userRole === 'guest') return;
+        try {
+            await updateUser(socket.userId, { timezone });
+            logger.info('User', `User ${socket.userId} updated timezone to ${timezone}`);
+        } catch (e) {
+            logger.error('User', 'Failed to update timezone:', e);
+        }
     });
 
     socket.on('disconnect', () => {

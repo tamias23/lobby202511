@@ -73,6 +73,11 @@ class SocketService {
     _socket!.emit(event, data);
   }
 
+  void emitWithAck(String event, dynamic data, {required Function ack}) {
+    if (!_ready) return;
+    _socket!.emitWithAck(event, data, ack: ack);
+  }
+
   // ── Listen ──────────────────────────────────────────────────────────────────
 
   void on(String event, Function(dynamic) handler) {

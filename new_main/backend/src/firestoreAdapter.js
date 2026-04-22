@@ -99,7 +99,7 @@ async function _tryConnect() {
  * we write a placeholder document at `_meta/schema` with version info.
  */
 async function _ensureCollections() {
-    const requiredCollections = ['users', 'profiles', 'games', 'tournaments', 'tournament_participants'];
+    const requiredCollections = ['users', 'profiles', 'games', 'tournaments', 'tournament_participants', 'jobs', 'subscriptions'];
 
     for (const name of requiredCollections) {
         try {

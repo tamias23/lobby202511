@@ -12,6 +12,8 @@ import 'screens/tournament/tournament_room_screen.dart';
 import 'screens/analysis/analysis_screen.dart';
 import 'screens/tutorial/tutorial_screen.dart';
 import 'screens/about/about_screen.dart';
+import 'screens/profile/profile_screen.dart';
+import 'screens/admin/admin_jobs_screen.dart';
 import 'core/theme.dart';
 import 'widgets/app_background.dart';
 
@@ -64,6 +66,14 @@ final _router = GoRouter(
     GoRoute(
       path: '/about',
       builder: (context, state) => const AboutScreen(),
+    ),
+    GoRoute(
+      path: '/profile',
+      builder: (context, state) => const ProfileScreen(),
+    ),
+    GoRoute(
+      path: '/admin/jobs',
+      builder: (context, state) => const AdminJobsScreen(),
     ),
   ],
 );

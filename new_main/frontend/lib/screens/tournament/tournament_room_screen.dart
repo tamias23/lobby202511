@@ -90,11 +90,13 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
   void _maybeStartTick(Map<String,dynamic> t) {
     final isArenaActive = t['format'] == 'arena' &&
         t['status'] == 'active' && t['arenaEndAt'] != null;
-    if (isArenaActive && _tick == null) {
+    final isScheduledOpen = t['status'] == 'open' &&
+        t['launchMode'] == 'at_time' && t['launchAt'] != null;
+    if ((isArenaActive || isScheduledOpen) && _tick == null) {
       _tick = Timer.periodic(const Duration(milliseconds: 500), (_) {
         if (mounted) setState(() => _tickCount++);
       });
-    } else if (!isArenaActive) {
+    } else if (!isArenaActive && !isScheduledOpen) {
       _tick?.cancel(); _tick = null;
     }
   }
@@ -143,6 +145,20 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
     final m = diff.inMinutes;
     final s = diff.inSeconds % 60;
     return '$m:${s.toString().padLeft(2, '0')}';
+  }
+
+  String _formatCountdown(dynamic timeAt) {
+    if (timeAt == null) return '';
+    final end = DateTime.fromMillisecondsSinceEpoch((timeAt as num).toInt());
+    final diff = end.difference(DateTime.now());
+    if (diff.isNegative) return 'Starting...';
+    final dDays = diff.inDays;
+    final dHours = diff.inHours % 24;
+    final dMin = diff.inMinutes % 60;
+    final dSec = diff.inSeconds % 60;
+    if (dDays > 0) return '${dDays}d ${dHours}h';
+    if (dHours > 0) return '${dHours}h ${dMin}m';
+    return '$dMin:${dSec.toString().padLeft(2,'0')}';
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -222,6 +238,8 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
             _MetaChip('Round $curRound/$maxRounds'),
           if (isArena && t['arenaEndAt'] != null && isActive)
             _MetaChip('⏱️ ${_formatTimeLeft(t['arenaEndAt'])}'),
+          if (status == 'open' && t['launchMode'] == 'at_time' && t['launchAt'] != null)
+            _MetaChip('⏳ ${_formatCountdown(t['launchAt'])}'),
           _MetaChip('👥 $curCount/$maxP'),
         ]),
       ]),
@@ -248,6 +266,10 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
     if (launchMode == 'at_time' && t['launchAt'] != null) {
       final d = DateTime.fromMillisecondsSinceEpoch((t['launchAt'] as num).toInt());
       launchStr = 'Scheduled at ${d.hour.toString().padLeft(2,'0')}:${d.minute.toString().padLeft(2,'0')}';
+      if (t['status'] == 'open') {
+        final cd = _formatCountdown(t['launchAt']);
+        launchStr += cd == 'Starting...' ? ' (Starting...)' : ' (in $cd)';
+      }
     } else if (launchMode == 'when_complete') {
       launchStr = 'Starts when full';
     } else {

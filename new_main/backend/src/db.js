@@ -108,6 +108,14 @@ async function createUser(data) {
         rating_volatility: data.rating_volatility || 0.06,
         nb_tournaments_entered: data.nb_tournaments_entered || 0,
         nb_tournaments_finished: data.nb_tournaments_finished || 0,
+        is_subscriber: data.is_subscriber || 0,
+        subscription_source: data.subscription_source || null,
+        subscriber_until: data.subscriber_until || null,
+        subscription_id: data.subscription_id || null,
+        is_admin: data.is_admin || 0,
+        rated_games_played_today: data.rated_games_played_today || 0,
+        bot_games_played_today: data.bot_games_played_today || 0,
+        timezone: data.timezone || 'UTC',
         created_at: data.created_at || Date.now(),
     });
 }
@@ -383,6 +391,161 @@ async function getGamesForTournament(tournamentId) {
     }
 }
 
+// ─── Jobs ───────────────────────────────────────────────────────────────────
+
+async function saveJob(data) {
+    if (!_isUp()) return;
+    try {
+        await _db().collection('jobs').doc(data.id).set(data);
+    } catch (e) {
+        logger.error('DB', `saveJob(${data.id}) failed:`, e.message);
+    }
+}
+
+async function getJob(id) {
+    if (!_isUp()) return null;
+    try {
+        const doc = await _db().collection('jobs').doc(id).get();
+        return doc.exists ? doc.data() : null;
+    } catch (e) {
+        logger.error('DB', `getJob(${id}) failed:`, e.message);
+        return null;
+    }
+}
+
+async function updateJob(id, fields) {
+    if (!_isUp()) return;
+    try {
+        await _db().collection('jobs').doc(id).update(fields);
+    } catch (e) {
+        logger.error('DB', `updateJob(${id}) failed:`, e.message);
+    }
+}
+
+async function getDueJobs(timestamp) {
+    if (!_isUp()) return [];
+    try {
+        const snap = await _db().collection('jobs')
+            .where('status', '==', 'SCHEDULED')
+            .where('scheduled_at', '<=', timestamp)
+            .get();
+        return snap.docs.map(d => d.data());
+    } catch (e) {
+        logger.error('DB', `getDueJobs failed:`, e.message);
+        return [];
+    }
+}
+
+async function getJobsOlderThan(timestamp) {
+    if (!_isUp()) return [];
+    try {
+        const snap = await _db().collection('jobs')
+            .where('completed_at', '<=', timestamp)
+            .get();
+        return snap.docs.filter(d => d.id !== '_meta').map(d => d.data());
+    } catch (e) {
+        logger.error('DB', `getJobsOlderThan failed:`, e.message);
+        return [];
+    }
+}
+
+async function getAllJobs() {
+    if (!_isUp()) return [];
+    try {
+        const snap = await _db().collection('jobs')
+            .orderBy('scheduled_at', 'desc')
+            .get();
+        return snap.docs.filter(d => d.id !== '_meta').map(d => d.data());
+    } catch (e) {
+        logger.error('DB', `getAllJobs failed:`, e.message);
+        return [];
+    }
+}
+
+async function deleteJobsByIds(jobIds) {
+    if (!_isUp() || jobIds.length === 0) return;
+    try {
+        const dbInstance = _db();
+        const batchSize = 500;
+        for (let i = 0; i < jobIds.length; i += batchSize) {
+            const batch = dbInstance.batch();
+            const chunk = jobIds.slice(i, i + batchSize);
+            for (const id of chunk) {
+                batch.delete(dbInstance.collection('jobs').doc(id));
+            }
+            await batch.commit();
+        }
+        logger.info('DB', `Deleted ${jobIds.length} job(s) from Firestore.`);
+    } catch (e) {
+        logger.error('DB', `deleteJobsByIds failed:`, e.message);
+    }
+}
+
+// ─── Subscriptions ──────────────────────────────────────────────────────────
+
+async function saveSubscription(data) {
+    if (!_isUp()) return;
+    try {
+        await _db().collection('subscriptions').doc(data.id).set(data);
+    } catch (e) {
+        logger.error('DB', `saveSubscription(${data.id}) failed:`, e.message);
+    }
+}
+
+async function getSubscriptionsForUser(userId) {
+    if (!_isUp()) return [];
+    try {
+        const snap = await _db().collection('subscriptions')
+            .where('user_id', '==', userId)
+            .orderBy('created_at', 'desc')
+            .get();
+        return snap.docs.map(d => d.data());
+    } catch (e) {
+        logger.error('DB', `getSubscriptionsForUser(${userId}) failed:`, e.message);
+        return [];
+    }
+}
+
+async function resetDailyLimits() {
+    if (!_isUp()) return;
+    try {
+        const dbInstance = _db();
+        
+        // Find users with rated_games_played_today > 0
+        const ratedSnap = await dbInstance.collection('users')
+            .where('rated_games_played_today', '>', 0)
+            .get();
+            
+        // Find users with bot_games_played_today > 0
+        const botSnap = await dbInstance.collection('users')
+            .where('bot_games_played_today', '>', 0)
+            .get();
+
+        const userIdsToUpdate = new Set();
+        ratedSnap.docs.forEach(d => userIdsToUpdate.add(d.id));
+        botSnap.docs.forEach(d => userIdsToUpdate.add(d.id));
+
+        const idsArray = Array.from(userIdsToUpdate);
+        if (idsArray.length === 0) return;
+
+        const batchSize = 500;
+        for (let i = 0; i < idsArray.length; i += batchSize) {
+            const batch = dbInstance.batch();
+            const chunk = idsArray.slice(i, i + batchSize);
+            for (const id of chunk) {
+                batch.update(dbInstance.collection('users').doc(id), {
+                    rated_games_played_today: 0,
+                    bot_games_played_today: 0
+                });
+            }
+            await batch.commit();
+        }
+        logger.info('DB', `Reset daily limits for ${idsArray.length} users.`);
+    } catch (e) {
+        logger.error('DB', 'resetDailyLimits failed:', e.message);
+    }
+}
+
 // ─── Exports ────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -419,6 +582,16 @@ module.exports = {
     addParticipant,
     removeParticipant,
     updateParticipantScore,
-    getParticipantsForTournament,
-    getGamesForTournament,
+    // Jobs
+    saveJob,
+    getJob,
+    updateJob,
+    getDueJobs,
+    getJobsOlderThan,
+    getAllJobs,
+    deleteJobsByIds,
+    // Subscriptions
+    saveSubscription,
+    getSubscriptionsForUser,
+    resetDailyLimits,
 };

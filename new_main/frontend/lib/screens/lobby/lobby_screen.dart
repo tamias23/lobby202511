@@ -8,6 +8,7 @@ import '../../models/models.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/lobby_provider.dart';
 import '../../providers/bg_provider.dart';
+import '../../utils/roles.dart';
 import '../../widgets/glass_panel.dart';
 
 // ── Gradient constants (matching legacy) ─────────────────────────────────────
@@ -187,7 +188,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                     child: Center(
                       child: SizedBox(
                         width: MediaQuery.of(context).size.width * 0.5,
-                        child: _showBotPanel ? _buildBotPanel(lobby) : _buildCustomForm(),
+                        child: _showBotPanel ? _buildBotPanel(lobby, auth) : _buildCustomForm(),
                       ),
                     ),
                   ),
@@ -353,34 +354,72 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                           r.requestId == lobby.myRequestId &&
                           r.timeControl['minutes'] == tc.minutes &&
                           r.timeControl['increment'] == tc.increment);
+                  
+                  final role = auth?.role ?? 'guest';
+                  final limit = Roles.getLimit(role, 'rated_games_per_24h');
+                  final played = auth?.ratedGamesPlayedToday ?? 0;
+                  final limitReached = limit != -1 && played >= limit;
+                  final cantPlay = limitReached || !Roles.canUser(role, 'unrated_game_creator');
+
                   return _TCButton(
-                    label: tc.label, description: tc.description,
-                    color: tc.color, isActive: isActive, isWaiting: isActive,
+                    label: tc.label, description: cantPlay ? 'Limit/Role' : tc.description,
+                    color: cantPlay ? Colors.grey : tc.color, isActive: isActive, isWaiting: isActive,
                     fontSize: labelSize,
-                    onTap: () => _onTimeControl(tc),
+                    onTap: cantPlay ? () {} : () => _onTimeControl(tc),
                   );
                 }),
                 _TCButton(
                   label: 'Custom',
-                  description: _showCustomForm ? '✕ Close' : 'User Choice',
+                  description: (() {
+                    final role = auth?.role ?? 'guest';
+                    if (!Roles.canUser(role, 'unrated_game_creator')) return 'Locked';
+                    final limit = Roles.getLimit(role, 'rated_games_per_24h');
+                    if (limit != -1 && (auth?.ratedGamesPlayedToday ?? 0) >= limit) return 'Limit Reached';
+                    return _showCustomForm ? '✕ Close' : 'User Choice';
+                  })(),
                   color: const Color(0xFFF27813),
                   isActive: _showCustomForm,
                   fontSize: labelSize,
-                  onTap: () => setState(() {
-                    _showCustomForm = !_showCustomForm;
-                    if (_showCustomForm) _showBotPanel = false;
-                  }),
+                  onTap: () {
+                    final role = auth?.role ?? 'guest';
+                    if (!Roles.canUser(role, 'unrated_game_creator')) return;
+                    final limit = Roles.getLimit(role, 'rated_games_per_24h');
+                    if (limit != -1 && (auth?.ratedGamesPlayedToday ?? 0) >= limit) return;
+
+                    setState(() {
+                      _showCustomForm = !_showCustomForm;
+                      if (_showCustomForm) _showBotPanel = false;
+                    });
+                  },
                 ),
                 if (lobby.availableBots.isNotEmpty)
-                  _TCButton(
-                    label: 'vs Bot', description: 'Play AI',
-                    color: const Color(0xFF8B5CF6), isActive: _showBotPanel,
-                    fontSize: labelSize,
-                    onTap: () => setState(() {
-                      _showBotPanel = !_showBotPanel;
-                      if (_showBotPanel) _showCustomForm = false;
-                    }),
-                  ),
+                  Builder(builder: (context) {
+                    final role = auth?.role ?? 'guest';
+                    if (!Roles.canUser(role, 'unrated_game_player')) {
+                      return _TCButton(
+                        label: 'vs Bot', description: 'Locked',
+                        color: Colors.grey, isActive: false,
+                        fontSize: labelSize, onTap: () {},
+                      );
+                    }
+                    final limit = Roles.getLimit(role, 'bot_games_per_24h');
+                    if (limit != -1 && (auth?.botGamesPlayedToday ?? 0) >= limit) {
+                      return _TCButton(
+                        label: 'vs Bot', description: 'Limit Reached',
+                        color: Colors.grey, isActive: false,
+                        fontSize: labelSize, onTap: () {},
+                      );
+                    }
+                    return _TCButton(
+                      label: 'vs Bot', description: 'Play AI',
+                      color: const Color(0xFF8B5CF6), isActive: _showBotPanel,
+                      fontSize: labelSize,
+                      onTap: () => setState(() {
+                        _showBotPanel = !_showBotPanel;
+                        if (_showBotPanel) _showCustomForm = false;
+                      }),
+                    );
+                  }),
                 if (auth != null && lobby.tournamentsEnabled)
                   _TCButton(
                     label: 'Tourney', description: 'Create',
@@ -407,12 +446,18 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   }
 
 
-  Widget _buildBotPanel(LobbyState lobby) {
+  Widget _buildBotPanel(LobbyState lobby, AppUser? auth) {
     final presets = [
       (label: '10+5', min: 10, inc: 5),
       (label: '15+10', min: 15, inc: 10),
       (label: '30+30', min: 30, inc: 30),
     ];
+    
+    final role = auth?.role ?? 'guest';
+    final limit = Roles.getLimit(role, 'bot_games_per_24h');
+    final playedToday = auth?.botGamesPlayedToday ?? 0;
+    final limitReached = limit != -1 && playedToday >= limit;
+    
     return Padding(
       padding: const EdgeInsets.only(top: 14),
       child: GlassPanel(
@@ -421,8 +466,17 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Play vs AI',
-              style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w700, color: DTheme.textMainDark)),
+            Row(
+              children: [
+                Text('Play vs AI',
+                  style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w700, color: DTheme.textMainDark)),
+                if (limitReached) ...[
+                  const Spacer(),
+                  Text('Limit reached (${playedToday}/${limit})',
+                    style: GoogleFonts.outfit(fontSize: 12, color: Colors.redAccent)),
+                ],
+              ],
+            ),
             const SizedBox(height: 12),
             // Time control presets
             Row(children: presets.map((p) {
@@ -441,7 +495,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
               spacing: 10, runSpacing: 10,
               children: lobby.availableBots.map((bot) => _BotCard(
                 bot: bot,
-                onTap: bot.busy ? null : () => _onPlayBot(bot),
+                onTap: (bot.busy || limitReached) ? null : () => _onPlayBot(bot),
               )).toList(),
             ),
             const SizedBox(height: 10),
@@ -1279,7 +1333,9 @@ class _UserBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onLogout,
+      onTap: () {
+        context.push('/profile');
+      },
       child: GlassPanel(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         borderRadius: 12,
@@ -1298,9 +1354,6 @@ class _UserBadge extends StatelessWidget {
             Text(auth.rating!.toStringAsFixed(0),
               style: const TextStyle(fontSize: 11, color: _kOrange)),
           ],
-          const SizedBox(width: 10),
-          Text('Logout',
-            style: GoogleFonts.outfit(fontSize: 11, color: DTheme.textMutedDark)),
         ]),
       ),
     );

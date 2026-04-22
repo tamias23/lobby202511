@@ -171,8 +171,35 @@ async function tryLockRequest(requestId) {
         return result === 'OK';
     } catch (e) {
         logger.warn('Sync', `Lock acquisition failed for request ${requestId}:`, e.message);
-        // On error, allow the accept to proceed (single-instance fallback)
+        // On error, fail the acquisition to prevent split-brain
+        return false;
+    }
+}
+
+/**
+ * Distributed lock for scheduled jobs.
+ * Uses Valkey SET NX EX to ensure only one instance processes a scheduled job.
+ *
+ * @param {string} jobId
+ * @returns {Promise<boolean>} true if this instance acquired the lock
+ */
+async function tryLockJob(jobId) {
+    const client = valkey.getClient();
+    if (!client) {
+        // No Valkey = single instance, always succeed
         return true;
+    }
+    try {
+        // SET key value NX EX 300  — set-if-not-exists with 5m expiry
+        // If the worker crashes, the lock will expire and another instance can retry
+        const result = await client.set(`nd6:lock:job:${jobId}`, INSTANCE_ID, {
+            NX: true,
+            EX: 300,
+        });
+        return result === 'OK';
+    } catch (e) {
+        logger.warn('Sync', `Lock acquisition failed for job ${jobId}:`, e.message);
+        return false;
     }
 }
 
@@ -487,8 +514,11 @@ async function _bootstrapFromValkey() {
 
     try {
         // Bootstrap games: merge all per-instance keys (nd6:state:games:*)
-        // KEYS is O(N total keys) — acceptable for our small key space (<1000).
-        const gameKeys = await client.keys(`${STATE_KEY_GAMES_PREFIX}*`);
+        // Use scanIterator instead of KEYS to avoid blocking the event loop
+        const gameKeys = [];
+        for await (const key of client.scanIterator({ MATCH: `${STATE_KEY_GAMES_PREFIX}*` })) {
+            gameKeys.push(key);
+        }
         let gameCount = 0;
         for (const key of gameKeys) {
             const raw = await client.get(key);
@@ -576,6 +606,7 @@ module.exports = {
     syncDisconnect,
     syncReconnect,
     tryLockRequest,
+    tryLockJob,
     syncTournamentList,
     getTournamentListFromValkey,
 };

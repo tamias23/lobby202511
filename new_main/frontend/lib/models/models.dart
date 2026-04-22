@@ -13,6 +13,11 @@ abstract class AppUser with _$AppUser {
     @Default('guest') String role,
     double? rating,
     String? token,
+    @Default(false) bool isSubscriber,
+    @Default(false) bool isAdmin,
+    @Default(0) int ratedGamesPlayedToday,
+    @Default(0) int botGamesPlayedToday,
+    @Default('UTC') String timezone,
   }) = _AppUser;
 
   factory AppUser.fromJson(Map<String, dynamic> json) => _$AppUserFromJson(json);
