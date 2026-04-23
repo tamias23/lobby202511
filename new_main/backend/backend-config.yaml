@@ -35,8 +35,8 @@ MAX_BOTS_IN_TOURNAMENTS: "20"
 TOURNAMENT_WIN_POINTS: "1"
 TOURNAMENT_DRAW_POINTS: "0.5"
 TOURNAMENT_LOSS_POINTS: "0"
-TOURNAMENT_MAX_AGE_HOURS: "6"
-TOURNAMENT_OPEN_EXPIRY_HOURS: "2"
+TOURNAMENT_MAX_AGE_HOURS: "24"
+TOURNAMENT_OPEN_EXPIRY_HOURS: "24"
 
 # Valkey (Redis-compatible) backplane for multi-instance scaling.
 # Set VALKEY_ENABLED to "true" when a Valkey/Redis instance is available.
@@ -52,5 +52,5 @@ FIRESTORE_PROJECT_ID: "my-local-firestore"
 
 # Game History Offload
 # Games older than GAME_RETENTION_DAYS are exported to /mnt/db as Parquet files.
-GAME_RETENTION_DAYS: "3"
-GAME_OFFLOAD_INTERVAL_HOURS: "24"
+# Scheduling is controlled by the cron runner (parquet_export job, default 20:00 UTC).
+GAME_RETENTION_DAYS: "90"

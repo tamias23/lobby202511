@@ -13,7 +13,10 @@ import 'screens/analysis/analysis_screen.dart';
 import 'screens/tutorial/tutorial_screen.dart';
 import 'screens/about/about_screen.dart';
 import 'screens/profile/profile_screen.dart';
+import 'screens/profile/game_history_screen.dart';
 import 'screens/admin/admin_jobs_screen.dart';
+import 'screens/admin/admin_users_screen.dart';
+import 'screens/leaderboard/leaderboard_screen.dart';
 import 'core/theme.dart';
 import 'widgets/app_background.dart';
 
@@ -72,8 +75,20 @@ final _router = GoRouter(
       builder: (context, state) => const ProfileScreen(),
     ),
     GoRoute(
+      path: '/profile/games',
+      builder: (context, state) => const GameHistoryScreen(),
+    ),
+    GoRoute(
       path: '/admin/jobs',
       builder: (context, state) => const AdminJobsScreen(),
+    ),
+    GoRoute(
+      path: '/admin/users',
+      builder: (context, state) => const AdminUsersScreen(),
+    ),
+    GoRoute(
+      path: '/leaderboard',
+      builder: (context, state) => const LeaderboardScreen(),
     ),
   ],
 );

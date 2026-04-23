@@ -12,6 +12,7 @@ const { swissPairings, roundRobinPairings, knockoutPairings, arenaPairings, knoc
 const { computeStandings, computeKnockoutBracket } = require('./standings');
 const logger = require('../utils/logger');
 const { updateRatings } = require('../utils/gameStorage');
+const { getCategoryKey, getCategoryLabel, getRatingField } = require('../utils/ratingUtils');
 // Lazy import to avoid circular dependency (valkeySync → tournamentManager → valkeySync)
 let _valkeySync = null;
 function _getValkeySync() {
@@ -179,8 +180,8 @@ async function createTournament(opts) {
     let launchAt = null;
     if (opts.launchMode === 'at_time' || opts.launchMode === 'both') {
         launchAt = opts.launchAt || (now + 2 * 60 * 60 * 1000);
-        // Cap at 2 hours from now
-        if (launchAt > now + 2 * 60 * 60 * 1000) launchAt = now + 2 * 60 * 60 * 1000;
+        // Cap at 24 hours from now to prevent extreme scheduling
+        if (launchAt > now + 24 * 60 * 60 * 1000) launchAt = now + 24 * 60 * 60 * 1000;
     }
 
     const tournament = {
@@ -258,9 +259,11 @@ async function joinTournament(tournamentId, userId, username, password, skipPass
     try {
         const user = await db.getUser(userId);
         if (user) {
-            const rating = Math.round(Number(user.rating) || 1500);
+            const tc = { minutes: t.time_control_minutes, increment: t.time_control_increment };
+            const field = getRatingField(tc);
+            const rating = Math.round(Number(user[field]) || 1500);
             if (rating < t.rating_min || rating > t.rating_max) {
-                throw new Error(`Your rating (${rating}) is outside the allowed range (${t.rating_min}–${t.rating_max}).`);
+                throw new Error(`Your ${getCategoryLabel(getCategoryKey(tc))} rating (${rating}) is outside the allowed range (${t.rating_min}–${t.rating_max}).`);
             }
         }
     } catch (e) {
@@ -862,6 +865,14 @@ async function cleanupExpired() {
                 continue;
             }
             // Also check if scheduled launch time has passed
+            if (t.launch_at && now > t.launch_at) {
+                const limits = FORMAT_LIMITS[t.format];
+                if (t.current_count < limits.min) {
+                    logger.info('Tournament', `${tid} (${t.format}) failed to start at scheduled time (insufficient players: ${t.current_count}/${limits.min}). Cancelling.`);
+                    await cancelTournament(tid);
+                    continue;
+                }
+            }
             await tryStartTournament(tid);
         }
     }
@@ -889,7 +900,11 @@ function broadcastTournamentUpdate(tournamentId) {
         maxRounds: getMaxRounds(t),
         currentCount: t.current_count,
         maxParticipants: t.max_participants,
-        timeControl: { minutes: t.time_control_minutes, increment: t.time_control_increment },
+        timeControl: { 
+            minutes: t.time_control_minutes, 
+            increment: t.time_control_increment,
+            category: getCategoryLabel(getCategoryKey({ minutes: t.time_control_minutes, increment: t.time_control_increment }))
+        },
         creatorId: t.creator_id,
         creatorName: t.creator_username || t.creator_id,
         createdAt: t.created_at,
@@ -948,7 +963,11 @@ function getOpenTournaments() {
                 hasPassword: t.has_password === 1,
                 currentCount: t.current_count,
                 maxParticipants: t.max_participants,
-                timeControl: { minutes: t.time_control_minutes, increment: t.time_control_increment },
+                timeControl: { 
+                    minutes: t.time_control_minutes, 
+                    increment: t.time_control_increment,
+                    category: getCategoryLabel(getCategoryKey({ minutes: t.time_control_minutes, increment: t.time_control_increment }))
+                },
                 ratingMin: t.rating_min,
                 ratingMax: t.rating_max,
                 creatorId: t.creator_id,
@@ -977,7 +996,11 @@ function getActiveTournamentsList() {
                 maxRounds: getMaxRounds(t),
                 currentCount: t.current_count,
                 maxParticipants: t.max_participants,
-                timeControl: { minutes: t.time_control_minutes, increment: t.time_control_increment },
+                timeControl: { 
+                    minutes: t.time_control_minutes, 
+                    increment: t.time_control_increment,
+                    category: getCategoryLabel(getCategoryKey({ minutes: t.time_control_minutes, increment: t.time_control_increment }))
+                },
                 arenaEndAt: t.arenaEndAt || null,
             });
         }

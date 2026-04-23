@@ -106,8 +106,14 @@ async function _ensureCollections() {
             const metaRef = db.collection(name).doc('_meta');
             const metaDoc = await metaRef.get();
             if (!metaDoc.exists) {
+                const now = Date.now();
+                const d = new Date(now);
+                const pad = n => n.toString().padStart(2, '0');
+                const utcstr = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+                
                 await metaRef.set({
-                    _created_at: Date.now(),
+                    _created_at: now,
+                    _created_at_utc: utcstr,
                     _description: `Schema placeholder for ${name} collection`,
                     _version: 1,
                 });

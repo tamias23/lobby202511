@@ -12,17 +12,16 @@
       "ghoul": "Ghoul",
       "witch": "Witch",
       "soldier": "Soldier",
-      "minotaur": "Minotaur",
-      "global_overview": "Global Overview"
+      "minotaur": "Minotaur"
     },
     "sections": {
       "intro": {
         "title": "Introduction",
-        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">The Goal</h2>\n                        <p>The primary objective is to <span class=\"accent\">capture the opponent's Goddess</span>. The game ends immediately when a Goddess is removed from the board.</p>\n                    </div>\n                    <p>Two sides compete: <span class=\"accent\">White</span> and <span class=\"accent\">Black</span>. White starts at the top of the board, and Black starts at the bottom. White moves first by selecting a starting color.</p>\n                    <p>Strategy involves managing your piece's lifecycle: from the reserve to the battlefield, and potentially back to being \"returned\" if captured.</p>\n                "
+        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">The Goal</h2>\n                        <p>The primary objective is to <span class=\"accent\">capture the opponent's Goddess</span>. The game ends immediately when a Goddess is removed from the board.</p>\n                    </div>\n                    <p>Two sides compete: <span class=\"accent\">White</span> and <span class=\"accent\">Black</span>. White starts at the top of the board, and Black starts at the bottom. White moves first by selecting a starting color.</p>\n                    <p>Strategy involves managing your piece's lifecycle: from the reserve to the battlefield, and potentially back to being \"returned\" if captured.</p>\n\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">Two Movement Types</h2>\n                        <p><span class=\"accent\">Jump / Leap / Hop</span> — A piece jumps directly from one polygon to another, regardless of what lies between them. Each hop counts as one step in range. <span class=\"highlight\">Jumping pieces ignore edge colours and blocked paths.</span></p>\n                        <p><span class=\"accent\">Slide / Chain</span> — A piece travels along the adjacency graph, moving through connected polygons step by step. <span class=\"highlight\">Red edges act as walls</span>: slide-based pieces cannot cross them.</p>\n                        <p>Goddesses, Heroes, Witches, Mages and Sirens are <span class=\"accent\">jump</span> pieces. Soldiers, Ghouls and Golems are <span class=\"accent\">slide/chain</span> pieces.</p>\n                    </div>\n                "
       },
       "setup_phase": {
         "title": "Setup Phase",
-        "content": "\n                    <p>Before the \"Playing\" phase begins, players must position their core forces. Placement is strictly regulated in 5 steps:</p>\n                    <ol class=\"setup-steps\">\n                        <li>\n                            <h3 class=\"accent\">1. The Goddess</h3>\n                            <p>Must be placed on the <span class=\"highlight\">far edge</span> of your side of the board.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">2. The Heroes</h3>\n                            <p>Placed on edges, between <span class=\"highlight\">4 and 6 jumps</span> away from the Goddess, and at least 6 jumps away from each other.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">3. The Minotaurs</h3>\n                            <p><span class=\"accent\">Minotaurs</span> are placed within 1-2 jump-hops of the Goddess to form a defensive shell.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">4. The Chromatic Ring</h3>\n                            <p><span class=\"accent\">Witchs</span> are distributed on 4 unique colors as near as possible to your anchor pieces.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">5. Infantry Deployment</h3>\n                            <p><span class=\"accent\">Ghouls</span> and <span class=\"accent\">Sirens</span> fill the remaining tactical positions as close as possible to your anchor pieces.</p>\n                        </li>\n                    </ol>\n                    <div class=\"card\" style=\"margin-top: 2rem\">\n                        <p><i>Note: <span class=\"accent\">Mages</span> and <span class=\"accent\">Soldiers</span> always start in the \"Returned\" reserve and are deployed during active play.</i></p>\n                    </div>\n                "
+        "content": "\n                    <p>Before the \"Playing\" phase begins, players must position their core forces. Placement is strictly regulated in 5 steps:</p>\n                    <ol class=\"setup-steps\">\n                        <li>\n                            <h3 class=\"accent\">The Goddess</h3>\n                            <p>Must be placed on the <span class=\"highlight\">far edge</span> of your side of the board.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">The Heroes</h3>\n                            <p>Placed on edges, between <span class=\"highlight\">4 and 6 jumps</span> away from the Goddess, and at least 6 jumps away from each other.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">The Minotaurs</h3>\n                            <p><span class=\"accent\">Minotaurs</span> are placed within 1-2 jump-hops of the Goddess to form a defensive shell.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">The Chromatic Ring</h3>\n                            <p><span class=\"accent\">Witchs</span> are distributed on 4 unique colors as near as possible to your anchor pieces.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">Infantry Deployment</h3>\n                            <p><span class=\"accent\">Ghouls</span> and <span class=\"accent\">Sirens</span> fill the remaining tactical positions as close as possible to your anchor pieces.</p>\n                        </li>\n                    </ol>\n                    <div class=\"card\" style=\"margin-top: 2rem\">\n                        <p><i>Note: <span class=\"accent\">Mages</span> and <span class=\"accent\">Soldiers</span> always start in the \"Returned\" reserve and are deployed during active play.</i></p>\n                    </div>\n                "
       },
       "board": {
         "title": "Board & Topology",
@@ -63,10 +62,6 @@
       "witch": {
         "title": "The Witch",
         "content": "\n                    <p>Mystics that manipulate the chromatic essence of the board.</p>\n                    <div class=\"card\">\n                        <h3>Type: <span class=\"accent\">Jumper</span></h3>\n                        <p>Movement: <span class=\"highlight\">Jump Range 4</span>. <span class=\"accent\">Must land on its starting color</span>.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3>Ability: <span class=\"accent\">Landing Blast</span></h3>\n                        <p>Upon landing on an empty polygon, the Witch destroys all enemy pieces <span class=\"accent\">slide-adjacent</span> to her destination.</p>\n                    </div>\n                "
-      },
-      "global_overview": {
-        "title": "Global Overview",
-        "content": "\n                    <p>This diagram represents a <span class=\"accent\">complete starting board</span> after the Setup Phase. Note how the core anchors are distributed and the front lines are reinforced with infantry.</p>\n                    <div class=\"card\">\n                        <h3>Final Positioning</h3>\n                        <ul style=\"padding-left: 1.5rem; color: var(--text-secondary)\">\n                            <li>Goddesses protected by Minotaurs.</li>\n                            <li>Heroes positioned for early scouting.</li>\n                            <li>Witchs spread across the color spectrum.</li>\n                            <li>Sirens and Ghouls screening the advances.</li>\n                        </ul>\n                    </div>\n                    <p>From this point, players begin the <span class=\"accent\">Playing Phase</span> by selecting their first colors.</p>\n                "
       }
     }
   },
@@ -83,17 +78,16 @@
       "ghoul": "Goule",
       "witch": "Sorcière",
       "soldier": "Soldat",
-      "minotaur": "Minotaur",
-      "global_overview": "Vue d'ensemble"
+      "minotaur": "Minotaur"
     },
     "sections": {
       "intro": {
         "title": "Introduction",
-        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">Le But</h2>\n                        <p>L'objectif principal est de <span class=\"accent\">capturer la Déesse adverse</span>. La partie se termine immédiatement lorsqu'une Déesse est retirée du plateau.</p>\n                    </div>\n                    <p>Deux camps s'affrontent : <span class=\"accent\">Blanc</span> et <span class=\"accent\">Noir</span>. Blanc commence en haut du plateau, et Noir en bas. Blanc joue en premier en choisissant une couleur de départ.</p>\n                    <p>La stratégie implique de gérer le cycle de vie de vos pièces : de la réserve au champ de bataille, et potentiellement retour à la réserve \"capturée\" si elles sont prises.</p>\n                "
+        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">Le But</h2>\n                        <p>L'objectif principal est de <span class=\"accent\">capturer la Déesse adverse</span>. La partie se termine immédiatement lorsqu'une Déesse est retirée du plateau.</p>\n                    </div>\n                    <p>Deux camps s'affrontent : <span class=\"accent\">Blanc</span> et <span class=\"accent\">Noir</span>. Blanc commence en haut du plateau, et Noir en bas. Blanc joue en premier en choisissant une couleur de départ.</p>\n                    <p>La stratégie implique de gérer le cycle de vie de vos pièces : de la réserve au champ de bataille, et potentiellement retour à la réserve \"capturée\" si elles sont prises.</p>\n\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">Deux Types de Mouvement</h2>\n                        <p><span class=\"accent\">Saut / Bond / Hop</span> — Une pièce saute directement d’un polygone à un autre, indépendamment de ce qui se trouve entre les deux. Chaque bond compte comme une étape. <span class=\"highlight\">Les pièces qui sautent ignorent la couleur des bords et les chemins bloqués.</span></p>\n                        <p><span class=\"accent\">Glissade / Chaîne</span> — Une pièce se déplace le long du graphe d’adjacence, de polygone en polygone. <span class=\"highlight\">Les bords rouges sont des murs</span> : les pièces glissantes ne peuvent pas les franchir.</p>\n                        <p>Les Déesses, Héros, Sorcières, Mages et Sirènes sont des pièces de <span class=\"accent\">saut</span>. Les Soldats, Ghouls et Golems sont des pièces de <span class=\"accent\">glissade/chaîne</span>.</p>\n                    </div>\n                "
       },
       "setup_phase": {
         "title": "Phase de Placement",
-        "content": "\n                    <p>Avant que la phase de \"Jeu\" ne commence, les joueurs doivent positionner leurs forces principales. Le placement est strictement réglementé en 5 étapes :</p>\n                    <ol class=\"setup-steps\">\n                        <li>\n                            <h3 class=\"accent\">1. La Déesse</h3>\n                            <p>Doit être placée sur le <span class=\"highlight\">bord éloigné</span> de votre côté du plateau.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">2. Les Héros</h3>\n                            <p>Placés sur les bords, entre <span class=\"highlight\">4 et 6 sauts</span> de la Déesse, et à au moins 6 sauts les uns des autres.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">3. Les Minotaurs</h3>\n                            <p>Les <span class=\"accent\">Minotaurs</span> sont placés à 1-2 sauts de la Déesse pour former une coque défensive.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">4. L'Anneau Chromatique</h3>\n                            <p>Les <span class=\"accent\">Sorcières</span> sont réparties sur 4 couleurs uniques aussi près que possible de vos pièces ancres.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">5. Déploiement de l'Infanterie</h3>\n                            <p>Les <span class=\"accent\">Goules</span> et les <span class=\"accent\">Sirènes</span> occupent les positions tactiques restantes aussi près que possible de vos pièces ancres.</p>\n                        </li>\n                    </ol>\n                    <div class=\"card\" style=\"margin-top: 2rem\">\n                        <p><i>Note : les <span class=\"accent\">Mages</span> et les <span class=\"accent\">Soldats</span> commencent toujours dans la réserve \"Capturée\" et sont déployés pendant le jeu actif.</i></p>\n                    </div>\n                "
+        "content": "\n                    <p>Avant que la phase de \"Jeu\" ne commence, les joueurs doivent positionner leurs forces principales. Le placement est strictement réglementé en 5 étapes :</p>\n                    <ol class=\"setup-steps\">\n                        <li>\n                            <h3 class=\"accent\">La Déesse</h3>\n                            <p>Doit être placée sur le <span class=\"highlight\">bord éloigné</span> de votre côté du plateau.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">Les Héros</h3>\n                            <p>Placés sur les bords, entre <span class=\"highlight\">4 et 6 sauts</span> de la Déesse, et à au moins 6 sauts les uns des autres.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">Les Minotaurs</h3>\n                            <p>Les <span class=\"accent\">Minotaurs</span> sont placés à 1-2 sauts de la Déesse pour former une coque défensive.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">L'Anneau Chromatique</h3>\n                            <p>Les <span class=\"accent\">Sorcières</span> sont réparties sur 4 couleurs uniques aussi près que possible de vos pièces ancres.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">Déploiement de l'Infanterie</h3>\n                            <p>Les <span class=\"accent\">Goules</span> et les <span class=\"accent\">Sirènes</span> occupent les positions tactiques restantes aussi près que possible de vos pièces ancres.</p>\n                        </li>\n                    </ol>\n                    <div class=\"card\" style=\"margin-top: 2rem\">\n                        <p><i>Note : les <span class=\"accent\">Mages</span> et les <span class=\"accent\">Soldats</span> commencent toujours dans la réserve \"Capturée\" et sont déployés pendant le jeu actif.</i></p>\n                    </div>\n                "
       },
       "board": {
         "title": "Plateau & Topologie",
@@ -134,10 +128,6 @@
       "witch": {
         "title": "La Sorcière",
         "content": "\n                    <p>Des mystiques manipulant l'essence chromatique du plateau.</p>\n                    <div class=\"card\">\n                        <h3>Type : <span class=\"accent\">Sauteur</span></h3>\n                        <p>Mouvement : <span class=\"highlight\">Portée de Saut 4</span>. <span class=\"accent\">Doit atterrir sur sa couleur de départ</span>.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3>Capacité : <span class=\"accent\">Explosion d'Atterrissage</span></h3>\n                        <p>En atterrissant sur un polygone vide, la Sorcière détruit toutes les pièces ennemies <span class=\"accent\">adjacentes par glissement</span> (slide-adjacent) à sa destination.</p>\n                    </div>\n                "
-      },
-      "global_overview": {
-        "title": "Vue d'ensemble",
-        "content": "\n                    <p>Ce diagramme représente un <span class=\"accent\">plateau de départ complet</span> après la Phase de Placement. Notez comment les ancres centrales sont réparties et les lignes de front renforcées par l'infanterie.</p>\n                    <div class=\"card\">\n                        <h3>Positionnement Final</h3>\n                        <ul style=\"padding-left: 1.5rem; color: var(--text-secondary)\">\n                            <li>Déesses protégées par des Minotaurs.</li>\n                            <li>Héros positionnés pour l'éclaireur précoce.</li>\n                            <li>Sorcières réparties sur le spectre des couleurs.</li>\n                            <li>Sirènes et Goules protégeant les avancées.</li>\n                        </ul>\n                    </div>\n                    <p>À partir de ce point, les joueurs commencent la <span class=\"accent\">Phase de Jeu</span> en sélectionnant leurs premières couleurs.</p>\n                "
       }
     }
   },
@@ -154,17 +144,16 @@
       "ghoul": "El Necrófago",
       "witch": "La Bruja",
       "soldier": "El Soldado",
-      "minotaur": "El Minotauro",
-      "global_overview": "Resumen Global"
+      "minotaur": "El Minotauro"
     },
     "sections": {
       "intro": {
         "title": "Introducción",
-        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">El Objetivo</h2>\n                        <p>El objetivo principal es <span class=\"accent\">capturar la Diosa del oponente</span>. El juego termina inmediatamente cuando una Diosa es eliminada del tablero.</p>\n                    </div>\n                    <p>Compiten dos bandos: <span class=\"accent\">Blanco</span> y <span class=\"accent\">Negro</span>. El Blanco comienza en la parte superior del tablero y el Negro en la inferior. El Blanco mueve primero seleccionando un color inicial.</p>\n                "
+        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">El Objetivo</h2>\n                        <p>El objetivo principal es <span class=\"accent\">capturar la Diosa del oponente</span>. El juego termina inmediatamente cuando una Diosa es eliminada del tablero.</p>\n                    </div>\n                    <p>Compiten dos bandos: <span class=\"accent\">Blanco</span> y <span class=\"accent\">Negro</span>. El Blanco comienza en la parte superior del tablero y el Negro en la inferior. El Blanco mueve primero seleccionando un color inicial.</p>\n\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">Dos Tipos de Movimiento</h2>\n                        <p><span class=\"accent\">Salto / Brinco / Hop</span> — Una pieza salta directamente de un polígono a otro, sin importar lo que haya entre ellos. Cada salto cuenta como un paso. <span class=\"highlight\">Las piezas de salto ignoran el color de los bordes y los caminos bloqueados.</span></p>\n                        <p><span class=\"accent\">Deslizamiento / Cadena</span> — Una pieza se desplaza por el grafo de adyacencia, de polígono en polígono. <span class=\"highlight\">Los bordes rojos actúan como muros</span>: las piezas deslizantes no pueden cruzarlos.</p>\n                        <p>Diosas, Héroes, Brujas, Magos y Sirenas son piezas de <span class=\"accent\">salto</span>. Soldados, Ghouls y Golems son piezas de <span class=\"accent\">deslizamiento/cadena</span>.</p>\n                    </div>\n                "
       },
       "setup_phase": {
         "title": "Fase de Configuración",
-        "content": "\n                    <p>Antes de que comience la fase de \"Juego\", los jugadores deben posicionar sus fuerzas centrales. La colocación está estrictamente regulada en 5 pasos:</p>\n                    <ol class=\"setup-steps\">\n                        <li>\n                            <h3 class=\"accent\">1. La Diosa</h3>\n                            <p>Debe colocarse en el <span class=\"highlight\">borde lejano</span> de tu lado del tablero.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">2. Los Héroes</h3>\n                            <p>Colocados en los bordes, entre <span class=\"highlight\">4 y 6 saltos</span> de distancia de la Diosa, y al menos a 6 saltos de distancia entre sí.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">3. Los Minotauros</h3>\n                            <p>Los <span class=\"accent\">Minotauros</span> se colocan a 1-2 saltos de distancia de la Diosa para formar un escudo defensivo.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">4. El Anillo Cromático</h3>\n                            <p>Las <span class=\"accent\">Brujas</span> se distribuyen en 4 colores únicos lo más cerca posible de tus piezas de anclaje.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">5. Despliegue de Infantería</h3>\n                            <p><span class=\"accent\">Necrófagos</span> y <span class=\"accent\">Sirenas</span> ocupan las posiciones tácticas restantes cerca de tus anclas.</p>\n                        </li>\n                    </ol>\n                "
+        "content": "\n                    <p>Antes de que comience la fase de \"Juego\", los jugadores deben posicionar sus fuerzas centrales. La colocación está estrictamente regulada en 5 pasos:</p>\n                    <ol class=\"setup-steps\">\n                        <li>\n                            <h3 class=\"accent\">La Diosa</h3>\n                            <p>Debe colocarse en el <span class=\"highlight\">borde lejano</span> de tu lado del tablero.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">Los Héroes</h3>\n                            <p>Colocados en los bordes, entre <span class=\"highlight\">4 y 6 saltos</span> de distancia de la Diosa, y al menos a 6 saltos de distancia entre sí.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">Los Minotauros</h3>\n                            <p>Los <span class=\"accent\">Minotauros</span> se colocan a 1-2 saltos de distancia de la Diosa para formar un escudo defensivo.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">El Anillo Cromático</h3>\n                            <p>Las <span class=\"accent\">Brujas</span> se distribuyen en 4 colores únicos lo más cerca posible de tus piezas de anclaje.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">Despliegue de Infantería</h3>\n                            <p><span class=\"accent\">Necrófagos</span> y <span class=\"accent\">Sirenas</span> ocupan las posiciones tácticas restantes cerca de tus anclas.</p>\n                        </li>\n                    </ol>\n                "
       },
       "board": {
         "title": "Tablero y Topología",
@@ -205,10 +194,6 @@
       "witch": {
         "title": "La Bruja",
         "content": "\n                    <div class=\"card\">\n                        <h3>Tipo: <span class=\"accent\">Saltadora</span></h3>\n                        <p>Movimiento: <span class=\"highlight\">Rango 4</span>. <span class=\"accent\">Debe aterrizar en su color inicial</span>.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3>Habilidad: <span class=\"accent\">Explosión de Aterrizaje</span></h3>\n                        <p>Al aterrizar, destruye a todos los enemigos adyacentes a su destino.</p>\n                    </div>\n                "
-      },
-      "global_overview": {
-        "title": "Resumen Global",
-        "content": "\n                    <p>Posicionamiento final tras la fase de configuración: Diosas protegidas por Minotauros, Héroes listos para incursiones y Brujas cubriendo el espectro de colores.</p>\n                "
       }
     }
   },
@@ -225,17 +210,16 @@
       "ghoul": "Il Ghoul",
       "witch": "La Strega",
       "soldier": "Il Soldato",
-      "minotaur": "Il Minotaur",
-      "global_overview": "Panoramica Globale"
+      "minotaur": "Il Minotaur"
     },
     "sections": {
       "intro": {
         "title": "Introduzione",
-        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">L'Obiettivo</h2>\n                        <p>L'obiettivo principale è <span class=\"accent\">catturare la Dea dell'avversario</span>. Il gioco termina immediatamente quando una Dea viene rimossa dal tabellone.</p>\n                    </div>\n                    <p>Due schieramenti competono: <span class=\"accent\">Bianco</span> e <span class=\"accent\">Nero</span>. Il Bianco inizia in cima al tabellone e il Nero in fondo.</p>\n                "
+        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">L'Obiettivo</h2>\n                        <p>L'obiettivo principale è <span class=\"accent\">catturare la Dea dell'avversario</span>. Il gioco termina immediatamente quando una Dea viene rimossa dal tabellone.</p>\n                    </div>\n                    <p>Due schieramenti competono: <span class=\"accent\">Bianco</span> e <span class=\"accent\">Nero</span>. Il Bianco inizia in cima al tabellone e il Nero in fondo.</p>\n\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">Due Tipi di Movimento</h2>\n                        <p><span class=\"accent\">Salto / Hop</span> — Un pezzo salta direttamente da un poligono a un altro, indipendentemente da ciò che si trova in mezzo. Ogni salto conta come un passo. <span class=\"highlight\">I pezzi che saltano ignorano il colore dei bordi e i percorsi bloccati.</span></p>\n                        <p><span class=\"accent\">Scivolamento / Catena</span> — Un pezzo si muove lungo il grafo di adiacenza, poligono per poligono. <span class=\"highlight\">I bordi rossi fungono da muri</span>: i pezzi scivolanti non possono attraversarli.</p>\n                        <p>Dee, Eroi, Streghe, Maghi e Sirene sono pezzi da <span class=\"accent\">salto</span>. Soldati, Ghoul e Golem sono pezzi da <span class=\"accent\">scivolamento/catena</span>.</p>\n                    </div>\n                "
       },
       "setup_phase": {
         "title": "Fase di Configurazione",
-        "content": "\n                    <p>Prima della fase di \"Gioco\", i giocatori devono posizionare le loro forze. Il posizionamento segue 5 fasi:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">1. La Dea</h3><p>Deve stare sul <span class=\"highlight\">bordo estremo</span>.</p></li>\n                        <li><h3 class=\"accent\">2. Gli Eroi</h3><p>Tra <span class=\"highlight\">4 e 6 salti</span> dalla Dea.</p></li>\n                        <li><h3 class=\"accent\">3. I Minotaur</h3><p>Protezione ravvicinata (1-2 salti) per la Dea.</p></li>\n                        <li><h3 class=\"accent\">4. L'Anello Cromatico</h3><p>Le <span class=\"accent\">Streghe</span> distribuite su 4 colori diversi.</p></li>\n                        <li><h3 class=\"accent\">5. Fanteria</h3><p><span class=\"accent\">Ghoul</span> e <span class=\"accent\">Sirene</span> completano le linee.</p></li>\n                    </ol>\n                "
+        "content": "\n                    <p>Prima della fase di \"Gioco\", i giocatori devono posizionare le loro forze. Il posizionamento segue 5 fasi:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">La Dea</h3><p>Deve stare sul <span class=\"highlight\">bordo estremo</span>.</p></li>\n                        <li><h3 class=\"accent\">Gli Eroi</h3><p>Tra <span class=\"highlight\">4 e 6 salti</span> dalla Dea.</p></li>\n                        <li><h3 class=\"accent\">I Minotaur</h3><p>Protezione ravvicinata (1-2 salti) per la Dea.</p></li>\n                        <li><h3 class=\"accent\">L'Anello Cromatico</h3><p>Le <span class=\"accent\">Streghe</span> distribuite su 4 colori diversi.</p></li>\n                        <li><h3 class=\"accent\">Fanteria</h3><p><span class=\"accent\">Ghoul</span> e <span class=\"accent\">Sirene</span> completano le linee.</p></li>\n                    </ol>\n                "
       },
       "board": {
         "title": "Tabellone e Topologia",
@@ -276,10 +260,6 @@
       "witch": {
         "title": "La Strega",
         "content": "\n                    <div class=\"card\">\n                        <h3>Tipo: <span class=\"accent\">Saltatore</span></h3>\n                        <p>Salto: <span class=\"highlight\">4</span>. Deve atterrare sul suo colore di partenza.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3>Abilità: <span class=\"accent\">Esplosione</span></h3>\n                        <p>Distrugge i nemici adiacenti quando atterra.</p>\n                    </div>\n                "
-      },
-      "global_overview": {
-        "title": "Panoramica Globale",
-        "content": "\n                    <p>Posizionamento finale: Dee protette dai Minotaur, Eroi pronti all'attacco e Streghe posizionate strategicamente.</p>\n                "
       }
     }
   },
@@ -296,17 +276,16 @@
       "ghoul": "Der Ghul",
       "witch": "Die Hexe",
       "soldier": "Der Soldat",
-      "minotaur": "Der Minotaur",
-      "global_overview": "Gesamtübersicht"
+      "minotaur": "Der Minotaur"
     },
     "sections": {
       "intro": {
         "title": "Einleitung",
-        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">Das Ziel</h2>\n                        <p>Das Hauptziel ist es, die <span class=\"accent\">Göttin des Gegners zu schlagen</span>. Das Spiel endet sofort, wenn eine Göttin vom Feld entfernt wird.</p>\n                    </div>\n                "
+        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">Das Ziel</h2>\n                        <p>Das Hauptziel ist es, die <span class=\"accent\">Göttin des Gegners zu schlagen</span>. Das Spiel endet sofort, wenn eine Göttin vom Feld entfernt wird.</p>\n                    </div>\n\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">Zwei Bewegungsarten</h2>\n                        <p><span class=\"accent\">Sprung / Hop</span> — Eine Figur springt direkt von einem Polygon zu einem anderen, unabhängig vom Zwischenraum. Jeder Sprung zählt als ein Schritt. <span class=\"highlight\">Springende Figuren ignorieren Kantenfarben und blockierte Pfade.</span></p>\n                        <p><span class=\"accent\">Gleiten / Kette</span> — Eine Figur bewegt sich entlang des Adjazenzgraphen, Polygon für Polygon. <span class=\"highlight\">Rote Kanten wirken als Wände</span>: gleitende Figuren können sie nicht überschreiten.</p>\n                        <p>Göttinnen, Helden, Hexen, Magier und Sirenen sind <span class=\"accent\">Sprung</span>-Figuren. Soldaten, Ghouls und Golems sind <span class=\"accent\">Gleit/Ketten</span>-Figuren.</p>\n                    </div>\n                "
       },
       "setup_phase": {
         "title": "Einstiegsphase",
-        "content": "\n                    <p>Bevor die Spielphase beginnt, müssen die Spieler ihre Kräfte positionieren. Die Aufstellung erfolgt in 5 Schritten:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">1. Die Göttin</h3><p>Wird am <span class=\"highlight\">äußersten Rand</span> platziert.</p></li>\n                        <li><h3 class=\"accent\">2. Die Helden</h3><p>Zwischen <span class=\"highlight\">4 und 6 Sprüngen</span> von der Göttin entfernt.</p></li>\n                        <li><h3 class=\"accent\">3. Die Minotaurs</h3><p>Schutzschilde in der Nähe der Göttin.</p></li>\n                        <li><h3 class=\"accent\">4. Der Chromatische Ring</h3><p>Die <span class=\"accent\">Hexen</span> werden auf 4 verschiedene Farben verteilt.</p></li>\n                        <li><h3 class=\"accent\">5. Infanterie</h3><p><span class=\"accent\">Ghule</span> und <span class=\"accent\">Sirenen</span> füllen die taktischen Lücken.</p></li>\n                    </ol>\n                "
+        "content": "\n                    <p>Bevor die Spielphase beginnt, müssen die Spieler ihre Kräfte positionieren. Die Aufstellung erfolgt in 5 Schritten:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">Die Göttin</h3><p>Wird am <span class=\"highlight\">äußersten Rand</span> platziert.</p></li>\n                        <li><h3 class=\"accent\">Die Helden</h3><p>Zwischen <span class=\"highlight\">4 und 6 Sprüngen</span> von der Göttin entfernt.</p></li>\n                        <li><h3 class=\"accent\">Die Minotaurs</h3><p>Schutzschilde in der Nähe der Göttin.</p></li>\n                        <li><h3 class=\"accent\">Der Chromatische Ring</h3><p>Die <span class=\"accent\">Hexen</span> werden auf 4 verschiedene Farben verteilt.</p></li>\n                        <li><h3 class=\"accent\">Infanterie</h3><p><span class=\"accent\">Ghule</span> und <span class=\"accent\">Sirenen</span> füllen die taktischen Lücken.</p></li>\n                    </ol>\n                "
       },
       "board": {
         "title": "Spielfeld & Topologie",
@@ -347,10 +326,6 @@
       "witch": {
         "title": "Die Hexe",
         "content": "\n                    <div class=\"card\">\n                        <h3>Typ: <span class=\"accent\">Springer</span></h3>\n                        <p>Sprungweite: <span class=\"highlight\">4</span>. Muss auf ihrer Startfarbe landen.</p>\n                    </div>\n                "
-      },
-      "global_overview": {
-        "title": "Gesamtübersicht",
-        "content": "\n                    <p>Die Aufstellung ist abgeschlossen. Die Göttinnen sind geschützt, die Helden bereit für den Angriff.</p>\n                "
       }
     }
   },
@@ -367,8 +342,7 @@
       "ghoul": "De Ghul",
       "witch": "De Heks",
       "soldier": "De Soldaat",
-      "minotaur": "De Minotaur",
-      "global_overview": "Globaal Overzicht"
+      "minotaur": "De Minotaur"
     },
     "sections": {
       "intro": {
@@ -377,7 +351,7 @@
       },
       "setup_phase": {
         "title": "Opstelfase",
-        "content": "\n                    <p>Voordat het spel begint, moeten spelers hun eenheden plaatsen. Dit gebeurt in 5 stappen:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">1. De Godin</h3><p>Wordt aan de <span class=\"highlight\">uiterste rand</span> geplaatst.</p></li>\n                        <li><h3 class=\"accent\">2. De Helden</h3><p>Tussen <span class=\"highlight\">4 en 6 sprongen</span> van de Godin.</p></li>\n                        <li><h3 class=\"accent\">3. De Minotaurs</h3><p>Beschermende schilden nabij de Godin.</p></li>\n                        <li><h3 class=\"accent\">4. De Chromatische Ring</h3><p>De <span class=\"accent\">Heksen</span> worden over 4 kleuren verdeeld.</p></li>\n                        <li><h3 class=\"accent\">5. Infanterie</h3><p><span class=\"accent\">Ghuls</span> en <span class=\"accent\">Sirenes</span> vullen de linies.</p></li>\n                    </ol>\n                "
+        "content": "\n                    <p>Voordat het spel begint, moeten spelers hun eenheden plaatsen. Dit gebeurt in 5 stappen:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">De Godin</h3><p>Wordt aan de <span class=\"highlight\">uiterste rand</span> geplaatst.</p></li>\n                        <li><h3 class=\"accent\">De Helden</h3><p>Tussen <span class=\"highlight\">4 en 6 sprongen</span> van de Godin.</p></li>\n                        <li><h3 class=\"accent\">De Minotaurs</h3><p>Beschermende schilden nabij de Godin.</p></li>\n                        <li><h3 class=\"accent\">De Chromatische Ring</h3><p>De <span class=\"accent\">Heksen</span> worden over 4 kleuren verdeeld.</p></li>\n                        <li><h3 class=\"accent\">Infanterie</h3><p><span class=\"accent\">Ghuls</span> en <span class=\"accent\">Sirenes</span> vullen de linies.</p></li>\n                    </ol>\n                "
       },
       "board": {
         "title": "Speelbord & Topologie",
@@ -418,10 +392,6 @@
       "witch": {
         "title": "De Heks",
         "content": "\n                    <div class=\"card\">\n                        <h3>Type: <span class=\"accent\">Springer</span></h3>\n                        <p>Sprongbereik: <span class=\"highlight\">4</span>.</p>\n                    </div>\n                "
-      },
-      "global_overview": {
-        "title": "Globaal Overzicht",
-        "content": "\n                    <p>Alle eenheden staan klaar voor de strijd.</p>\n                "
       }
     }
   },
@@ -438,8 +408,7 @@
       "ghoul": "食尸鬼",
       "witch": "女巫",
       "soldier": "士兵",
-      "minotaur": "弥诺陶洛斯",
-      "global_overview": "全局总览"
+      "minotaur": "弥诺陶洛斯"
     },
     "sections": {
       "intro": {
@@ -448,7 +417,7 @@
       },
       "setup_phase": {
         "title": "配置阶段",
-        "content": "\n                    <p>在游戏正式开始前，玩家需布置兵力。放置过程分为5步：</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">1. 女神</h3><p>必须放置在己方半场的 <span class=\"highlight\">远端边缘</span>。</p></li>\n                        <li><h3 class=\"accent\">2. 英雄</h3><p>距女神 <span class=\"highlight\">4-6个跳跃</span> 的距离。</p></li>\n                        <li><h3 class=\"accent\">3. 傀儡</h3><p>放置在女神附近（1-2个跳跃）作为防御盾牌。</p></li>\n                        <li><h3 class=\"accent\">4. 色彩环</h3><p><span class=\"accent\">女巫</span> 需分布在4种不同的颜色上。</p></li>\n                        <li><h3 class=\"accent\">5. 步兵部署</h3><p><span class=\"accent\">食尸鬼</span> 和 <span class=\"accent\">塞壬</span> 占据剩余的位置。</p></li>\n                    </ol>\n                "
+        "content": "\n                    <p>在游戏正式开始前，玩家需布置兵力。放置过程分为5步：</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">女神</h3><p>必须放置在己方半场的 <span class=\"highlight\">远端边缘</span>。</p></li>\n                        <li><h3 class=\"accent\">英雄</h3><p>距女神 <span class=\"highlight\">4-6个跳跃</span> 的距离。</p></li>\n                        <li><h3 class=\"accent\">傀儡</h3><p>放置在女神附近（1-2个跳跃）作为防御盾牌。</p></li>\n                        <li><h3 class=\"accent\">色彩环</h3><p><span class=\"accent\">女巫</span> 需分布在4种不同的颜色上。</p></li>\n                        <li><h3 class=\"accent\">步兵部署</h3><p><span class=\"accent\">食尸鬼</span> 和 <span class=\"accent\">塞壬</span> 占据剩余的位置。</p></li>\n                    </ol>\n                "
       },
       "board": {
         "title": "棋盘与地貌",
@@ -489,10 +458,6 @@
       "witch": {
         "title": "女巫",
         "content": "\n                    <div class=\"card\">\n                        <h3>类型：<span class=\"accent\">跳跃者</span></h3>\n                        <p>跳跃范围：<span class=\"highlight\">4</span>。必须降落在起始颜色上。</p>\n                    </div>\n                "
-      },
-      "global_overview": {
-        "title": "全局总览",
-        "content": "\n                    <p>兵力布置已完成。女神受到保护，英雄准备出击。</p>\n                "
       }
     }
   },
@@ -509,8 +474,7 @@
       "ghoul": "グール",
       "witch": "魔女",
       "soldier": "兵士",
-      "minotaur": "ミノタウロス",
-      "global_overview": "全体概要"
+      "minotaur": "ミノタウロス"
     },
     "sections": {
       "intro": {
@@ -519,7 +483,7 @@
       },
       "setup_phase": {
         "title": "配置フェーズ",
-        "content": "\n                    <p>ゲームの「プレイ」フェーズが始まる前に、プレイヤーは部隊を配置する必要があります。配置は厳密に5つのステップで行われます：</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">1. 女神</h3><p>ボード上の自陣の <span class=\"highlight\">最も遠い端</span> に配置します。</p></li>\n                        <li><h3 class=\"accent\">2. 英雄</h3><p>女神から <span class=\"highlight\">4〜6ジャンプ</span> 離れた端に配置します。</p></li>\n                        <li><h3 class=\"accent\">3. ゴーレム</h3><p>女神の近く（1〜2ジャンプ）に守りの盾として配置します。</p></li>\n                        <li><h3 class=\"accent\">4. 彩色の輪</h3><p><span class=\"accent\">魔女</span> は4種類の異なる色に分散して配置します。</p></li>\n                        <li><h3 class=\"accent\">5. 歩兵の展開</h3><p><span class=\"accent\">グール</span> と <span class=\"accent\">セイレーン</span> が残りの位置を占めます。</p></li>\n                    </ol>\n                "
+        "content": "\n                    <p>ゲームの「プレイ」フェーズが始まる前に、プレイヤーは部隊を配置する必要があります。配置は厳密に5つのステップで行われます：</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">女神</h3><p>ボード上の自陣の <span class=\"highlight\">最も遠い端</span> に配置します。</p></li>\n                        <li><h3 class=\"accent\">英雄</h3><p>女神から <span class=\"highlight\">4〜6ジャンプ</span> 離れた端に配置します。</p></li>\n                        <li><h3 class=\"accent\">ゴーレム</h3><p>女神の近く（1〜2ジャンプ）に守りの盾として配置します。</p></li>\n                        <li><h3 class=\"accent\">彩色の輪</h3><p><span class=\"accent\">魔女</span> は4種類の異なる色に分散して配置します。</p></li>\n                        <li><h3 class=\"accent\">歩兵の展開</h3><p><span class=\"accent\">グール</span> と <span class=\"accent\">セイレーン</span> が残りの位置を占めます。</p></li>\n                    </ol>\n                "
       },
       "board": {
         "title": "ボードとトポロジー",
@@ -560,10 +524,6 @@
       "witch": {
         "title": "魔女",
         "content": "\n                    <div class=\"card\">\n                        <h3>型：<span class=\"accent\">ジャンパー</span></h3>\n                        <p>ジャンプ範囲：<span class=\"highlight\">4</span>。開始時と同じ色に着地する必要があります。</p>\n                    </div>\n                "
-      },
-      "global_overview": {
-        "title": "全体概要",
-        "content": "\n                    <p>配置フェーズが完了しました。女神は護られ、英雄は出撃の準備が整っています。</p>\n                "
       }
     }
   },
@@ -580,8 +540,7 @@
       "ghoul": "구울",
       "witch": "마녀",
       "soldier": "병사",
-      "minotaur": "미노타우로스",
-      "global_overview": "전체 개요"
+      "minotaur": "미노타우로스"
     },
     "sections": {
       "intro": {
@@ -590,7 +549,7 @@
       },
       "setup_phase": {
         "title": "배치 단계",
-        "content": "\n                    <p>게임이 시작되기 전에 플레이어는 부대를 배치해야 합니다. 배치는 5단계로 진행됩니다:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">1. 여신</h3><p>보드의 <span class=\"highlight\">가장 먼 가장자리</span>에 배치합니다.</p></li>\n                        <li><h3 class=\"accent\">2. 영웅</h3><p>여신으로부터 <span class=\"highlight\">4~6회 점프</span> 거리 내에 배치합니다.</p></li>\n                        <li><h3 class=\"accent\">3. 골렘</h3><p>여신 주변(1~2회 점프)에 방어막으로 배치합니다.</p></li>\n                        <li><h3 class=\"accent\">4. 색상 링</h3><p><span class=\"accent\">마녀</span>는 4가지 서로 다른 색상에 분산 배치합니다.</p></li>\n                        <li><h3 class=\"accent\">5. 보병 전개</h3><p><span class=\"accent\">구울</span>과 <span class=\"accent\">세이렌</span>이 나머지 위치를 채웁니다.</p></li>\n                    </ol>\n                "
+        "content": "\n                    <p>게임이 시작되기 전에 플레이어는 부대를 배치해야 합니다. 배치는 5단계로 진행됩니다:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">여신</h3><p>보드의 <span class=\"highlight\">가장 먼 가장자리</span>에 배치합니다.</p></li>\n                        <li><h3 class=\"accent\">영웅</h3><p>여신으로부터 <span class=\"highlight\">4~6회 점프</span> 거리 내에 배치합니다.</p></li>\n                        <li><h3 class=\"accent\">골렘</h3><p>여신 주변(1~2회 점프)에 방어막으로 배치합니다.</p></li>\n                        <li><h3 class=\"accent\">색상 링</h3><p><span class=\"accent\">마녀</span>는 4가지 서로 다른 색상에 분산 배치합니다.</p></li>\n                        <li><h3 class=\"accent\">보병 전개</h3><p><span class=\"accent\">구울</span>과 <span class=\"accent\">세이렌</span>이 나머지 위치를 채웁니다.</p></li>\n                    </ol>\n                "
       },
       "board": {
         "title": "보드 및 위상",
@@ -631,10 +590,6 @@
       "witch": {
         "title": "마녀",
         "content": "\n                    <div class=\"card\">\n                        <h3>유형: <span class=\"accent\">점퍼</span></h3>\n                        <p>점프 범위: <span class=\"highlight\">4</span>. 시작한 색상과 같은 색상의 칸에 착지해야 합니다.</p>\n                    </div>\n                "
-      },
-      "global_overview": {
-        "title": "전체 개요",
-        "content": "\n                    <p>배치가 완료되었습니다. 여신은 보호받고 있으며 영웅은 출격 준비가 되었습니다.</p>\n                "
       }
     }
   },
@@ -651,8 +606,7 @@
       "ghoul": "Ghoul",
       "witch": "Penyihir",
       "soldier": "Askar",
-      "minotaur": "Minotaur",
-      "global_overview": "Gambaran Keseluruhan"
+      "minotaur": "Minotaur"
     },
     "sections": {
       "intro": {
@@ -661,7 +615,7 @@
       },
       "setup_phase": {
         "title": "Fasa Persiapan",
-        "content": "\n                    <p>Sebelum fasa permainan bermula, pemain mesti mengatur kedudukan tentera. Penempatan dilakukan dalam 5 langkah:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">1. Dewi</h3><p>Mesti diletakkan di <span class=\"highlight\">tepi jauh</span> kawasan anda.</p></li>\n                        <li><h3 class=\"accent\">2. Wira</h3><p>Di tepi, antara <span class=\"highlight\">4 hingga 6 lompatan</span> dari Dewi.</p></li>\n                        <li><h3 class=\"accent\">3. Minotaur</h3><p>Sebagai perisai pertahanan berhampiran Dewi (1-2 lompatan).</p></li>\n                        <li><h3 class=\"accent\">4. Gelang Kromatik</h3><p><span class=\"accent\">Penyihir</span> diagihkan pada 4 warna berbeza.</p></li>\n                        <li><h3 class=\"accent\">5. Aturan Infantri</h3><p><span class=\"accent\">Ghoul</span> dan <span class=\"accent\">Siren</span> mengisi baki kedudukan taktikal.</p></li>\n                    </ol>\n                "
+        "content": "\n                    <p>Sebelum fasa permainan bermula, pemain mesti mengatur kedudukan tentera. Penempatan dilakukan dalam 5 langkah:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">Dewi</h3><p>Mesti diletakkan di <span class=\"highlight\">tepi jauh</span> kawasan anda.</p></li>\n                        <li><h3 class=\"accent\">Wira</h3><p>Di tepi, antara <span class=\"highlight\">4 hingga 6 lompatan</span> dari Dewi.</p></li>\n                        <li><h3 class=\"accent\">Minotaur</h3><p>Sebagai perisai pertahanan berhampiran Dewi (1-2 lompatan).</p></li>\n                        <li><h3 class=\"accent\">Gelang Kromatik</h3><p><span class=\"accent\">Penyihir</span> diagihkan pada 4 warna berbeza.</p></li>\n                        <li><h3 class=\"accent\">Aturan Infantri</h3><p><span class=\"accent\">Ghoul</span> dan <span class=\"accent\">Siren</span> mengisi baki kedudukan taktikal.</p></li>\n                    </ol>\n                "
       },
       "board": {
         "title": "Papan & Topologi",
@@ -702,10 +656,6 @@
       "witch": {
         "title": "Penyihir",
         "content": "\n                    <div class=\"card\">\n                        <h3>Jenis: <span class=\"accent\">Lompatan</span></h3>\n                        <p>Julat Lompatan: <span class=\"highlight\">4</span>. Mesti mendarat pada warna asalnya.</p>\n                    </div>\n                "
-      },
-      "global_overview": {
-        "title": "Gambaran Keseluruhan",
-        "content": "\n                    <p>Persiapan selesai. Dewi dilindungi dan wira sedia untuk menyerang.</p>\n                "
       }
     }
   },
@@ -722,8 +672,7 @@
       "ghoul": "पिशाच",
       "witch": "चुड़ैल",
       "soldier": "सैनिक",
-      "minotaur": "मिनोटौर",
-      "global_overview": "वैश्विक अवलोकन"
+      "minotaur": "मिनोटौर"
     },
     "sections": {
       "intro": {
@@ -732,7 +681,7 @@
       },
       "setup_phase": {
         "title": "तैयारी चरण",
-        "content": "\n                    <p>खेल शुरू होने से पहले, खिलाड़ियों को अपनी सेना तैनात करनी होगी। इसके 5 चरण हैं:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">1. देवी</h3><p>इसे अपने पक्ष के <span class=\"highlight\">सबसे दूर के किनारे</span> पर रखना चाहिए।</p></li>\n                        <li><h3 class=\"accent\">2. वीर</h3><p>देवी से <span class=\"highlight\">4 से 6 छलांग</span> की दूरी पर।</p></li>\n                        <li><h3 class=\"accent\">3. गोलेम</h3><p>देवी के पास (1-2 छलांग) रक्षा कवच के रूप में।</p></li>\n                        <li><h3 class=\"accent\">4. रंगों का घेरा</h3><p><span class=\"accent\">चुड़ैलें</span> 4 अलग-अलग रंगों पर वितरित की जाती हैं।</p></li>\n                        <li><h3 class=\"accent\">5. पैदल सेना</h3><p><span class=\"accent\">पिशाच</span> और <span class=\"accent\">सायरन</span> बाकी रणनीतिक स्थानों को भरते हैं।</p></li>\n                    </ol>\n                "
+        "content": "\n                    <p>खेल शुरू होने से पहले, खिलाड़ियों को अपनी सेना तैनात करनी होगी। इसके 5 चरण हैं:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">देवी</h3><p>इसे अपने पक्ष के <span class=\"highlight\">सबसे दूर के किनारे</span> पर रखना चाहिए।</p></li>\n                        <li><h3 class=\"accent\">वीर</h3><p>देवी से <span class=\"highlight\">4 से 6 छलांग</span> की दूरी पर।</p></li>\n                        <li><h3 class=\"accent\">गोलेम</h3><p>देवी के पास (1-2 छलांग) रक्षा कवच के रूप में।</p></li>\n                        <li><h3 class=\"accent\">रंगों का घेरा</h3><p><span class=\"accent\">चुड़ैलें</span> 4 अलग-अलग रंगों पर वितरित की जाती हैं।</p></li>\n                        <li><h3 class=\"accent\">पैदल सेना</h3><p><span class=\"accent\">पिशाच</span> और <span class=\"accent\">सायरन</span> बाकी रणनीतिक स्थानों को भरते हैं।</p></li>\n                    </ol>\n                "
       },
       "board": {
         "title": "बोर्ड और संरचना",
@@ -773,10 +722,6 @@
       "witch": {
         "title": "चुड़ैल",
         "content": "\n                    <div class=\"card\">\n                        <h3>प्रकार: <span class=\"accent\">कूदने वाला</span></h3>\n                        <p>कूदने की सीमा: <span class=\"highlight\">4</span>। इसे अपने शुरुआती रंग पर ही उतरना होगा।</p>\n                    </div>\n                "
-      },
-      "global_overview": {
-        "title": "वैश्विक अवलोकन",
-        "content": "\n                    <p>तैयारी पूरी हुई। देवी सुरक्षित है और वीर आक्रमण के लिए तैयार हैं।</p>\n                "
       }
     }
   },
@@ -793,8 +738,7 @@
       "ghoul": "பூதம்",
       "witch": "சூனியக்காரி",
       "soldier": "போர்வீரன்",
-      "minotaur": "மினோட்டார்",
-      "global_overview": "உலகளாவிய கண்ணோட்டம்"
+      "minotaur": "மினோட்டார்"
     },
     "sections": {
       "intro": {
@@ -803,7 +747,7 @@
       },
       "setup_phase": {
         "title": "அமைப்பு கட்டம்",
-        "content": "\n                    <p>விளையாட்டு தொடங்கும் முன், வீரர்கள் தங்கள் படைகளை நிலைநிறுத்த வேண்டும். இது 5 படிகளில் செய்யப்படுகிறது:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">1. தெய்வம்</h3><p>உங்கள் பக்கத்தின் <span class=\"highlight\">தொலைதூர விளிம்பில்</span> வைக்கப்பட வேண்டும்.</p></li>\n                        <li><h3 class=\"accent\">2. வீரர்கள்</h3><p>தெய்வத்திலிருந்து <span class=\"highlight\">4 முதல் 6 குதித்தல்</span> தொலைவில்.</p></li>\n                        <li><h3 class=\"accent\">3. கோலெம்கள்</h3><p>தெய்வத்திற்கு அருகில் பாதுகாப்பு கவசமாக.</p></li>\n                        <li><h3 class=\"accent\">4. வண்ண வளையம்</h3><p><span class=\"accent\">சூனியக்காரிகள்</span> 4 வெவ்வேறு வண்ணங்களில் விநியோகிக்கப்படுகிறார்கள்.</p></li>\n                        <li><h3 class=\"accent\">5. காலாட்படை</h3><p><span class=\"accent\">பூதங்கள்</span> மற்றும் <span class=\"accent\">சைரன்கள்</span> மீதமுள்ள இடங்களை நிரப்புகின்றன.</p></li>\n                    </ol>\n                "
+        "content": "\n                    <p>விளையாட்டு தொடங்கும் முன், வீரர்கள் தங்கள் படைகளை நிலைநிறுத்த வேண்டும். இது 5 படிகளில் செய்யப்படுகிறது:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">தெய்வம்</h3><p>உங்கள் பக்கத்தின் <span class=\"highlight\">தொலைதூர விளிம்பில்</span> வைக்கப்பட வேண்டும்.</p></li>\n                        <li><h3 class=\"accent\">வீரர்கள்</h3><p>தெய்வத்திலிருந்து <span class=\"highlight\">4 முதல் 6 குதித்தல்</span> தொலைவில்.</p></li>\n                        <li><h3 class=\"accent\">கோலெம்கள்</h3><p>தெய்வத்திற்கு அருகில் பாதுகாப்பு கவசமாக.</p></li>\n                        <li><h3 class=\"accent\">வண்ண வளையம்</h3><p><span class=\"accent\">சூனியக்காரிகள்</span> 4 வெவ்வேறு வண்ணங்களில் விநியோகிக்கப்படுகிறார்கள்.</p></li>\n                        <li><h3 class=\"accent\">காலாட்படை</h3><p><span class=\"accent\">பூதங்கள்</span> மற்றும் <span class=\"accent\">சைரன்கள்</span> மீதமுள்ள இடங்களை நிரப்புகின்றன.</p></li>\n                    </ol>\n                "
       },
       "board": {
         "title": "பலகை மற்றும் இடவியல்",
@@ -844,10 +788,6 @@
       "witch": {
         "title": "சூனியக்காரி",
         "content": "\n                    <div class=\"card\">\n                        <h3>வகை: <span class=\"accent\">குதிப்பவர்</span></h3>\n                        <p>குதித்தல் வரம்பு: <span class=\"highlight\">4</span>.</p>\n                    </div>\n                "
-      },
-      "global_overview": {
-        "title": "உலகளாவிய கண்ணோட்டம்",
-        "content": "\n                    <p>அமைப்பு முடிந்தது. தெய்வம் பாதுகாக்கப்படுகிறது, வீரர்கள் தாக்குதலுக்குத் தயார்.</p>\n                "
       }
     }
   },
@@ -864,8 +804,7 @@
       "ghoul": "الغول",
       "witch": "الساحرة",
       "soldier": "الجندي",
-      "minotaur": "المينوتور",
-      "global_overview": "نظرة عامة"
+      "minotaur": "المينوتور"
     },
     "sections": {
       "intro": {
@@ -874,7 +813,7 @@
       },
       "setup_phase": {
         "title": "مرحلة الإعداد",
-        "content": "\n                    <p>قبل بدء اللعب، يجب على اللاعبين توزيع قواتهم. يتم الإعداد في 5 خطوات:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">1. الإلهة</h3><p>يجب وضعها على <span class=\"highlight\">الحافة البعيدة</span> من جانبك.</p></li>\n                        <li><h3 class=\"accent\">2. الأبطال</h3><p>على الحواف، على بعد <span class=\"highlight\">4 إلى 6 قفزات</span> من الإلهة.</p></li>\n                        <li><h3 class=\"accent\">3. الغولم</h3><p>دروع دفاعية بالقرب من الإلهة (1-2 قفزة).</p></li>\n                        <li><h3 class=\"accent\">4. الحلقة اللونية</h3><p>يتم توزيع <span class=\"accent\">الساحرات</span> على 4 ألوان مختلفة.</p></li>\n                        <li><h3 class=\"accent\">5. نشر المشاة</h3><p><span class=\"accent\">الغيلان</span> و <span class=\"accent\">السيرين</span> تشغل المواقع التكتيكية المتبقية.</p></li>\n                    </ol>\n                "
+        "content": "\n                    <p>قبل بدء اللعب، يجب على اللاعبين توزيع قواتهم. يتم الإعداد في 5 خطوات:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">الإلهة</h3><p>يجب وضعها على <span class=\"highlight\">الحافة البعيدة</span> من جانبك.</p></li>\n                        <li><h3 class=\"accent\">الأبطال</h3><p>على الحواف، على بعد <span class=\"highlight\">4 إلى 6 قفزات</span> من الإلهة.</p></li>\n                        <li><h3 class=\"accent\">الغولم</h3><p>دروع دفاعية بالقرب من الإلهة (1-2 قفزة).</p></li>\n                        <li><h3 class=\"accent\">الحلقة اللونية</h3><p>يتم توزيع <span class=\"accent\">الساحرات</span> على 4 ألوان مختلفة.</p></li>\n                        <li><h3 class=\"accent\">نشر المشاة</h3><p><span class=\"accent\">الغيلان</span> و <span class=\"accent\">السيرين</span> تشغل المواقع التكتيكية المتبقية.</p></li>\n                    </ol>\n                "
       },
       "board": {
         "title": "اللوحة والتضاريس",
@@ -915,10 +854,6 @@
       "witch": {
         "title": "الساحرة",
         "content": "\n                    <div class=\"card\">\n                        <h3>النوع: <span class=\"accent\">قافزة</span></h3>\n                        <p>مدى القفز: <span class=\"highlight\">4</span>.</p>\n                    </div>\n                "
-      },
-      "global_overview": {
-        "title": "نظرة عامة",
-        "content": "\n                    <p>اكتمل الإعداد. الإلهات محمية، والأبطال مستعدون للهجوم.</p>\n                "
       }
     }
   },
@@ -935,8 +870,7 @@
       "ghoul": "غول",
       "witch": "جادوگرنی",
       "soldier": "سپاہی",
-      "minotaur": "مینوتور",
-      "global_overview": "مجموعی جائزہ"
+      "minotaur": "مینوتور"
     },
     "sections": {
       "intro": {
@@ -945,7 +879,7 @@
       },
       "setup_phase": {
         "title": "تیاری کا مرحلہ",
-        "content": "\n                    <p>کھیل شروع ہونے سے پہلے، کھلاڑیوں کو اپنی فوج تعینات کرنی ہوگی۔ اس کے 5 مراحل ہیں:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">1. دیوی</h3><p>اسے اپنے حصے کے <span class=\"highlight\">دور ترین کنارے</span> پر رکھنا چاہیے۔</p></li>\n                        <li><h3 class=\"accent\">2. ہیرو</h3><p>دیوی سے <span class=\"highlight\">4 سے 6 چھلانگوں</span> کے فاصلے پر۔</p></li>\n                        <li><h3 class=\"accent\">3. گولم</h3><p>دیوی کے قریب دفاعی ڈھال کے طور پر۔</p></li>\n                        <li><h3 class=\"accent\">4. رنگوں کا گھیرا</h3><p><span class=\"accent\">جادوگرنیاں</span> 4 مختلف رنگوں پر تقسیم کی جاتی ہیں۔</p></li>\n                        <li><h3 class=\"accent\">5. پیادہ فوج</h3><p><span class=\"accent\">غول</span> اور <span class=\"accent\">سائرن</span> باقی جگہوں کو بھرتے ہیں۔</p></li>\n                    </ol>\n                "
+        "content": "\n                    <p>کھیل شروع ہونے سے پہلے، کھلاڑیوں کو اپنی فوج تعینات کرنی ہوگی۔ اس کے 5 مراحل ہیں:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">دیوی</h3><p>اسے اپنے حصے کے <span class=\"highlight\">دور ترین کنارے</span> پر رکھنا چاہیے۔</p></li>\n                        <li><h3 class=\"accent\">ہیرو</h3><p>دیوی سے <span class=\"highlight\">4 سے 6 چھلانگوں</span> کے فاصلے پر۔</p></li>\n                        <li><h3 class=\"accent\">گولم</h3><p>دیوی کے قریب دفاعی ڈھال کے طور پر۔</p></li>\n                        <li><h3 class=\"accent\">رنگوں کا گھیرا</h3><p><span class=\"accent\">جادوگرنیاں</span> 4 مختلف رنگوں پر تقسیم کی جاتی ہیں۔</p></li>\n                        <li><h3 class=\"accent\">پیادہ فوج</h3><p><span class=\"accent\">غول</span> اور <span class=\"accent\">سائرن</span> باقی جگہوں کو بھرتے ہیں۔</p></li>\n                    </ol>\n                "
       },
       "board": {
         "title": "بورڈ اور ساخت",
@@ -986,10 +920,6 @@
       "witch": {
         "title": "جادوگرنی",
         "content": "\n                    <div class=\"card\">\n                        <h3>قسم: <span class=\"accent\">چھلانگ لگانے والا</span></h3>\n                        <p>حد: <span class=\"highlight\">4</span>۔</p>\n                    </div>\n                "
-      },
-      "global_overview": {
-        "title": "مجموعی جائزہ",
-        "content": "\n                    <p>تیاری مکمل ہوئی۔ دیویاں محفوظ ہیں اور ہیرو حملے کے لیے تیار ہیں۔</p>\n                "
       }
     }
   },
@@ -1006,8 +936,7 @@
       "ghoul": "O Carniçal",
       "witch": "A Bruxa",
       "soldier": "O Soldado",
-      "minotaur": "O Minotaur",
-      "global_overview": "Visão Geral"
+      "minotaur": "O Minotaur"
     },
     "sections": {
       "intro": {
@@ -1016,7 +945,7 @@
       },
       "setup_phase": {
         "title": "Fase de Preparação",
-        "content": "\n                    <p>Antes do início do jogo, os jogadores devem posicionar as suas forças. O posicionamento segue 5 passos:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">1. A Deusa</h3><p>Deve ser colocada na <span class=\"highlight\">borda distante</span> do seu lado.</p></li>\n                        <li><h3 class=\"accent\">2. Os Heróis</h3><p>Colocados nas bordas, entre <span class=\"highlight\">4 a 6 saltos</span> de distância da Deusa.</p></li>\n                        <li><h3 class=\"accent\">3. Os Minotaurs</h3><p>Escudos defensivos perto da Deusa (1-2 saltos).</p></li>\n                        <li><h3 class=\"accent\">4. O Anel Cromático</h3><p>As <span class=\"accent\">Bruxas</span> são distribuídas por 4 cores diferentes.</p></li>\n                        <li><h3 class=\"accent\">5. Destacamento de Infantaria</h3><p><span class=\"accent\">Carniçais</span> e <span class=\"accent\">Sereias</span> ocupam as restantes posições.</p></li>\n                    </ol>\n                "
+        "content": "\n                    <p>Antes do início do jogo, os jogadores devem posicionar as suas forças. O posicionamento segue 5 passos:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">A Deusa</h3><p>Deve ser colocada na <span class=\"highlight\">borda distante</span> do seu lado.</p></li>\n                        <li><h3 class=\"accent\">Os Heróis</h3><p>Colocados nas bordas, entre <span class=\"highlight\">4 a 6 saltos</span> de distância da Deusa.</p></li>\n                        <li><h3 class=\"accent\">Os Minotaurs</h3><p>Escudos defensivos perto da Deusa (1-2 saltos).</p></li>\n                        <li><h3 class=\"accent\">O Anel Cromático</h3><p>As <span class=\"accent\">Bruxas</span> são distribuídas por 4 cores diferentes.</p></li>\n                        <li><h3 class=\"accent\">Destacamento de Infantaria</h3><p><span class=\"accent\">Carniçais</span> e <span class=\"accent\">Sereias</span> ocupam as restantes posições.</p></li>\n                    </ol>\n                "
       },
       "board": {
         "title": "Tabuleiro e Topologia",
@@ -1057,10 +986,6 @@
       "witch": {
         "title": "A Bruxa",
         "content": "\n                    <div class=\"card\">\n                        <h3>Tipo: <span class=\"accent\">Saltadora</span></h3>\n                        <p>Alcance de Salto: <span class=\"highlight\">4</span>.</p>\n                    </div>\n                "
-      },
-      "global_overview": {
-        "title": "Visão Geral",
-        "content": "\n                    <p>Preparação concluída. As Deusas estão protegidas e os heróis prontos para o ataque.</p>\n                "
       }
     }
   },
@@ -1077,8 +1002,7 @@
       "ghoul": "Гуль",
       "witch": "Ведьма",
       "soldier": "Солдат",
-      "minotaur": "Минотавр",
-      "global_overview": "Общий обзор"
+      "minotaur": "Минотавр"
     },
     "sections": {
       "intro": {
@@ -1087,7 +1011,7 @@
       },
       "setup_phase": {
         "title": "Фаза расстановки",
-        "content": "\n                    <p>Перед началом игры игроки должны расставить свои силы. Расстановка проходит в 5 этапов:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">1. Богиня</h3><p>Должна быть размещена на <span class=\"highlight\">дальнем краю</span> вашего поля.</p></li>\n                        <li><h3 class=\"accent\">2. Герои</h3><p>Размещаются по краям, в <span class=\"highlight\">4-6 прыжках</span> от Богини.</p></li>\n                        <li><h3 class=\"accent\">3. Големы</h3><p>Защитные щиты рядом с Богиней (1-2 прыжка).</p></li>\n                        <li><h3 class=\"accent\">4. Хроматическое кольцо</h3><p><span class=\"accent\">Ведьмы</span> распределяются по 4 разным цветам.</p></li>\n                        <li><h3 class=\"accent\">5. Развертывание пехоты</h3><p><span class=\"accent\">Гули</span> и <span class=\"accent\">Сирены</span> занимают оставшиеся позиции.</p></li>\n                    </ol>\n                "
+        "content": "\n                    <p>Перед началом игры игроки должны расставить свои силы. Расстановка проходит в 5 этапов:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">Богиня</h3><p>Должна быть размещена на <span class=\"highlight\">дальнем краю</span> вашего поля.</p></li>\n                        <li><h3 class=\"accent\">Герои</h3><p>Размещаются по краям, в <span class=\"highlight\">4-6 прыжках</span> от Богини.</p></li>\n                        <li><h3 class=\"accent\">Големы</h3><p>Защитные щиты рядом с Богиней (1-2 прыжка).</p></li>\n                        <li><h3 class=\"accent\">Хроматическое кольцо</h3><p><span class=\"accent\">Ведьмы</span> распределяются по 4 разным цветам.</p></li>\n                        <li><h3 class=\"accent\">Развертывание пехоты</h3><p><span class=\"accent\">Гули</span> и <span class=\"accent\">Сирены</span> занимают оставшиеся позиции.</p></li>\n                    </ol>\n                "
       },
       "board": {
         "title": "Поле и топология",
@@ -1128,10 +1052,6 @@
       "witch": {
         "title": "Ведьма",
         "content": "\n                    <div class=\"card\">\n                        <h3>Тип: <span class=\"accent\">Прыгун</span></h3>\n                        <p>Дальность прыжка: <span class=\"highlight\">4</span>.</p>\n                    </div>\n                "
-      },
-      "global_overview": {
-        "title": "Общий обзор",
-        "content": "\n                    <p>Расстановка завершена. Богини под защитой, герои готовы к бою.</p>\n                "
       }
     }
   },
@@ -1148,8 +1068,7 @@
       "ghoul": "পিশাচ",
       "witch": "ডাইনি",
       "soldier": "সৈনিক",
-      "minotaur": "মিনোটর",
-      "global_overview": "সার্বিক চিত্র"
+      "minotaur": "মিনোটর"
     },
     "sections": {
       "intro": {
@@ -1158,7 +1077,7 @@
       },
       "setup_phase": {
         "title": "প্রস্তুতি পর্ব",
-        "content": "\n                    <p>খেলা শুরুর আগে খেলোয়াড়দের তাদের বাহিনী মোতায়েন করতে হবে। এটি ৫টি ধাপে করা হয়:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">১. দেবী</h3><p>আপনার পক্ষের <span class=\"highlight\">সবচেয়ে দূরের প্রান্তে</span> রাখতে হবে।</p></li>\n                        <li><h3 class=\"accent\">২. বীর</h3><p>দেবী থেকে <span class=\"highlight\">৪ থেকে ৬ লাফ</span> দূরত্বে।</p></li>\n                        <li><h3 class=\"accent\">৩. গোলেম</h3><p>দেবীর কাছে প্রতিরক্ষা ঢাল হিসেবে (১-২ লাফ)।</p></li>\n                        <li><h3 class=\"accent\">৪. রঙের বৃত্ত</h3><p><span class=\"accent\">ডাইনিরা</span> ৪টি ভিন্ন রঙে বিন্যস্ত থাকে।</p></li>\n                        <li><h3 class=\"accent\">৫. পদাতিক বাহিনী</h3><p><span class=\"accent\">পিশাচ</span> এবং <span class=\"accent\">সাইরেন</span> বাকি কৌশলগত স্থানগুলি পূরণ করে।</p></li>\n                    </ol>\n                "
+        "content": "\n                    <p>খেলা শুরুর আগে খেলোয়াড়দের তাদের বাহিনী মোতায়েন করতে হবে। এটি ৫টি ধাপে করা হয়:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">দেবী</h3><p>আপনার পক্ষের <span class=\"highlight\">সবচেয়ে দূরের প্রান্তে</span> রাখতে হবে।</p></li>\n                        <li><h3 class=\"accent\">বীর</h3><p>দেবী থেকে <span class=\"highlight\">৪ থেকে ৬ লাফ</span> দূরত্বে।</p></li>\n                        <li><h3 class=\"accent\">গোলেম</h3><p>দেবীর কাছে প্রতিরক্ষা ঢাল হিসেবে (১-২ লাফ)।</p></li>\n                        <li><h3 class=\"accent\">রঙের বৃত্ত</h3><p><span class=\"accent\">ডাইনিরা</span> ৪টি ভিন্ন রঙে বিন্যস্ত থাকে।</p></li>\n                        <li><h3 class=\"accent\">পদাতিক বাহিনী</h3><p><span class=\"accent\">পিশাচ</span> এবং <span class=\"accent\">সাইরেন</span> বাকি কৌশলগত স্থানগুলি পূরণ করে।</p></li>\n                    </ol>\n                "
       },
       "board": {
         "title": "বোর্ড এবং টপোলজি",
@@ -1199,10 +1118,6 @@
       "witch": {
         "title": "ডাইনি",
         "content": "\n                    <div class=\"card\">\n                        <h3>ধরণ: <span class=\"accent\">লাফ প্রদানকারী</span></h3>\n                        <p>লাফানোর সীমা: <span class=\"highlight\">৪</span>।</p>\n                    </div>\n                "
-      },
-      "global_overview": {
-        "title": "সার্বিক চিত্র",
-        "content": "\n                    <p>প্রস্তুতি সম্পন্ন। দেবী সুরক্ষিত এবং বীররা আক্রমণের জন্য প্রস্তুত।</p>\n                "
       }
     }
   },
@@ -1219,8 +1134,7 @@
       "ghoul": "Ghoul",
       "witch": "Penyihir",
       "soldier": "Prajurit",
-      "minotaur": "Minotaur",
-      "global_overview": "Ikhtisar Global"
+      "minotaur": "Minotaur"
     },
     "sections": {
       "intro": {
@@ -1229,7 +1143,7 @@
       },
       "setup_phase": {
         "title": "Fase Persiapan",
-        "content": "\n                    <p>Sebelum fase permainan dimulai, pemain harus mengatur kekuatan mereka. Penempatan dilakukan dalam 5 langkah:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">1. Dewi</h3><p>Harus ditempatkan di <span class=\"highlight\">tepi jauh</span> sisi Anda.</p></li>\n                        <li><h3 class=\"accent\">2. Pahlawan</h3><p>Ditempatkan di tepi, berjarak <span class=\"highlight\">4 hingga 6 lompatan</span> dari Dewi.</p></li>\n                        <li><h3 class=\"accent\">3. Minotaur</h3><p>Sebagai perisai pertahanan di dekat Dewi (1-2 lompatan).</p></li>\n                        <li><h3 class=\"accent\">4. Lingkaran Kromatik</h3><p><span class=\"accent\">Penyihir</span> didistribusikan pada 4 warna yang berbeda.</p></li>\n                        <li><h3 class=\"accent\">5. Pengerahan Infanteri</h3><p><span class=\"accent\">Ghoul</span> dan <span class=\"accent\">Siren</span> menempati posisi taktis yang tersisa.</p></li>\n                    </ol>\n                "
+        "content": "\n                    <p>Sebelum fase permainan dimulai, pemain harus mengatur kekuatan mereka. Penempatan dilakukan dalam 5 langkah:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">Dewi</h3><p>Harus ditempatkan di <span class=\"highlight\">tepi jauh</span> sisi Anda.</p></li>\n                        <li><h3 class=\"accent\">Pahlawan</h3><p>Ditempatkan di tepi, berjarak <span class=\"highlight\">4 hingga 6 lompatan</span> dari Dewi.</p></li>\n                        <li><h3 class=\"accent\">Minotaur</h3><p>Sebagai perisai pertahanan di dekat Dewi (1-2 lompatan).</p></li>\n                        <li><h3 class=\"accent\">Lingkaran Kromatik</h3><p><span class=\"accent\">Penyihir</span> didistribusikan pada 4 warna yang berbeda.</p></li>\n                        <li><h3 class=\"accent\">Pengerahan Infanteri</h3><p><span class=\"accent\">Ghoul</span> dan <span class=\"accent\">Siren</span> menempati posisi taktis yang tersisa.</p></li>\n                    </ol>\n                "
       },
       "board": {
         "title": "Papan & Topologi",
@@ -1270,10 +1184,6 @@
       "witch": {
         "title": "Penyihir",
         "content": "\n                    <div class=\"card\">\n                        <h3>Tipe: <span class=\"accent\">Pelompat</span></h3>\n                        <p>Jangkauan Lompat: <span class=\"highlight\">4</span>.</p>\n                    </div>\n                "
-      },
-      "global_overview": {
-        "title": "Ikhtisar Global",
-        "content": "\n                    <p>Persiapan selesai. Dewi dilindungi dan pahlawan siap menyerang.</p>\n                "
       }
     }
   }

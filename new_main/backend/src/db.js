@@ -24,6 +24,28 @@ const initDb = async () => {
     }
 };
 
+// ─── Helper: Inject UTC Date strings ─────────────────────────────────────────
+
+function formatUtcString(ts) {
+    if (!ts || typeof ts !== 'number') return null;
+    const d = new Date(ts);
+    const pad = n => n.toString().padStart(2, '0');
+    return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+}
+
+function injectUtcFields(data) {
+    if (!data || typeof data !== 'object') return data;
+    const res = { ...data };
+    for (const key of Object.keys(res)) {
+        if (key.endsWith('_at') || key === 'timestamp' || key === 'subscriber_until') {
+            if (typeof res[key] === 'number') {
+                res[key + '_utc'] = formatUtcString(res[key]);
+            }
+        }
+    }
+    return res;
+}
+
 // ─── Helper: get Firestore db or null ────────────────────────────────────────
 
 function _db() {
@@ -44,6 +66,38 @@ async function getUser(id) {
     } catch (e) {
         logger.error('DB', `getUser(${id}) failed:`, e.message);
         return null;
+    }
+}
+
+/**
+ * Search users by username prefix (case-sensitive, Firestore range query).
+ * Also returns bots. Limit 50.
+ */
+async function searchUsers(query, limit = 50) {
+    if (!_isUp()) return [];
+    try {
+        const db = _db();
+        let snap;
+        if (query && query.trim()) {
+            const q = query.trim();
+            // Firestore range query for prefix match on username
+            snap = await db.collection('users')
+                .where('username', '>=', q)
+                .where('username', '<=', q + '\uf8ff')
+                .limit(limit)
+                .get();
+        } else {
+            snap = await db.collection('users')
+                .orderBy('username')
+                .limit(limit)
+                .get();
+        }
+        return snap.docs
+            .filter(d => d.id !== '_meta')
+            .map(d => d.data());
+    } catch (e) {
+        logger.error('DB', `searchUsers(${query}) failed:`, e.message);
+        return [];
     }
 }
 
@@ -94,7 +148,7 @@ async function createUser(data) {
     const usernameSnap = await db.collection('users').where('username', '==', data.username).limit(1).get();
     if (!usernameSnap.empty) throw new Error('Username or Email already registered');
 
-    await db.collection('users').doc(data.id).set({
+    const userData = {
         id: data.id,
         username: data.username,
         email: data.email,
@@ -116,29 +170,36 @@ async function createUser(data) {
         rated_games_played_today: data.rated_games_played_today || 0,
         bot_games_played_today: data.bot_games_played_today || 0,
         timezone: data.timezone || 'UTC',
+        // Per-category ratings
+        rating_bullet: data.rating_bullet || 1500,
+        rating_blitz: data.rating_blitz || 1500,
+        rating_rapid: data.rating_rapid || 1500,
+        rating_classical: data.rating_classical || 1500,
         created_at: data.created_at || Date.now(),
-    });
+    };
+    await db.collection('users').doc(data.id).set(injectUtcFields(userData));
 }
 
 async function updateUser(id, fields) {
     if (!_isUp()) return;
     try {
-        await _db().collection('users').doc(id).update(fields);
+        await _db().collection('users').doc(id).update(injectUtcFields(fields));
     } catch (e) {
         logger.error('DB', `updateUser(${id}) failed:`, e.message);
     }
 }
 
-async function updateUserRating(id, rating, ratingDeviation, ratingVolatility) {
+async function updateUserRating(id, rating, ratingDeviation, ratingVolatility, ratingField = 'rating') {
     if (!_isUp()) return;
     try {
         await _db().collection('users').doc(id).update({
-            rating,
+            [ratingField]: rating,
             rating_deviation: ratingDeviation,
             rating_volatility: ratingVolatility,
+            rating: rating, // Keep 'rating' in sync with the last category played
         });
     } catch (e) {
-        logger.error('DB', `updateUserRating(${id}) failed:`, e.message);
+        logger.error('DB', `updateUserRating(${id}, ${ratingField}) failed:`, e.message);
     }
 }
 
@@ -171,7 +232,7 @@ async function upsertProfile(userId, data) {
     if (!_isUp()) return;
     try {
         await _db().collection('profiles').doc(userId).set(
-            { user_id: userId, ...data },
+            injectUtcFields({ user_id: userId, ...data }),
             { merge: true }
         );
     } catch (e) {
@@ -184,7 +245,7 @@ async function upsertProfile(userId, data) {
 async function saveGame(data) {
     if (!_isUp()) return;
     try {
-        await _db().collection('games').doc(data.game_id).set({
+        const gameData = {
             game_id: data.game_id,
             timestamp: data.timestamp,
             white_name: data.white_name,
@@ -196,15 +257,14 @@ async function saveGame(data) {
             moves: typeof data.moves === 'string' ? data.moves : JSON.stringify(data.moves || []),
             tournament_id: data.tournament_id || null,
             tournament_round_info: data.tournament_round_info || null,
-            // Extra fields for tournament games (unified schema)
             white_score: data.white_score || 0,
             black_score: data.black_score || 0,
             started_at: data.started_at || data.timestamp,
             completed_at: data.completed_at || null,
-            // Time control (stored as separate fields for portability)
             time_control_minutes: data.time_control_minutes || null,
             time_control_increment: data.time_control_increment || null,
-        });
+        };
+        await _db().collection('games').doc(data.game_id).set(injectUtcFields(gameData));
         logger.debug('DB', `Game ${data.game_id} saved.`);
     } catch (e) {
         logger.error('DB', `saveGame(${data.game_id}) failed:`, e.message);
@@ -214,7 +274,7 @@ async function saveGame(data) {
 async function updateGame(gameId, fields) {
     if (!_isUp()) return;
     try {
-        await _db().collection('games').doc(gameId).update(fields);
+        await _db().collection('games').doc(gameId).update(injectUtcFields(fields));
     } catch (e) {
         logger.error('DB', `updateGame(${gameId}) failed:`, e.message);
     }
@@ -283,7 +343,7 @@ async function countGames() {
 async function saveTournament(data) {
     if (!_isUp()) return;
     try {
-        await _db().collection('tournaments').doc(data.id).set(data);
+        await _db().collection('tournaments').doc(data.id).set(injectUtcFields(data));
     } catch (e) {
         logger.error('DB', `saveTournament(${data.id}) failed:`, e.message);
     }
@@ -303,7 +363,7 @@ async function getTournament(id) {
 async function updateTournament(id, fields) {
     if (!_isUp()) return;
     try {
-        await _db().collection('tournaments').doc(id).update(fields);
+        await _db().collection('tournaments').doc(id).update(injectUtcFields(fields));
     } catch (e) {
         logger.error('DB', `updateTournament(${id}) failed:`, e.message);
     }
@@ -335,7 +395,7 @@ async function addParticipant(data) {
     if (!_isUp()) return;
     try {
         const docId = _participantDocId(data.tournament_id, data.user_id);
-        await _db().collection('tournament_participants').doc(docId).set(data);
+        await _db().collection('tournament_participants').doc(docId).set(injectUtcFields(data));
     } catch (e) {
         logger.error('DB', `addParticipant(${data.tournament_id}, ${data.user_id}) failed:`, e.message);
     }
@@ -391,12 +451,63 @@ async function getGamesForTournament(tournamentId) {
     }
 }
 
-// ─── Jobs ───────────────────────────────────────────────────────────────────
+async function getGamesByPlayer(userId, side, limit = 50) {
+    if (!_isUp()) return [];
+    try {
+        const field = side === 'white' ? 'white_player_id' : 'black_player_id';
+        const snap = await _db().collection('games')
+            .where(field, '==', userId)
+            .orderBy('timestamp', 'desc')
+            .limit(limit)
+            .get();
+        return snap.docs
+            .filter(d => d.id !== '_meta')
+            .map(d => d.data());
+    } catch (e) {
+        logger.error('DB', `getGamesByPlayer(${userId}, ${side}) failed:`, e.message);
+        return [];
+    }
+}
+
+// ─── Cron Jobs (persistent schedule table, one row per job type) ────────────
+
+async function getCronJobs() {
+    if (!_isUp()) return [];
+    try {
+        const snap = await _db().collection('cron_jobs').orderBy('type').get();
+        return snap.docs
+            .filter(d => d.id !== '_meta')
+            .map(d => d.data());
+    } catch (e) {
+        logger.error('DB', `getCronJobs failed:`, e.message);
+        return [];
+    }
+}
+
+async function upsertCronJob(data) {
+    if (!_isUp()) return;
+    try {
+        await _db().collection('cron_jobs').doc(data.type).set(injectUtcFields(data), { merge: true });
+    } catch (e) {
+        logger.error('DB', `upsertCronJob(${data.type}) failed:`, e.message);
+    }
+}
+
+async function updateCronJob(type, fields) {
+    if (!_isUp()) return;
+    try {
+        await _db().collection('cron_jobs').doc(type).update(injectUtcFields(fields));
+    } catch (e) {
+        logger.error('DB', `updateCronJob(${type}) failed:`, e.message);
+    }
+}
+
+// ─── Jobs (run-log: one record per execution) ────────────────────────────────
 
 async function saveJob(data) {
     if (!_isUp()) return;
     try {
-        await _db().collection('jobs').doc(data.id).set(data);
+        await _db().collection('jobs').doc(data.id).set(injectUtcFields(data));
     } catch (e) {
         logger.error('DB', `saveJob(${data.id}) failed:`, e.message);
     }
@@ -416,7 +527,7 @@ async function getJob(id) {
 async function updateJob(id, fields) {
     if (!_isUp()) return;
     try {
-        await _db().collection('jobs').doc(id).update(fields);
+        await _db().collection('jobs').doc(id).update(injectUtcFields(fields));
     } catch (e) {
         logger.error('DB', `updateJob(${id}) failed:`, e.message);
     }
@@ -486,7 +597,7 @@ async function deleteJobsByIds(jobIds) {
 async function saveSubscription(data) {
     if (!_isUp()) return;
     try {
-        await _db().collection('subscriptions').doc(data.id).set(data);
+        await _db().collection('subscriptions').doc(data.id).set(injectUtcFields(data));
     } catch (e) {
         logger.error('DB', `saveSubscription(${data.id}) failed:`, e.message);
     }
@@ -546,6 +657,54 @@ async function resetDailyLimits() {
     }
 }
 
+// ─── Leaderboards ───────────────────────────────────────────────────────────
+
+async function getTopPlayers(ratingField, limit = 50) {
+    if (!_isUp()) return [];
+    try {
+        const snap = await _db().collection('users')
+            .orderBy(ratingField, 'desc')
+            .limit(limit * 2) // Fetch extra to account for potential bots
+            .get();
+            
+        return snap.docs
+            .map(d => ({ ...d.data(), id: d.id }))
+            .slice(0, limit)
+            .map(u => ({
+                id: u.id,
+                username: u.username,
+                rating: Math.round(u[ratingField] || 1500),
+                is_bot: u.role === 'bot',
+            }));
+    } catch (e) {
+        logger.error('DB', `getTopPlayers(${ratingField}) failed:`, e.message);
+        return [];
+    }
+}
+
+async function saveLeaderboard(id, data) {
+    if (!_isUp()) return;
+    try {
+        await _db().collection('leaderboards').doc(id).set(injectUtcFields({
+            ...data,
+            updated_at: Date.now(),
+        }));
+    } catch (e) {
+        logger.error('DB', `saveLeaderboard(${id}) failed:`, e.message);
+    }
+}
+
+async function getLeaderboard(id) {
+    if (!_isUp()) return null;
+    try {
+        const doc = await _db().collection('leaderboards').doc(id).get();
+        return doc.exists ? doc.data() : null;
+    } catch (e) {
+        logger.error('DB', `getLeaderboard(${id}) failed:`, e.message);
+        return null;
+    }
+}
+
 // ─── Exports ────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -554,6 +713,7 @@ module.exports = {
 
     // Users
     getUser,
+    searchUsers,
     getUserByEmailOrUsername,
     getUserByVerificationToken,
     createUser,
@@ -571,6 +731,8 @@ module.exports = {
     getGamesOlderThan,
     deleteGamesByIds,
     countGames,
+    getGamesForTournament,
+    getGamesByPlayer,
 
     // Tournaments
     saveTournament,
@@ -582,7 +744,7 @@ module.exports = {
     addParticipant,
     removeParticipant,
     updateParticipantScore,
-    // Jobs
+    // Jobs (run-log)
     saveJob,
     getJob,
     updateJob,
@@ -590,8 +752,16 @@ module.exports = {
     getJobsOlderThan,
     getAllJobs,
     deleteJobsByIds,
+    // Cron Jobs (schedule table)
+    getCronJobs,
+    upsertCronJob,
+    updateCronJob,
     // Subscriptions
     saveSubscription,
     getSubscriptionsForUser,
     resetDailyLimits,
+    // Leaderboards
+    getTopPlayers,
+    saveLeaderboard,
+    getLeaderboard,
 };

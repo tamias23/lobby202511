@@ -6,8 +6,9 @@ const { Server } = require('socket.io');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const geoip = require('geoip-lite');
 const { v4: uuidv4 } = require('uuid');
-const { initDb, isDbUp, getUser, getUserByEmailOrUsername, getUserByVerificationToken, createUser, updateUser, updateUserRating } = require('./db');
+const { initDb, isDbUp, getUser, getUserByEmailOrUsername, getUserByVerificationToken, createUser, updateUser, updateUserRating, getLeaderboard } = require('./db');
 // startGameOffload removed, replaced by jobs system
 const tournamentManager = require('./tournament/tournamentManager');
 const { generateGuestId } = require('./utils/auth');
@@ -17,6 +18,7 @@ const { sendVerificationEmail } = require('./utils/email');
 const valkeyAdapter = require('./valkeyAdapter');
 const valkeySync = require('./valkeySync');
 const permissions = require('./utils/permissions');
+const { getRatingField } = require('./utils/ratingUtils');
 let getLegalMovesNapi, applyMoveNapi, initGameStateNapi, randomizeSetupNapi, endTurnSetupNapi, passTurnPlayingNapi, endHeroeBonusNapi, selectColorNapi, replayToStepNapi;
 
 try {
@@ -77,13 +79,13 @@ const saveMatchResult = async (gameId, timestamp, whiteName, blackName, whitePla
 };
 
 // Helper to fetch a player's rating from the database
-async function fetchUserRating(userId) {
+async function fetchUserRating(userId, ratingField = 'rating') {
     if (!userId || (userId.startsWith('guest_') && !userId.startsWith('bot_'))) return null;
     // Allow bots to have ratings fetched
     try {
         const user = await getUser(userId);
         if (!user) return null;
-        return Math.round(Number(user.rating) || 1500);
+        return Math.round(Number(user[ratingField]) || 1500);
     } catch (_) {
         return null;
     }
@@ -736,6 +738,7 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json()); // Enable JSON parsing
+app.enable('trust proxy'); // Trust Cloud Run/Load Balancer for req.ip
 
 // Redirect www → apex domain (canonical URL)
 app.use((req, res, next) => {
@@ -969,6 +972,66 @@ app.post('/api/tutorial/apply', (req, res) => {
 });
 
 
+// GET /api/tutorial/random-setup
+// Runs the real Rust randomize-setup logic for both sides and returns:
+//   - placements: ordered [{id, type, pos}] — the sequence to animate (white/black interleaved)
+//   - initialReturned: all pieces that start in 'returned' state [{id, type, side}]
+app.get('/api/tutorial/random-setup', (req, res) => {
+    try {
+        // Load the default 'board' from disk (same board used by the tutorial /api/boards/board)
+        const boardFile = boardPool.find(f => f === 'board.json' || f.replace('.json', '') === 'board');
+        if (!boardFile) return res.status(503).json({ error: 'Default board not found in board pool' });
+        const boardData = JSON.parse(fs.readFileSync(path.join(BOARDS_PATH, boardFile), 'utf8'));
+
+        // Get initial piece state (all returned)
+        const initResponse = initGameStateNapi({
+            boardJson: JSON.stringify(boardData),
+            randomSetup: false,
+        });
+        let pieces = JSON.parse(initResponse.piecesJson);
+        const initialReturned = pieces
+            .filter(p => p.position === 'returned')
+            .map(p => ({ id: p.id, type: p.type, side: p.side }));
+
+        // Run randomize for one side; return newly placed pieces + next state
+        function runSide(currentPieces, turn, setupStep) {
+            const result = randomizeSetupNapi({
+                boardJson: JSON.stringify(boardData),
+                piecesJson: JSON.stringify(currentPieces),
+                turn, phase: 'Setup', setupStep,
+                colorChosen: {}, colorsEverChosen: [],
+                turnCounter: 0, isNewTurn: true, movesThisTurn: 0,
+                lockedSequencePiece: undefined, heroeTakeCounter: 0,
+                side: turn,
+            });
+            const newPieces = JSON.parse(result.piecesJson);
+            const placed = newPieces
+                .filter(np => {
+                    const old = currentPieces.find(op => op.id === np.id);
+                    return old?.position === 'returned' && np.position !== 'returned';
+                })
+                .map(np => ({ id: np.id, type: np.type, pos: np.position }));
+            return { newPieces, placed, nextSetupStep: result.setupStep };
+        }
+
+        const whiteResult = runSide(pieces, 'white', 0);
+        const blackResult = runSide(whiteResult.newPieces, 'black', whiteResult.nextSetupStep);
+
+        // Interleave [w0, b0, w1, b1, ...] for visual balance
+        const wp = whiteResult.placed;
+        const bp = blackResult.placed;
+        const placements = [];
+        for (let i = 0; i < Math.max(wp.length, bp.length); i++) {
+            if (i < wp.length) placements.push(wp[i]);
+            if (i < bp.length) placements.push(bp[i]);
+        }
+
+        res.json({ placements, initialReturned });
+    } catch (e) {
+        logger.error('Tutorial', '/api/tutorial/random-setup error:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
 
 // GET /api/boards/random/:count — return N random boards with polygon data for SVG preview
 app.get('/api/boards/random/:count', (req, res) => {
@@ -1032,15 +1095,17 @@ app.post('/register', async (req, res) => {
     try {
         const userId = uuidv4();
         const passwordHash = await bcrypt.hash(password, 10);
-        // NOTE: Email verification is currently DISABLED.
-        // is_verified is set to 0 (unverified) but the login gate is bypassed below.
-        // To re-enable: generate verificationToken, insert with token/expires, call sendVerificationEmail.
+        
+        // Determine timezone by IP
+        const geo = geoip.lookup(req.ip);
+        const timezone = geo?.timezone || 'UTC';
 
         await createUser({
             id: userId,
             username,
             email,
             password_hash: passwordHash,
+            timezone,
             role: 'registered',
             is_verified: 0,
         });
@@ -1101,6 +1166,14 @@ app.post('/login', async (req, res) => {
         const isMatch = await bcrypt.compare(password, user.password_hash);
         if (!isMatch) {
             return res.status(401).json({ error: 'Invalid email or password' });
+        }
+
+        // Determine timezone by IP and update if it changed or was unset
+        const geo = geoip.lookup(req.ip);
+        if (geo && geo.timezone && geo.timezone !== user.timezone) {
+            await updateUser(user.id, { timezone: geo.timezone });
+            user.timezone = geo.timezone;
+            logger.info('User', `User ${user.id} timezone auto-updated to ${geo.timezone} (from IP ${req.ip})`);
         }
 
         // Sign JWT
@@ -1165,7 +1238,172 @@ app.get('/api/me', async (req, res) => {
     }
 });
 
-// --- HELPERS ---
+// GET /api/me/games — last 50 games for the authenticated user
+app.get('/api/me/games', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'No token provided' });
+    }
+    const token = authHeader.slice(7);
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+        const userId = decoded.id;
+
+        const db = require('./db');
+        const { getCategoryLabel } = require('./utils/ratingUtils');
+
+        // Fetch games where user is white or black (up to 50 each side, dedup later)
+        const [asWhite, asBlack] = await Promise.all([
+            db.getGamesByPlayer(userId, 'white', 50),
+            db.getGamesByPlayer(userId, 'black', 50),
+        ]);
+
+        // Merge, dedup by game_id, sort by timestamp desc, take top 50
+        const seen = new Set();
+        const merged = [];
+        for (const g of [...asWhite, ...asBlack]) {
+            if (!seen.has(g.game_id)) {
+                seen.add(g.game_id);
+                merged.push(g);
+            }
+        }
+        merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        const games = merged.slice(0, 50);
+
+        const result = games.map(g => {
+            const isWhite = g.white_player_id === userId;
+            const opponent = isWhite ? g.black_name  : g.white_name;
+            const myResult = g.winner === 'draw'
+                ? 'Draw'
+                : (isWhite ? (g.winner === 'white' ? 'Win' : 'Loss')
+                           : (g.winner === 'black' ? 'Win' : 'Loss'));
+
+            const minutes   = g.time_control_minutes || 0;
+            const increment = g.time_control_increment || 0;
+            const category  = getCategoryLabel(minutes, increment);
+
+            return {
+                game_id:        g.game_id,
+                opponent:       opponent || '?',
+                my_color:       isWhite ? 'white' : 'black',
+                result:         myResult,
+                winner:         g.winner,
+                minutes,
+                increment,
+                time_control:   `${minutes}+${increment}`,
+                category,
+                timestamp:      g.timestamp || g.started_at || null,
+                timestamp_utc:  g.timestamp_utc || g.started_at_utc || null,
+                tournament_id:  g.tournament_id || null,
+                moves:          g.moves || null,
+            };
+        });
+
+        res.json({ games: result });
+    } catch (err) {
+        if (err.name === 'TokenExpiredError') return res.status(401).json({ error: 'Token expired' });
+        if (err.name === 'JsonWebTokenError')  return res.status(401).json({ error: 'Invalid token' });
+        logger.error('API', 'GET /api/me/games error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ── Admin middleware ──────────────────────────────────────────────────────────
+function requireAdmin(req, res, next) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'No token provided' });
+    }
+    try {
+        const decoded = jwt.verify(authHeader.slice(7), JWT_SECRET, { algorithms: ['HS256'] });
+        if (decoded.role !== 'admin' && !decoded.isAdmin) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+        req.adminUser = decoded;
+        next();
+    } catch (err) {
+        return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+}
+
+// GET /api/admin/users?q=<prefix>  — search users (admin only)
+app.get('/api/admin/users', requireAdmin, async (req, res) => {
+    try {
+        const db = require('./db');
+        const q = req.query.q || '';
+        const users = await db.searchUsers(q, 50);
+        res.json({ users: users.map(u => ({
+            id:         u.id,
+            username:   u.username,
+            email:      u.email,
+            role:       u.role,
+            rating:     Math.round(u.rating || 1500),
+            rating_bullet:    Math.round(u.rating_bullet    || 1500),
+            rating_blitz:     Math.round(u.rating_blitz     || 1500),
+            rating_rapid:     Math.round(u.rating_rapid     || 1500),
+            rating_classical: Math.round(u.rating_classical || 1500),
+            is_subscriber:    u.is_subscriber === 1,
+            is_admin:         u.is_admin === 1,
+            created_at_utc:   u.created_at_utc || null,
+            rated_games_played_today: u.rated_games_played_today || 0,
+            bot_games_played_today:   u.bot_games_played_today   || 0,
+        }))});
+    } catch (err) {
+        logger.error('API', 'GET /api/admin/users error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// GET /api/admin/users/:id/games  — last 50 games for any user (admin only)
+app.get('/api/admin/users/:id/games', requireAdmin, async (req, res) => {
+    try {
+        const db = require('./db');
+        const { getCategoryLabel } = require('./utils/ratingUtils');
+        const userId = req.params.id;
+
+        const [asWhite, asBlack] = await Promise.all([
+            db.getGamesByPlayer(userId, 'white', 50),
+            db.getGamesByPlayer(userId, 'black', 50),
+        ]);
+
+        const seen = new Set();
+        const merged = [];
+        for (const g of [...asWhite, ...asBlack]) {
+            if (!seen.has(g.game_id)) { seen.add(g.game_id); merged.push(g); }
+        }
+        merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+        const result = merged.slice(0, 50).map(g => {
+            const isWhite  = g.white_player_id === userId;
+            const opponent = isWhite ? g.black_name : g.white_name;
+            const myResult = g.winner === 'draw' ? 'Draw'
+                : (isWhite ? (g.winner === 'white' ? 'Win' : 'Loss')
+                           : (g.winner === 'black' ? 'Win' : 'Loss'));
+            const minutes   = g.time_control_minutes  || 0;
+            const increment = g.time_control_increment || 0;
+            return {
+                game_id:       g.game_id,
+                opponent:      opponent || '?',
+                my_color:      isWhite ? 'white' : 'black',
+                result:        myResult,
+                winner:        g.winner,
+                minutes, increment,
+                time_control:  `${minutes}+${increment}`,
+                category:      getCategoryLabel(minutes, increment),
+                timestamp:     g.timestamp || g.started_at || null,
+                timestamp_utc: g.timestamp_utc || g.started_at_utc || null,
+                tournament_id: g.tournament_id || null,
+                moves:         g.moves || null,
+            };
+        });
+
+        res.json({ games: result });
+    } catch (err) {
+        logger.error('API', 'GET /api/admin/users/:id/games error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 function getRandomHash() {
     return crypto.randomBytes(16).toString('hex');
 }
@@ -1286,6 +1524,20 @@ setInterval(() => {
 // ── Stale-game thresholds ────────────────────────────────────────────────────
 // Applied regardless of game phase — the clock starts at game creation.
 const BOTH_ABSENT_LIMIT_MS = 60_000;  // 60s with both players gone → purge
+
+// --- Leaderboard API ---
+app.get('/leaderboard', async (req, res) => {
+    try {
+        const leaderboard = await getLeaderboard('global');
+        if (!leaderboard) {
+            return res.json({ error: 'Leaderboard not yet built. Please try again in a few minutes.' });
+        }
+        res.json(leaderboard);
+    } catch (err) {
+        logger.error('API', 'Leaderboard fetch error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 const STALE_GAME_LIMIT_MS  = 60_000;  // 60s with no socket in room at all → purge
 
 // Helper: true when no socket currently subscribes to this game's room
@@ -1556,9 +1808,10 @@ async function createGame(whitePlayer, blackPlayer, timeControl, boardId, tourna
     };
 
     // Fetch ratings from DB (non-blocking for guests)
+    const ratingField = getRatingField(timeControl);
     const [wRating, bRating] = await Promise.all([
-        fetchUserRating(whitePlayer.userId),
-        fetchUserRating(blackPlayer.userId),
+        fetchUserRating(whitePlayer.userId, ratingField),
+        fetchUserRating(blackPlayer.userId, ratingField),
     ]);
     gameData.whiteRating = wRating;
     gameData.blackRating = bRating;
@@ -2855,35 +3108,24 @@ io.on('connection', (socket) => {
     });
     // --- ADMIN ACTIONS ---
     socket.on('admin:get_jobs', async (data, callback) => {
-        if (typeof data === 'function') {
-            callback = data;
-        }
+        if (typeof data === 'function') callback = data;
         if (!permissions.canUser(socket.userRole, 'manage_jobs')) {
             return callback({ success: false, error: 'Forbidden' });
         }
         const db = require('./db');
-        const jobs = await db.getAllJobs();
-        callback({ success: true, data: jobs });
+        const [cronJobs, runLog] = await Promise.all([db.getCronJobs(), db.getAllJobs()]);
+        callback({ success: true, cron_jobs: cronJobs, run_log: runLog });
     });
 
-    socket.on('admin:create_job', async (data, callback) => {
+    socket.on('admin:update_cron_job', async (data, callback) => {
         if (!permissions.canUser(socket.userRole, 'manage_jobs')) {
             return callback({ success: false, error: 'Forbidden' });
         }
         const db = require('./db');
-        const { v4: uuidv4 } = require('uuid');
-        
-        const newJob = {
-            id: uuidv4(),
-            type: data.type,
-            status: 'SCHEDULED',
-            scheduled_at: data.scheduled_at, // unix timestamp ms
-            created_at: Date.now(),
-            payload: data.payload || {},
-            error: null
-        };
-        await db.saveJob(newJob);
-        callback({ success: true, data: newJob });
+        const { type, ...fields } = data;
+        if (!type) return callback({ success: false, error: 'Missing type' });
+        await db.updateCronJob(type, fields);
+        callback({ success: true });
     });
 
     socket.on('admin:delete_job', async ({ jobId }, callback) => {
@@ -2895,14 +3137,10 @@ io.on('connection', (socket) => {
         callback({ success: true });
     });
 
-    socket.on('update_timezone', async ({ timezone }) => {
-        if (!socket.userId || socket.userRole === 'guest') return;
-        try {
-            await updateUser(socket.userId, { timezone });
-            logger.info('User', `User ${socket.userId} updated timezone to ${timezone}`);
-        } catch (e) {
-            logger.error('User', 'Failed to update timezone:', e);
-        }
+    // ── Client latency ping ───────────────────────────────────────────────────
+    // The client sends this every ~10s and measures the round-trip time.
+    socket.on('client:ping', (data, callback) => {
+        if (typeof callback === 'function') callback({ ts: data?.ts });
     });
 
     socket.on('disconnect', () => {

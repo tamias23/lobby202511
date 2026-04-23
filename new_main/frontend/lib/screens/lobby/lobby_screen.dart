@@ -232,6 +232,8 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
               _HeaderButton(label: 'Analysis', onTap: () => context.go('/analysis')),
               const SizedBox(width: 6),
               _HeaderButton(label: 'Tutorial', onTap: () => context.go('/tutorial')),
+              const SizedBox(width: 6),
+              _HeaderButton(label: 'Leaderboard', onTap: () => context.go('/leaderboard')),
               const Spacer(),
               if (auth == null) ...[
                 _HeaderButton(label: 'Login',    onTap: () => context.go('/login')),
@@ -639,7 +641,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
       emptyLine2: 'Create one!',
       children: lobby.openTournaments.map((t) => _TournamentOpenCard(
         username: t.name ?? formatLabel[t.format] ?? t.format,
-        tc: 'by ${t.creatorUsername ?? 'System'} · ${t.timeControl['minutes']}+${t.timeControl['increment']}',
+        tc: 'by ${t.creatorUsername ?? 'System'} · ${t.timeControl['category'] ?? ''} ${t.timeControl['minutes']}+${t.timeControl['increment']}',
         info: '${t.currentCount ?? 0}/${t.maxParticipants ?? '?'}${t.hasPassword ? ' 🔒' : ''}',
         onView: () => context.go('/tournament/${t.id}'),
         onJoin: auth == null ? null : () => ref.read(lobbyProvider.notifier).joinTournament(t.id),
@@ -659,7 +661,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
       children: lobby.activeTournaments.map((t) => _ActiveGameCard(
         whiteName: t.name ?? formatLabel[t.format] ?? t.format,
         blackName: 'by ${t.creatorUsername ?? 'System'}',
-        tc: '${t.timeControl['minutes']}+${t.timeControl['increment']}',
+        tc: '${t.timeControl['category'] ?? ''} ${t.timeControl['minutes']}+${t.timeControl['increment']}',
         moveCount: t.currentCount ?? 0,
         hasDisconnect: false,
         isMe: false,

@@ -233,7 +233,7 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
         Wrap(spacing: 12, runSpacing: 6, children: [
           _StatusBadge(status),
           if (tc != null)
-            _MetaChip('${tc['minutes']}+${tc['increment']}'),
+            _MetaChip('${tc['category'] ?? ''} ${tc['minutes']}+${tc['increment']}'),
           if (!isArena)
             _MetaChip('Round $curRound/$maxRounds'),
           if (isArena && t['arenaEndAt'] != null && isActive)
@@ -288,7 +288,7 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
         _DetailItem('Start Plan', launchStr),
         _DetailItem('Board',      t['boardId'] as String? ?? 'Random'),
         _DetailItem('Rating',     '${t['ratingMin'] ?? 0} – ${t['ratingMax'] ?? 5000}'),
-        if (tc != null) _DetailItem('Time Control', '${tc['minutes']}+${tc['increment']}'),
+        if (tc != null) _DetailItem('Time Control', '${tc['category'] ?? ''} ${tc['minutes']}+${tc['increment']}'),
       ]),
     );
   }

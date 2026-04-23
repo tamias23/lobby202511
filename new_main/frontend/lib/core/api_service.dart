@@ -89,4 +89,33 @@ class ApiService {
     final response = await _dio.post('/api/tutorial/apply', data: payload);
     return response.data as Map<String, dynamic>;
   }
+
+  // ── Leaderboard ─────────────────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> getLeaderboard() async {
+    final response = await _dio.get('/leaderboard');
+    return response.data as Map<String, dynamic>;
+  }
+
+  // ── Game History ─────────────────────────────────────────────────────────────
+
+  Future<List<dynamic>> getMyGames() async {
+    final response = await _dio.get('/api/me/games');
+    final data = response.data as Map<String, dynamic>;
+    return data['games'] as List<dynamic>? ?? [];
+  }
+
+  // ── Admin ────────────────────────────────────────────────────────────────────
+
+  Future<List<dynamic>> getAdminUsers({String query = ''}) async {
+    final response = await _dio.get('/api/admin/users', queryParameters: {'q': query});
+    final data = response.data as Map<String, dynamic>;
+    return data['users'] as List<dynamic>? ?? [];
+  }
+
+  Future<List<dynamic>> getAdminUserGames(String userId) async {
+    final response = await _dio.get('/api/admin/users/$userId/games');
+    final data = response.data as Map<String, dynamic>;
+    return data['games'] as List<dynamic>? ?? [];
+  }
 }

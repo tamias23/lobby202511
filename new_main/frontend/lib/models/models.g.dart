@@ -17,6 +17,10 @@ _AppUser _$AppUserFromJson(Map<String, dynamic> json) => _AppUser(
   ratedGamesPlayedToday: (json['ratedGamesPlayedToday'] as num?)?.toInt() ?? 0,
   botGamesPlayedToday: (json['botGamesPlayedToday'] as num?)?.toInt() ?? 0,
   timezone: json['timezone'] as String? ?? 'UTC',
+  ratingBullet: (json['rating_bullet'] as num?)?.toDouble(),
+  ratingBlitz: (json['rating_blitz'] as num?)?.toDouble(),
+  ratingRapid: (json['rating_rapid'] as num?)?.toDouble(),
+  ratingClassical: (json['rating_classical'] as num?)?.toDouble(),
 );
 
 Map<String, dynamic> _$AppUserToJson(_AppUser instance) => <String, dynamic>{
@@ -30,6 +34,10 @@ Map<String, dynamic> _$AppUserToJson(_AppUser instance) => <String, dynamic>{
   'ratedGamesPlayedToday': instance.ratedGamesPlayedToday,
   'botGamesPlayedToday': instance.botGamesPlayedToday,
   'timezone': instance.timezone,
+  'rating_bullet': instance.ratingBullet,
+  'rating_blitz': instance.ratingBlitz,
+  'rating_rapid': instance.ratingRapid,
+  'rating_classical': instance.ratingClassical,
 };
 
 _Piece _$PieceFromJson(Map<String, dynamic> json) => _Piece(

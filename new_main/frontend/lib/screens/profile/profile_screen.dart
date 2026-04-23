@@ -6,8 +6,8 @@ import '../../widgets/glass_panel.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/ping_provider.dart';
 import '../../core/socket_service.dart';
-import 'package:timezone/timezone.dart' as tz;
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -18,23 +18,12 @@ class ProfileScreen extends ConsumerStatefulWidget {
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final _socket = SocketService.instance;
-  late String _selectedTimezone;
 
   @override
   void initState() {
     super.initState();
-    // Initialize with current user timezone or UTC
-    final auth = ref.read(authProvider).value;
-    _selectedTimezone = auth?.timezone ?? 'UTC';
   }
 
-  void _updateTimezone(String newZone) {
-    setState(() => _selectedTimezone = newZone);
-    _socket.emit('update_timezone', {'timezone': newZone});
-    // Optimistically update the authProvider state
-    final notifier = ref.read(authProvider.notifier);
-    notifier.updateTimezone(newZone);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,9 +34,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       return const Scaffold(body: Center(child: Text('Not logged in')));
     }
 
-    // List of available timezones from the initialized database
-    final availableZones = tz.timeZoneDatabase.locations.keys.toList()..sort();
-    if (!availableZones.contains('UTC')) availableZones.insert(0, 'UTC');
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -76,6 +62,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   Text(auth.username, style: GoogleFonts.outfit(fontSize: 28, fontWeight: FontWeight.bold, color: DTheme.textMainDark)),
                   
                   const SizedBox(height: 8),
+                  // Role badge
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                     decoration: BoxDecoration(
@@ -87,43 +74,54 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: auth.role == 'guest' ? Colors.grey : DTheme.success),
                     ),
                   ),
+
+                  const SizedBox(height: 12),
+                  _PingIndicator(),
                   
                   const SizedBox(height: 32),
                   
-                  // Stats Grid
+                  // Category Ratings
+                  const SizedBox(height: 24),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _buildStat('Bullet', auth.ratingBullet?.toStringAsFixed(0) ?? '1500', small: true),
+                            _buildStat('Blitz', auth.ratingBlitz?.toStringAsFixed(0) ?? '1500', small: true),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _buildStat('Rapid', auth.ratingRapid?.toStringAsFixed(0) ?? '1500', small: true),
+                            _buildStat('Classical', auth.ratingClassical?.toStringAsFixed(0) ?? '1500', small: true),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 32),
+                  
+                  // Activity Stats
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      _buildStat('Rating', auth.rating?.toStringAsFixed(0) ?? 'N/A'),
+                      _buildStat('Last Rating', auth.rating?.toStringAsFixed(0) ?? 'N/A'),
                       _buildStat('Rated Today', auth.ratedGamesPlayedToday.toString()),
                       _buildStat('Bots Today', auth.botGamesPlayedToday.toString()),
                     ],
                   ),
-                  
-                  const SizedBox(height: 32),
-
-                  // Timezone Selector
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text('Timezone Preference', style: DTheme.bodyMuted),
-                  ),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    value: availableZones.contains(_selectedTimezone) ? _selectedTimezone : 'UTC',
-                    dropdownColor: DTheme.bgDark,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(
-                      filled: true,
-                      fillColor: Colors.black26,
-                      border: OutlineInputBorder(),
-                    ),
-                    items: availableZones.map((z) => DropdownMenuItem(value: z, child: Text(z))).toList(),
-                    onChanged: (v) {
-                      if (v != null) _updateTimezone(v);
-                    },
-                  ),
-                  
-                  const SizedBox(height: 32),
+                                    const SizedBox(height: 32),
                   
                   // Subscription Section
                   if (auth.role != 'guest' && !auth.isSubscriber)
@@ -181,6 +179,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   const SizedBox(height: 32),
                   
                   // Actions
+                  if (auth.role != 'guest') ...[ 
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: DTheme.accent.withValues(alpha: 0.15),
+                          foregroundColor: DTheme.accent,
+                          side: BorderSide(color: DTheme.accent.withValues(alpha: 0.5)),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        icon: const Icon(Icons.history),
+                        label: const Text('My Games'),
+                        onPressed: () => context.push('/profile/games'),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   if (auth.role == 'admin') ...[
                     SizedBox(
                       width: double.infinity,
@@ -194,6 +210,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         icon: const Icon(Icons.admin_panel_settings),
                         label: const Text('Admin Dashboard'),
                         onPressed: () => context.push('/admin/jobs'),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white.withValues(alpha: 0.07),
+                          foregroundColor: Colors.white70,
+                          side: const BorderSide(color: Colors.white24),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        icon: const Icon(Icons.manage_accounts),
+                        label: const Text('User Management'),
+                        onPressed: () => context.push('/admin/users'),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -225,13 +257,95 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  Widget _buildStat(String label, String value) {
+  Widget _buildStat(String label, String value, {bool small = false}) {
     return Column(
       children: [
-        Text(value, style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold, color: DTheme.textMainDark)),
+        Text(value, style: GoogleFonts.outfit(
+          fontSize: small ? 18 : 24, 
+          fontWeight: FontWeight.bold, 
+          color: small ? DTheme.accent : DTheme.textMainDark,
+        )),
         const SizedBox(height: 4),
-        Text(label, style: GoogleFonts.outfit(fontSize: 14, color: DTheme.textMutedDark)),
+        Text(label, style: GoogleFonts.outfit(fontSize: small ? 12 : 14, color: DTheme.textMutedDark)),
       ],
+    );
+  }
+}
+
+// ── Ping indicator ────────────────────────────────────────────────────────────
+
+class _PingIndicator extends ConsumerWidget {
+  const _PingIndicator();
+
+  Color _pingColor(int ms) {
+    if (ms < 80)  return const Color(0xFF00E676);  // green
+    if (ms < 200) return Colors.amber;
+    return Colors.redAccent;
+  }
+
+  String _pingLabel(int ms) {
+    if (ms < 80)  return 'Excellent';
+    if (ms < 200) return 'Good';
+    return 'Poor';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final latency = ref.watch(latencyProvider);
+
+    return latency.when(
+      loading: () => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 10, height: 10,
+            child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white38),
+          ),
+          const SizedBox(width: 6),
+          Text('Measuring ping…',
+              style: GoogleFonts.outfit(fontSize: 12, color: Colors.white38)),
+        ],
+      ),
+      error: (_, __) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.wifi_off, size: 14, color: Colors.redAccent),
+          const SizedBox(width: 6),
+          Text('No connection', style: GoogleFonts.outfit(fontSize: 12, color: Colors.redAccent)),
+        ],
+      ),
+      data: (ms) {
+        final color = _pingColor(ms);
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 400),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: color.withValues(alpha: 0.35)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Signal bars icon
+              Icon(Icons.network_ping, size: 14, color: color),
+              const SizedBox(width: 6),
+              Text(
+                '$ms ms',
+                style: GoogleFonts.outfit(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: color),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '· ${_pingLabel(ms)}',
+                style: GoogleFonts.outfit(fontSize: 12, color: color.withValues(alpha: 0.75)),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

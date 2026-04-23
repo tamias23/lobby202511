@@ -17,7 +17,6 @@ import '../game/painters/piece_svg.dart';
 const _sections = [
   'intro', 'setup_phase', 'board', 'turn',
   'goddess', 'heroe', 'mage', 'siren', 'ghoul', 'witch', 'soldier', 'minotaur',
-  'global_overview',
 ];
 
 const _languages = [
@@ -40,52 +39,14 @@ typedef _P = Map<String, String>;
 List<_P> _p(List<List<String>> raw) =>
     raw.map((r) => {'id': r[0], 'type': r[1], 'pos': r[2]}).toList();
 
-/// Preset for the setup_phase: returns the INITIAL_SETUP_PIECES list.
-final _initialSetup = _p([
-  ['white_goddess_0',  'goddess',  'oH1'],
-  ['white_heroe_0',    'heroe',    'bH2'],
-  ['white_heroe_1',    'heroe',    'gE2'],
-  ['white_minotaur_0', 'minotaur', 'bF1'],
-  ['white_minotaur_1', 'minotaur', 'gI1'],
-  ['black_goddess_0',  'goddess',  'oK1'],
-  ['black_heroe_0',    'heroe',    'yJ1'],
-  ['black_heroe_1',    'heroe',    'yE2'],
-  ['black_minotaur_0', 'minotaur', 'gI2'],
-  ['black_minotaur_1', 'minotaur', 'gE1'],
-]);
-
-List<_P> _fullBoard() {
-  final pieces = List<_P>.from(_initialSetup);
-  final extraPositions = [
-    'gC2','gK1','yE1','yJ2','yC2','yL1','oF1','oJ1','oE1','oK2',
-    'oN1','oB2','yF1','yH2','yF2','yH1','gK2','gC1','gG2','gH1',
-  ];
-  for (int i = 0; i < extraPositions.length; i++) {
-    final type = i % 2 == 0 ? 'ghoul' : 'siren';
-    final side = i < 10 ? 'white' : 'black';
-    pieces.add({'id': '${side}_${type}_$i', 'type': type, 'pos': extraPositions[i]});
-  }
-  pieces.addAll(_p([
-    ['white_witch_0', 'witch', 'gH2'],
-    ['white_witch_1', 'witch', 'gG1'],
-    ['black_witch_0', 'witch', 'yI1'],
-    ['black_witch_1', 'witch', 'yJ2'],
-    ['white_soldier_0', 'soldier', 'bF2'],
-    ['white_soldier_1', 'soldier', 'gH1'],
-    ['black_soldier_0', 'soldier', 'yI2'],
-    ['black_soldier_1', 'soldier', 'gJ1'],
-    ['white_mage_0', 'mage', 'oG1'],
-    ['black_mage_0', 'mage', 'oL1'],
-  ]));
-  return pieces;
-}
 
 final _sectionPieces = <String, List<_P>>{
   'intro': _p([
     ['white_goddess_0', 'goddess', 'oH1'],
     ['black_goddess_0', 'goddess', 'bF1'],
   ]),
-  'setup_phase': _initialSetup,
+  // setup_phase shows a valid position fetched from the backend at runtime
+  'setup_phase': [],
   'board': [],
   'turn': [],
   'goddess': _p([
@@ -166,11 +127,8 @@ final _sectionPieces = <String, List<_P>>{
   ]),
 };
 
-// global_overview uses the full board
-List<_P> _presetsFor(String section) {
-  if (section == 'global_overview') return _fullBoard();
-  return _sectionPieces[section] ?? [];
-}
+List<_P> _presetsFor(String section) =>
+    _sectionPieces[section] ?? [];
 
 // ── Lightweight HTML → Flutter renderer ───────────────────────────────────────
 
@@ -513,6 +471,9 @@ class _TutorialScreenState extends State<TutorialScreen> {
   Offset _boardCenter = const Offset(205, 217);
   double _boardWidth = 680;  // resizable — default 2× original 340
 
+  // Cached valid setup position (loaded once from backend on startup)
+  List<Map<String, String>> _cachedSetupPieces = [];
+
   @override
   void initState() {
     super.initState();
@@ -540,9 +501,30 @@ class _TutorialScreenState extends State<TutorialScreen> {
       final res = await http.get(Uri.parse('$base/api/boards/board'));
       if (!mounted || res.statusCode != 200) return;
       _parseBoard(jsonDecode(res.body) as Map<String, dynamic>);
+      _loadSetupPosition(); // fetch valid setup in background
       _resetPieces();
     } catch (e) {
       debugPrint('Tutorial: board fetch error: $e');
+    }
+  }
+
+  /// Fetch one valid end-of-setup position from the backend and store it.
+  /// When ready it updates the board display if we are on setup_phase.
+  Future<void> _loadSetupPosition() async {
+    try {
+      final base = AppConfig.apiUrl.isEmpty ? '' : AppConfig.apiUrl;
+      final res = await http.get(Uri.parse('$base/api/tutorial/random-setup'));
+      if (!mounted || res.statusCode != 200) return;
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      final pieces = (data['placements'] as List? ?? [])
+          .map((e) => Map<String, String>.from(e as Map))
+          .toList();
+      if (mounted) {
+        _cachedSetupPieces = pieces;
+        if (_section == 'setup_phase') _resetPieces();
+      }
+    } catch (e) {
+      debugPrint('Tutorial: setup position error: $e');
     }
   }
 
@@ -568,8 +550,17 @@ class _TutorialScreenState extends State<TutorialScreen> {
   }
 
   void _resetPieces() {
+    if (_section == 'setup_phase' && _cachedSetupPieces.isNotEmpty) {
+      setState(() {
+        _pieces   = List<Map<String, String>>.from(_cachedSetupPieces);
+        _selected = null;
+        _targets  = [];
+      });
+      return;
+    }
     setState(() {
-      _pieces  = List<Map<String, String>>.from(_presetsFor(_section).map((p) => Map<String, String>.from(p)));
+      _pieces  = List<Map<String, String>>.from(
+          _presetsFor(_section).map((p) => Map<String, String>.from(p)));
       _selected = null;
       _targets  = [];
     });

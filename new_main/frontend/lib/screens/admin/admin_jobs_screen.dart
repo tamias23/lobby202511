@@ -5,55 +5,110 @@ import 'package:go_router/go_router.dart';
 import '../../core/socket_service.dart';
 import '../../core/theme.dart';
 import '../../widgets/glass_panel.dart';
-import 'dart:convert';
-import 'package:timezone/timezone.dart' as tz;
 import '../../providers/auth_provider.dart';
 
-String _formatDate(int timestamp, String timezone) {
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+String _fmtTs(dynamic ts) {
+  if (ts == null || ts == 0) return '—';
   try {
-    final location = tz.getLocation(timezone);
-    final dt = tz.TZDateTime.fromMillisecondsSinceEpoch(location, timestamp);
-    return "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} "
-           "${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')} "
-           "${dt.timeZoneName}";
+    final dt = DateTime.fromMillisecondsSinceEpoch((ts as num).toInt(), isUtc: true);
+    return '${dt.year}-${dt.month.toString().padLeft(2,'0')}-${dt.day.toString().padLeft(2,'0')} '
+           '${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')} UTC';
   } catch (_) {
-    final dt = DateTime.fromMillisecondsSinceEpoch(timestamp, isUtc: true);
-    return "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} "
-           "${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')} UTC";
+    return '?';
   }
 }
 
-String _formatDateNoTz(DateTime d) {
-  return "${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}";
+String _cronLabel(Map<String,dynamic> job) {
+  final min = job['minute']?.toString() ?? '*';
+  final hr  = job['hour']?.toString()   ?? '*';
+  final wd  = job['weekday']?.toString() ?? '*';
+  return '$min $hr $wd';
 }
+
+String _cronHuman(Map<String,dynamic> job) {
+  final min = job['minute']?.toString() ?? '*';
+  final hr  = job['hour']?.toString()   ?? '*';
+  final wd  = job['weekday']?.toString() ?? '*';
+
+  // Step syntax: */N
+  if (min.startsWith('*/')) {
+    final step = min.substring(2);
+    return 'every ${step}min';
+  }
+
+  String time;
+  if (min == '*' && hr == '*') {
+    time = 'every minute';
+  } else if (min == '*') {
+    time = 'every hour';
+  } else if (hr == '*') {
+    time = 'every hour at :${min.padLeft(2, '0')}';
+  } else {
+    time = '${hr.padLeft(2, '0')}:${min.padLeft(2, '0')} UTC';
+  }
+
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  String day;
+  if (wd == '*') {
+    day = 'daily';
+  } else {
+    final idx = int.tryParse(wd);
+    day = 'on ${(idx != null && idx < days.length) ? days[idx] : wd}';
+  }
+
+  return '$time $day';
+}
+
+Color _statusColor(String? status) {
+  return switch (status) {
+    'DONE'    => DTheme.success,
+    'FAILED'  => Colors.red,
+    'RUNNING' => Colors.blue,
+    _         => Colors.orange,
+  };
+}
+
+// ── Screen ────────────────────────────────────────────────────────────────────
 
 class AdminJobsScreen extends ConsumerStatefulWidget {
   const AdminJobsScreen({super.key});
-
   @override
   ConsumerState<AdminJobsScreen> createState() => _AdminJobsScreenState();
 }
 
-class _AdminJobsScreenState extends ConsumerState<AdminJobsScreen> {
+class _AdminJobsScreenState extends ConsumerState<AdminJobsScreen>
+    with SingleTickerProviderStateMixin {
   final _socket = SocketService.instance;
-  List<Map<String, dynamic>> _jobs = [];
+  List<Map<String,dynamic>> _cronJobs = [];
+  List<Map<String,dynamic>> _runLog   = [];
   bool _loading = true;
+  late TabController _tabs;
 
   @override
   void initState() {
     super.initState();
-    _fetchJobs();
+    _tabs = TabController(length: 2, vsync: this);
+    _fetch();
   }
 
-  void _fetchJobs() {
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
+
+  void _fetch() {
     setState(() => _loading = true);
     _socket.emitWithAck('admin:get_jobs', {}, ack: (response) {
       if (!mounted) return;
-      final res = response as Map<String, dynamic>;
-      if (res['success'] == true && res['data'] != null) {
+      final res = response as Map<String,dynamic>;
+      if (res['success'] == true) {
         setState(() {
-          _jobs = List<Map<String, dynamic>>.from(res['data']);
-          _loading = false;
+          _cronJobs = List<Map<String,dynamic>>.from(res['cron_jobs'] ?? []);
+          _runLog   = List<Map<String,dynamic>>.from(res['run_log']   ?? []);
+          _loading  = false;
         });
       } else {
         setState(() => _loading = false);
@@ -62,43 +117,35 @@ class _AdminJobsScreenState extends ConsumerState<AdminJobsScreen> {
     });
   }
 
-  void _deleteJob(String jobId) {
-    _socket.emitWithAck('admin:delete_job', {'jobId': jobId}, ack: (response) {
+  void _deleteRunLog(String jobId) {
+    _socket.emitWithAck('admin:delete_job', {'jobId': jobId}, ack: (res) {
       if (!mounted) return;
-      final res = response as Map<String, dynamic>;
-      if (res['success'] == true) {
-        _fetchJobs();
-      } else {
-        _showError(res['error'] ?? 'Failed to delete job');
-      }
+      final r = res as Map<String,dynamic>;
+      if (r['success'] == true) _fetch();
+      else _showError(r['error'] ?? 'Delete failed');
     });
   }
 
   void _showError(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg, style: const TextStyle(color: Colors.white)), backgroundColor: Colors.red));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg, style: const TextStyle(color: Colors.white)),
+               backgroundColor: Colors.red));
   }
 
-  void _openCreateJobDialog() {
-    final auth = ref.read(authProvider).value;
-    final userTimezone = auth?.timezone ?? 'UTC';
-
+  void _openEditDialog(Map<String,dynamic> job) {
     showDialog(
       context: context,
-      builder: (context) => _CreateJobDialog(
-        timezone: userTimezone,
-        onJobCreated: (type, payload, scheduledAt) {
-          _socket.emitWithAck('admin:create_job', {
-            'type': type,
-            'payload': payload,
-            'scheduled_at': scheduledAt.millisecondsSinceEpoch,
-          }, ack: (response) {
+      builder: (_) => _EditCronDialog(
+        job: job,
+        onSave: (fields) {
+          _socket.emitWithAck('admin:update_cron_job', {
+            'type': job['type'],
+            ...fields,
+          }, ack: (res) {
             if (!mounted) return;
-            final res = response as Map<String, dynamic>;
-            if (res['success'] == true) {
-              _fetchJobs();
-            } else {
-              _showError(res['error'] ?? 'Failed to create job');
-            }
+            final r = res as Map<String,dynamic>;
+            if (r['success'] == true) _fetch();
+            else _showError(r['error'] ?? 'Update failed');
           });
         },
       ),
@@ -116,200 +163,241 @@ class _AdminJobsScreenState extends ConsumerState<AdminJobsScreen> {
           icon: const Icon(Icons.arrow_back, color: DTheme.textMainDark),
           onPressed: () => context.pop(),
         ),
-        title: Text('Admin Dashboard - Jobs', style: GoogleFonts.outfit(color: DTheme.textMainDark, fontWeight: FontWeight.bold)),
+        title: Text('Admin — Jobs',
+            style: GoogleFonts.outfit(color: DTheme.textMainDark, fontWeight: FontWeight.bold)),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: DTheme.textMainDark),
-            onPressed: _fetchJobs,
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(backgroundColor: DTheme.primary, foregroundColor: Colors.white),
-              onPressed: _openCreateJobDialog,
-              icon: const Icon(Icons.add),
-              label: const Text('New Job'),
-            ),
-          )
+          IconButton(icon: const Icon(Icons.refresh, color: DTheme.textMainDark), onPressed: _fetch),
         ],
+        bottom: TabBar(
+          controller: _tabs,
+          labelColor: DTheme.primary,
+          unselectedLabelColor: Colors.white54,
+          indicatorColor: DTheme.primary,
+          tabs: const [
+            Tab(text: 'Cron Schedule'),
+            Tab(text: 'Run Log'),
+          ],
+        ),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _jobs.isEmpty
-              ? Center(child: Text('No jobs found.', style: DTheme.bodyMuted))
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.all(16.0),
-                  child: GlassPanel(
-                    padding: const EdgeInsets.all(16),
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: DataTable(
-                        headingTextStyle: GoogleFonts.outfit(color: DTheme.textMainDark, fontWeight: FontWeight.bold),
-                        dataTextStyle: DTheme.body,
-                        columns: const [
-                          DataColumn(label: Text('Type')),
-                          DataColumn(label: Text('Status')),
-                          DataColumn(label: Text('Scheduled For')),
-                          DataColumn(label: Text('Payload')),
-                          DataColumn(label: Text('Actions')),
-                        ],
-                        rows: _jobs.map((job) {
-                          final auth = ref.watch(authProvider).value;
-                          final userTimezone = auth?.timezone ?? 'UTC';
-                          final timestamp = job['scheduled_at'] as int? ?? 0;
-                          final scheduledDate = DateTime.fromMillisecondsSinceEpoch(timestamp);
-                          final isPast = scheduledDate.isBefore(DateTime.now());
-                          final statusColor = job['status'] == 'DONE' ? DTheme.success : job['status'] == 'FAILED' ? Colors.red : job['status'] == 'RUNNING' ? Colors.blue : Colors.orange;
-                          
-                          return DataRow(
-                            cells: [
-                              DataCell(Text(job['type'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold))),
-                              DataCell(Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
-                                child: Text(job['status'] ?? 'UNKNOWN', style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.bold)),
-                              )),
-                              DataCell(Text('${_formatDate(timestamp, userTimezone)}${isPast && job['status'] == 'SCHEDULED' ? ' (Overdue)' : ''}')),
-                              DataCell(SizedBox(
-                                width: 200,
-                                child: Text(jsonEncode(job['payload'] ?? {}), overflow: TextOverflow.ellipsis),
-                              )),
-                              DataCell(
-                                IconButton(
-                                  icon: const Icon(Icons.delete, color: Colors.redAccent),
-                                  tooltip: 'Delete Job',
-                                  onPressed: () {
-                                    showDialog(
-                                      context: context,
-                                      builder: (_) => AlertDialog(
-                                        backgroundColor: DTheme.bgDark,
-                                        title: const Text('Delete Job?', style: TextStyle(color: Colors.white)),
-                                        content: const Text('This action cannot be undone.', style: TextStyle(color: Colors.white70)),
-                                        actions: [
-                                          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-                                          ElevatedButton(
-                                            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                                            onPressed: () {
-                                              Navigator.pop(context);
-                                              _deleteJob(job['id']);
-                                            },
-                                            child: const Text('Delete', style: TextStyle(color: Colors.white)),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ],
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                  ),
-                ),
+          : TabBarView(
+              controller: _tabs,
+              children: [
+                _buildCronTable(),
+                _buildRunLog(),
+              ],
+            ),
+    );
+  }
+
+  // ── Cron Schedule Tab ───────────────────────────────────────────────────────
+
+  Widget _buildCronTable() {
+    if (_cronJobs.isEmpty) {
+      return Center(child: Text('No cron jobs found.', style: DTheme.bodyMuted));
+    }
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: GlassPanel(
+        padding: const EdgeInsets.all(16),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            headingTextStyle: GoogleFonts.outfit(
+                color: DTheme.textMainDark, fontWeight: FontWeight.bold, fontSize: 13),
+            dataTextStyle: DTheme.body.copyWith(fontSize: 12),
+            columns: const [
+              DataColumn(label: Text('Job Type')),
+              DataColumn(label: Text('Description')),
+              DataColumn(label: Text('Schedule (min hr wd)')),
+              DataColumn(label: Text('Human Readable')),
+              DataColumn(label: Text('Enabled')),
+              DataColumn(label: Text('Last Run')),
+              DataColumn(label: Text('Last Status')),
+              DataColumn(label: Text('Edit')),
+            ],
+            rows: _cronJobs.map((job) {
+              final lastStatus = job['last_run_status'] as String?;
+              return DataRow(cells: [
+                DataCell(Text(job['type'] ?? '—',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'monospace'))),
+                DataCell(SizedBox(
+                    width: 200,
+                    child: Text(job['description'] ?? '—', overflow: TextOverflow.ellipsis))),
+                DataCell(Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(6)),
+                  child: Text(_cronLabel(job),
+                      style: const TextStyle(fontFamily: 'monospace', fontSize: 13, color: Colors.white)),
+                )),
+                DataCell(Text(_cronHuman(job), style: const TextStyle(color: Colors.white70))),
+                DataCell(Switch(
+                  value: job['enabled'] == true,
+                  activeColor: DTheme.success,
+                  onChanged: (v) {
+                    _socket.emitWithAck('admin:update_cron_job', {
+                      'type': job['type'],
+                      'enabled': v,
+                    }, ack: (res) {
+                      if (!mounted) return;
+                      if ((res as Map)['success'] == true) _fetch();
+                    });
+                  },
+                )),
+                DataCell(Text(_fmtTs(job['last_run_at']),
+                    style: const TextStyle(color: Colors.white54, fontSize: 11))),
+                DataCell(lastStatus == null
+                    ? const Text('—', style: TextStyle(color: Colors.white38))
+                    : Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                            color: _statusColor(lastStatus).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8)),
+                        child: Text(lastStatus,
+                            style: TextStyle(
+                                color: _statusColor(lastStatus),
+                                fontWeight: FontWeight.bold, fontSize: 11)))),
+                DataCell(IconButton(
+                  icon: const Icon(Icons.edit, color: Colors.white54, size: 18),
+                  tooltip: 'Edit schedule',
+                  onPressed: () => _openEditDialog(job),
+                )),
+              ]);
+            }).toList(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Run Log Tab ─────────────────────────────────────────────────────────────
+
+  Widget _buildRunLog() {
+    if (_runLog.isEmpty) {
+      return Center(child: Text('No run history yet.', style: DTheme.bodyMuted));
+    }
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: GlassPanel(
+        padding: const EdgeInsets.all(16),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            headingTextStyle: GoogleFonts.outfit(
+                color: DTheme.textMainDark, fontWeight: FontWeight.bold, fontSize: 13),
+            dataTextStyle: DTheme.body.copyWith(fontSize: 12),
+            columns: const [
+              DataColumn(label: Text('Type')),
+              DataColumn(label: Text('Status')),
+              DataColumn(label: Text('Started At')),
+              DataColumn(label: Text('Completed At')),
+              DataColumn(label: Text('Worker')),
+              DataColumn(label: Text('Error')),
+              DataColumn(label: Text('Delete')),
+            ],
+            rows: _runLog.map((job) {
+              final status = job['status'] as String?;
+              return DataRow(cells: [
+                DataCell(Text(job['type'] ?? '—',
+                    style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold))),
+                DataCell(Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                      color: _statusColor(status).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8)),
+                  child: Text(status ?? '—',
+                      style: TextStyle(color: _statusColor(status),
+                          fontWeight: FontWeight.bold, fontSize: 11)),
+                )),
+                DataCell(Text(_fmtTs(job['started_at']),
+                    style: const TextStyle(fontSize: 11, color: Colors.white54))),
+                DataCell(Text(_fmtTs(job['completed_at']),
+                    style: const TextStyle(fontSize: 11, color: Colors.white54))),
+                DataCell(Text(job['worker_id']?.toString() ?? '—',
+                    style: const TextStyle(fontSize: 10, color: Colors.white38))),
+                DataCell(SizedBox(
+                  width: 180,
+                  child: Text(job['error']?.toString() ?? '—',
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color: job['error'] != null ? Colors.redAccent : Colors.white38,
+                          fontSize: 11)),
+                )),
+                DataCell(IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.redAccent, size: 18),
+                  onPressed: () => _deleteRunLog(job['id']),
+                )),
+              ]);
+            }).toList(),
+          ),
+        ),
+      ),
     );
   }
 }
 
-class _CreateJobDialog extends StatefulWidget {
-  final String timezone;
-  final void Function(String type, Map<String, dynamic> payload, DateTime scheduledAt) onJobCreated;
-  const _CreateJobDialog({required this.timezone, required this.onJobCreated});
+// ── Edit Cron Dialog ──────────────────────────────────────────────────────────
 
+class _EditCronDialog extends StatefulWidget {
+  final Map<String,dynamic> job;
+  final void Function(Map<String,dynamic> fields) onSave;
+  const _EditCronDialog({required this.job, required this.onSave});
   @override
-  State<_CreateJobDialog> createState() => _CreateJobDialogState();
+  State<_EditCronDialog> createState() => _EditCronDialogState();
 }
 
-class _CreateJobDialogState extends State<_CreateJobDialog> {
-  String _selectedType = 'launch_tournament';
-  late DateTime _scheduledAt;
-  final _payloadController = TextEditingController(text: '{\n  "format": "swiss",\n  "minutes": 10,\n  "increment": 5\n}');
+class _EditCronDialogState extends State<_EditCronDialog> {
+  late TextEditingController _minCtrl;
+  late TextEditingController _hrCtrl;
+  late TextEditingController _wdCtrl;
+  late TextEditingController _descCtrl;
 
   @override
   void initState() {
     super.initState();
-    try {
-      final location = tz.getLocation(widget.timezone);
-      _scheduledAt = tz.TZDateTime.now(location).add(const Duration(hours: 1));
-    } catch (_) {
-      _scheduledAt = DateTime.now().add(const Duration(hours: 1));
-    }
+    _minCtrl  = TextEditingController(text: widget.job['minute']?.toString()  ?? '*');
+    _hrCtrl   = TextEditingController(text: widget.job['hour']?.toString()    ?? '*');
+    _wdCtrl   = TextEditingController(text: widget.job['weekday']?.toString() ?? '*');
+    _descCtrl = TextEditingController(text: widget.job['description']?.toString() ?? '');
   }
+
+  @override
+  void dispose() {
+    _minCtrl.dispose(); _hrCtrl.dispose(); _wdCtrl.dispose(); _descCtrl.dispose();
+    super.dispose();
+  }
+
+  dynamic _parseField(String v) => (v.trim() == '*') ? '*' : (int.tryParse(v.trim()) ?? v.trim());
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: DTheme.bgDarkTop,
-      title: Text('Create Scheduled Job', style: GoogleFonts.outfit(color: DTheme.textMainDark)),
+      title: Text('Edit Schedule — ${widget.job['type']}',
+          style: GoogleFonts.outfit(color: DTheme.textMainDark, fontSize: 16)),
       content: SizedBox(
-        width: 400,
+        width: 380,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Job Type', style: DTheme.bodyMuted),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              value: _selectedType,
-              dropdownColor: DTheme.bgDark,
-              style: const TextStyle(color: Colors.white),
-              items: const [
-                DropdownMenuItem(value: 'launch_tournament', child: Text('launch_tournament')),
-                DropdownMenuItem(value: 'data_export', child: Text('data_export')),
-              ],
-              onChanged: (v) => setState(() {
-                _selectedType = v!;
-                if (_selectedType == 'data_export') {
-                  _payloadController.text = '{}';
-                }
-              }),
-            ),
+            Text('Use * for "any". Examples:',
+                style: GoogleFonts.outfit(color: Colors.white54, fontSize: 12)),
+            Text('  0 0 * = daily at 00:00 UTC\n  0 8 1 = Mon at 08:00 UTC\n  30 * * = every hour at :30',
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: Colors.white38)),
             const SizedBox(height: 16),
-            Text('Scheduled At', style: DTheme.bodyMuted),
-            const SizedBox(height: 8),
-            InkWell(
-              onTap: () async {
-                final date = await showDatePicker(context: context, initialDate: _scheduledAt, firstDate: DateTime.now(), lastDate: DateTime(2030));
-                if (date != null && mounted) {
-                  final time = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(_scheduledAt));
-                  if (time != null && mounted) {
-                    setState(() {
-                      try {
-                        final location = tz.getLocation(widget.timezone);
-                        _scheduledAt = tz.TZDateTime(location, date.year, date.month, date.day, time.hour, time.minute);
-                      } catch (_) {
-                        _scheduledAt = DateTime(date.year, date.month, date.day, time.hour, time.minute);
-                      }
-                    });
-                  }
-                }
-              },
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8)),
-                child: Row(
-                  children: [
-                    const Icon(Icons.calendar_today, size: 16, color: Colors.white),
-                    const SizedBox(width: 8),
-                    Text(_formatDateNoTz(_scheduledAt), style: const TextStyle(color: Colors.white)),
-                  ],
-                ),
-              ),
-            ),
+            Row(children: [
+              Expanded(child: _field('Minute (0–59)', _minCtrl)),
+              const SizedBox(width: 8),
+              Expanded(child: _field('Hour (0–23)', _hrCtrl)),
+              const SizedBox(width: 8),
+              Expanded(child: _field('Weekday (0–7)', _wdCtrl)),
+            ]),
             const SizedBox(height: 16),
-            Text('JSON Payload', style: DTheme.bodyMuted),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _payloadController,
-              maxLines: 4,
-              style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 12),
-              decoration: const InputDecoration(
-                filled: true,
-                fillColor: Colors.black26,
-                border: OutlineInputBorder(),
-              ),
-            ),
+            _field('Description', _descCtrl),
           ],
         ),
       ),
@@ -318,17 +406,34 @@ class _CreateJobDialogState extends State<_CreateJobDialog> {
         ElevatedButton(
           style: ElevatedButton.styleFrom(backgroundColor: DTheme.primary),
           onPressed: () {
-            try {
-              final payload = jsonDecode(_payloadController.text) as Map<String, dynamic>;
-              widget.onJobCreated(_selectedType, payload, _scheduledAt);
-              Navigator.pop(context);
-            } catch (e) {
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Invalid JSON payload: $e')));
-            }
+            widget.onSave({
+              'minute':      _parseField(_minCtrl.text),
+              'hour':        _parseField(_hrCtrl.text),
+              'weekday':     _parseField(_wdCtrl.text),
+              'description': _descCtrl.text.trim(),
+            });
+            Navigator.pop(context);
           },
-          child: const Text('Create Job', style: TextStyle(color: Colors.white)),
+          child: const Text('Save', style: TextStyle(color: Colors.white)),
         ),
       ],
     );
   }
+
+  Widget _field(String label, TextEditingController ctrl) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(label, style: GoogleFonts.outfit(color: Colors.white54, fontSize: 12)),
+      const SizedBox(height: 4),
+      TextField(
+        controller: ctrl,
+        style: const TextStyle(color: Colors.white, fontFamily: 'monospace'),
+        decoration: const InputDecoration(
+          filled: true, fillColor: Colors.black26,
+          border: OutlineInputBorder(),
+          isDense: true, contentPadding: EdgeInsets.all(10),
+        ),
+      ),
+    ],
+  );
 }

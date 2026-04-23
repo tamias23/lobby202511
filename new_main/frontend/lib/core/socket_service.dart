@@ -13,6 +13,35 @@ class SocketService {
   io.Socket? _socket;     // nullable — avoids LateInitializationError
   bool _initialized = false;
 
+  // ── Ping latency ─────────────────────────────────────────────────────────────
+
+  final _pingController = StreamController<int>.broadcast();
+  /// Stream of round-trip latency values in milliseconds, updated every ~10s.
+  Stream<int> get latencyStream => _pingController.stream;
+
+  Timer? _pingTimer;
+
+  void _startPingLoop() {
+    _pingTimer?.cancel();
+    _pingTimer = Timer.periodic(const Duration(seconds: 10), (_) => _measurePing());
+    // Fire once immediately so the profile has a value right away
+    Future.delayed(const Duration(seconds: 1), _measurePing);
+  }
+
+  void _stopPingLoop() {
+    _pingTimer?.cancel();
+    _pingTimer = null;
+  }
+
+  void _measurePing() {
+    if (_socket == null || !_socket!.connected) return;
+    final sent = DateTime.now().millisecondsSinceEpoch;
+    _socket!.emitWithAck('client:ping', {'ts': sent}, ack: (data) {
+      final rtt = DateTime.now().millisecondsSinceEpoch - sent;
+      if (!_pingController.isClosed) _pingController.add(rtt);
+    });
+  }
+
   bool get _ready => _socket != null;
 
   // ── Initialization ──────────────────────────────────────────────────────────
@@ -36,6 +65,10 @@ class SocketService {
     if (token != null) {
       _socket!.auth = {'token': token};
     }
+
+    // Start/stop ping loop with connection state
+    _socket!.onConnect((_) => _startPingLoop());
+    _socket!.onDisconnect((_) => _stopPingLoop());
 
     _initialized = true;
   }

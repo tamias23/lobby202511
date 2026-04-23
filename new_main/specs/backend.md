@@ -21,7 +21,7 @@ The project uses **Google Cloud Firestore** as its persistent document database.
 - **Collections**: `users`, `profiles`, `games`, `tournaments`, `tournament_participants`.
 - **Connection Manager** (`firestoreAdapter.js`): Manages Firestore connection with 15-second retry on failure. Locally connects to the Firestore emulator (`FIRESTORE_EMULATOR_HOST=localhost:8200`). On GCP, uses default credentials.
 - **Graceful Degradation**: If Firestore is unavailable, the game engine continues running in memory. Auth and persistence operations will fail gracefully.
-- **Game Offload**: Old games (beyond `GAME_RETENTION_DAYS`, default 7) are periodically exported to Parquet files on `/mnt/db` using DuckDB in-memory, then deleted from Firestore. This runs every 24h in GCP mode only.
+- **Game Offload**: Old games (beyond `GAME_RETENTION_DAYS`, default 7) are exported to Parquet files on `/mnt/db` using DuckDB in-memory, then deleted from Firestore. Triggered daily at 20:00 UTC by the `parquet_export` cron job (GCP mode only — requires `GCS_BUCKET` + `NODE_ENV=production`).
 - **Minimal Interaction**: All real-time game state lives in memory, synced via Valkey. Firestore is only used for durable persistence of users, completed games, and tournament metadata. See `specs/about_firestore.md` for the full interaction inventory.
 
 ### 4. Distributed State Synchronization (`valkeySync.js`)
@@ -43,7 +43,7 @@ The server is configured via a YAML file mapped to environment variables.
 | `BOT_SERVER_URL` | Endpoint for the Rust Bot Server | `http://localhost:5001` |
 | `MCTS_DEFAULT_BUDGET_MS` | Time target for bot move calculation | `500` |
 | `FIRESTORE_PROJECT_ID` | GCP project ID for Firestore | `my-local-firestore` |
-| `GAME_RETENTION_DAYS` | Days to keep games before Parquet offload | `7` |
+| `GAME_RETENTION_DAYS` | Days to keep games in Firestore before Parquet offload | `7` |
 
 ## Authentication Flow
 

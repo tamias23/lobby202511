@@ -7,18 +7,18 @@
 //   Games older than GAME_RETENTION_DAYS are exported, then deleted from Firestore.
 //
 // Only active when both GCS_BUCKET and NODE_ENV=production are set (i.e. on GCP).
-// Locally, startGameOffload() is a silent no-op.
+// Locally, offloadOldGames() is a silent no-op.
 //
 // DuckDB is used in-memory solely for Parquet file generation.
+// Scheduling is handled by the cron runner (parquet_export job, 20:00 UTC daily).
 // ─────────────────────────────────────────────────────────────────────────────
 
 const fs   = require('fs');
 const path = require('path');
 const logger = require('./utils/logger');
 
-const GCS_BUCKET                = process.env.GCS_BUCKET;
-const GAME_RETENTION_DAYS       = parseInt(process.env.GAME_RETENTION_DAYS) || 7;
-const GAME_OFFLOAD_INTERVAL_MS  = (parseInt(process.env.GAME_OFFLOAD_INTERVAL_HOURS) || 24) * 60 * 60 * 1000;
+const GCS_BUCKET          = process.env.GCS_BUCKET;
+const GAME_RETENTION_DAYS = parseInt(process.env.GAME_RETENTION_DAYS) || 7;
 const GCS_MOUNT                 = '/mnt/db';
 
 // Only activate in production

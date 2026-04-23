@@ -18,6 +18,10 @@ abstract class AppUser with _$AppUser {
     @Default(0) int ratedGamesPlayedToday,
     @Default(0) int botGamesPlayedToday,
     @Default('UTC') String timezone,
+    @JsonKey(name: 'rating_bullet') double? ratingBullet,
+    @JsonKey(name: 'rating_blitz') double? ratingBlitz,
+    @JsonKey(name: 'rating_rapid') double? ratingRapid,
+    @JsonKey(name: 'rating_classical') double? ratingClassical,
   }) = _AppUser;
 
   factory AppUser.fromJson(Map<String, dynamic> json) => _$AppUserFromJson(json);
