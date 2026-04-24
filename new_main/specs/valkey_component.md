@@ -74,10 +74,10 @@ Valkey is used as the backbone for distributed state synchronization, distribute
 ## Observations & Potential Issues
 
 > [!WARNING]
-> **Matchmaking Lock Fallback**: In `valkeySync.js`, `tryLockRequest` returns `true` if Valkey is unreachable. In a multi-instance production environment, if Valkey goes down, this fallback could lead to "Double Acceptance" race conditions where two players accept the same request simultaneously.
+> **Matchmaking Lock Fallback**: In `valkeySync.js`, `tryLockRequest` returns `false` if a Valkey command fails (fail-closed) to prevent "Double Acceptance" race conditions in multi-instance environments. It only returns `true` if Valkey is explicitly disabled/uninitialized (single-instance mode), ensuring safety by default.
 
 > [!NOTE]
-> **Use of `KEYS` Command**: The bootstrap process uses `client.keys('nd6:state:games:*')`. While acceptable for the current small scale (<1000 keys), this is an $O(N)$ operation that can block the Redis event loop if the key space grows significantly. Switching to `SCAN` is recommended for future-proofing.
+> **Use of `SCAN` Command**: The bootstrap process uses `client.scanIterator()` instead of `KEYS`. This prevents blocking the Redis event loop, ensuring the application remains responsive even as the number of active game instances grows.
 
 > [!IMPORTANT]
 > **Inconsistent TTLs**: 
