@@ -1,6 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/socket_service.dart';
 
+Map<String, dynamic> _deepMap(Map raw) => raw.map((k, v) {
+  dynamic val;
+  if (v is Map)       val = _deepMap(v);
+  else if (v is List) val = v.map((e) => e is Map ? _deepMap(e) : e).toList();
+  else                val = v;
+  return MapEntry(k.toString(), val);
+});
+
 class TournamentState {
   final Map<String, dynamic>? data;
   final String? pendingGameHash;
@@ -47,14 +55,14 @@ class TournamentNotifier extends Notifier<TournamentState> {
   }
 
   void _onUpdate(dynamic data) {
-    final d = Map<String, dynamic>.from(data as Map);
+    final d = _deepMap(data as Map);
     if (d['id'] == _tournamentId || d['id'] == null) {
       state = state.copyWith(data: d);
     }
   }
 
   void _onGameStart(dynamic data) {
-    final d = Map<String, dynamic>.from(data as Map);
+    final d = _deepMap(data as Map);
     state = state.copyWith(pendingGameHash: d['hash'] as String?);
   }
 

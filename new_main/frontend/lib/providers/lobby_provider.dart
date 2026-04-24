@@ -131,7 +131,7 @@ class LobbyNotifier extends Notifier<LobbyState> {
   void _applyLobbyData(dynamic rawData) {
     final Map<String, dynamic> d;
     try {
-      d = Map<String, dynamic>.from(rawData as Map);
+      d = _deepMap(rawData as Map);  // deep-convert: socket delivers Map<dynamic,dynamic>
     } catch (e) {
       if (kDebugMode) print('[Lobby] Failed to cast lobby data: $e');
       return;
@@ -143,7 +143,7 @@ class LobbyNotifier extends Notifier<LobbyState> {
       if (d['gameRequests'] != null) {
         next = next.copyWith(
           gameRequests: (d['gameRequests'] as List)
-              .map((e) => GameRequest.fromJson(Map<String, dynamic>.from(e as Map)))
+              .map((e) => GameRequest.fromJson(e as Map<String, dynamic>))
               .toList(),
         );
       }
@@ -153,7 +153,7 @@ class LobbyNotifier extends Notifier<LobbyState> {
       if (d['activeGames'] != null) {
         next = next.copyWith(
           activeGames: (d['activeGames'] as List)
-              .map((e) => ActiveGame.fromJson(Map<String, dynamic>.from(e as Map)))
+              .map((e) => ActiveGame.fromJson(e as Map<String, dynamic>))
               .toList(),
         );
       }
@@ -162,7 +162,7 @@ class LobbyNotifier extends Notifier<LobbyState> {
     try {
       if (d['stats'] != null) {
         next = next.copyWith(
-          stats: LiveStats.fromJson(Map<String, dynamic>.from(d['stats'] as Map)),
+          stats: LiveStats.fromJson(d['stats'] as Map<String, dynamic>),
         );
       }
     } catch (e) { if (kDebugMode) print('[Lobby] stats: $e'); }
@@ -171,7 +171,7 @@ class LobbyNotifier extends Notifier<LobbyState> {
       if (d['available_bots'] != null) {
         next = next.copyWith(
           availableBots: (d['available_bots'] as List)
-              .map((e) => BotInfo.fromJson(Map<String, dynamic>.from(e as Map)))
+              .map((e) => BotInfo.fromJson(e as Map<String, dynamic>))
               .toList(),
         );
       }
@@ -179,14 +179,14 @@ class LobbyNotifier extends Notifier<LobbyState> {
 
     try {
       if (d['tournaments'] != null) {
-        final t = Map<String, dynamic>.from(d['tournaments'] as Map);
+        final t = d['tournaments'] as Map<String, dynamic>;
         next = next.copyWith(
           tournamentsEnabled: t['enabled'] != false,
           openTournaments: ((t['openTournaments'] as List?) ?? [])
-              .map((e) => TournamentSummary.fromJson(_deepMap(e as Map)))
+              .map((e) => TournamentSummary.fromJson(e as Map<String, dynamic>))
               .toList(),
           activeTournaments: ((t['activeTournaments'] as List?) ?? [])
-              .map((e) => TournamentSummary.fromJson(_deepMap(e as Map)))
+              .map((e) => TournamentSummary.fromJson(e as Map<String, dynamic>))
               .toList(),
         );
       }
@@ -195,20 +195,33 @@ class LobbyNotifier extends Notifier<LobbyState> {
     state = next;
   }
 
+  void _onGameStarted(dynamic _) {
+    // When a game begins (opponent accepted our request), clear the request id
+    // so the "Cancel my request" button disappears.
+    if (state.myRequestId != null) {
+      state = state.copyWith(myRequestId: null);
+    }
+  }
+
   void _registerListeners() {
-    _socket.on('lobby_state', _onLobbyState);
-    _socket.on('lobby_update', _onLobbyUpdate);
-    _socket.on('request_created', _onRequestCreated);
-    _socket.on('request_error', _onRequestError);
-    _socket.on('bot_error', _onBotError);
+    _socket.on('lobby_state',    _onLobbyState);
+    _socket.on('lobby_update',   _onLobbyUpdate);
+    _socket.on('request_created',_onRequestCreated);
+    _socket.on('request_error',  _onRequestError);
+    _socket.on('bot_error',      _onBotError);
+    // Clear pending request as soon as a game is started
+    _socket.on('game_started',   _onGameStarted);
+    _socket.on('game_start',     _onGameStarted);
   }
 
   void _removeListeners() {
-    _socket.off('lobby_state', _onLobbyState);
-    _socket.off('lobby_update', _onLobbyUpdate);
-    _socket.off('request_created', _onRequestCreated);
-    _socket.off('request_error', _onRequestError);
-    _socket.off('bot_error', _onBotError);
+    _socket.off('lobby_state',    _onLobbyState);
+    _socket.off('lobby_update',   _onLobbyUpdate);
+    _socket.off('request_created',_onRequestCreated);
+    _socket.off('request_error',  _onRequestError);
+    _socket.off('bot_error',      _onBotError);
+    _socket.off('game_started',   _onGameStarted);
+    _socket.off('game_start',     _onGameStarted);
   }
 
   // ── Actions ──────────────────────────────────────────────────────────────────

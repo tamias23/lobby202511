@@ -21,10 +21,16 @@ fn parse_flag_str<'a>(args: &'a [String], flag: &str, default: &'a str) -> &'a s
 fn make_agent(name: &str, weights_str: Option<&String>, mcts_budget: u64, mcts_data_dir: String, model_path: Option<String>, mcts_record: bool, verbosity: u8, num_threads: usize, diego_mcts_budget: u64) -> Arc<dyn agents::Agent> {
     match name {
         "random" => Arc::new(agents::random::RandomAgent),
+        #[cfg(feature = "onnx")]
         "mcts" => {
             let path = model_path.unwrap_or_else(|| "./rust/model.onnx".to_string());
             Arc::new(agents::mcts::MctsAgent::with_threads(mcts_budget, Some(path), mcts_data_dir, mcts_record, verbosity, num_threads))
-        }, 
+        },
+        #[cfg(not(feature = "onnx"))]
+        "mcts" => {
+            eprintln!("MCTS agent requires the 'onnx' feature. Build with: cargo build --features onnx");
+            std::process::exit(1);
+        },
         "greedy_bob" => {
             let mut weights = [1.0; 26]; // Default baseline
             if let Some(w_str) = weights_str {

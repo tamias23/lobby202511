@@ -343,12 +343,26 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
                         child: Row(children: [
-                          Expanded(child: Text(
-                            s['username'] as String? ?? s['user_id'] as String? ?? '?',
-                            style: GoogleFonts.outfit(
-                              fontSize: 13, color: isMe ? DTheme.primary : Colors.white70,
-                              fontWeight: isMe ? FontWeight.w700 : FontWeight.w400),
-                            overflow: TextOverflow.ellipsis)),
+                          Expanded(child: RichText(
+                            overflow: TextOverflow.ellipsis,
+                            text: TextSpan(children: [
+                              TextSpan(
+                                text: s['username'] as String? ?? s['user_id'] as String? ?? '?',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13,
+                                  color: isMe ? DTheme.primary : Colors.white70,
+                                  fontWeight: isMe ? FontWeight.w700 : FontWeight.w400),
+                              ),
+                              TextSpan(
+                                text: ' (${((s['rating'] as num?) ?? 1500).toInt()})',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11,
+                                  color: isMe
+                                      ? DTheme.primary.withValues(alpha: 0.7)
+                                      : Colors.white38),
+                              ),
+                            ]),
+                          )),
                           if (s['eliminated'] == true)
                             const Text(' ✗', style: TextStyle(color: Colors.red, fontSize: 11)),
                         ])),

@@ -1,5 +1,5 @@
 use crate::agents::{Agent, AgentMove};
-use crate::agents::mcts::build_graph_data;
+use crate::agents::graph::build_graph_data;
 use crate::engine::{get_legal_moves, get_polys_within_distance_jump, GameState, GamePhase, apply_move, apply_move_turnover, get_legal_colors, get_setup_legal_placements};
 use crate::models::{Side, PieceType};
 use rand::seq::SliceRandom;

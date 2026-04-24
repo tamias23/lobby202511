@@ -1,0 +1,40 @@
+# docker-compose.maintenance.yml — Maintenance mode for Dedal (Podman).
+#
+# This compose file replaces the main app with a static maintenance page.
+# The service is named "nginx" so the Cloudflare tunnel (configured to
+# point to http://nginx:8080 in the dashboard) can reach it without
+# reconfiguring the tunnel origin.
+#
+# Usage:
+#   podman compose -f docker-compose.maintenance.yml up -d
+#   podman compose -f docker-compose.maintenance.yml --profile tunnel up -d
+
+services:
+  # Named "nginx" to match the Cloudflare tunnel origin URL (http://nginx:8080)
+  nginx:
+    image: localhost/dedal-maintenance:latest
+    container_name: dedal-maintenance
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "2"
+
+  # Cloudflare Tunnel (opt-in)
+  tunnel:
+    image: docker.io/cloudflare/cloudflared:latest
+    container_name: dedal-maintenance-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CF_TUNNEL_TOKEN}
+    depends_on:
+      - nginx
+    profiles:
+      - tunnel
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "2"

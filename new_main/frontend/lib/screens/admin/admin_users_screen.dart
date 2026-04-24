@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -5,6 +6,7 @@ import '../../core/api_service.dart';
 import '../../core/theme.dart';
 import '../../widgets/glass_panel.dart';
 import '../profile/game_history_screen.dart';
+import '../analysis/analysis_screen.dart';
 
 // ── Admin Users Screen ─────────────────────────────────────────────────────────
 // Lets admins search any user/bot by username prefix and open their profile.
@@ -500,7 +502,8 @@ class _GamesPanelState extends State<_GamesPanel> {
                           padding: const EdgeInsets.all(12),
                           itemCount: _games.length,
                           itemBuilder: (_, i) => _GameCard(
-                              game: _games[i] as Map<String, dynamic>),
+                              game: _games[i] as Map<String, dynamic>,
+                              username: widget.username),
                         ),
         ),
       ],
@@ -512,7 +515,8 @@ class _GamesPanelState extends State<_GamesPanel> {
 
 class _GameCard extends StatelessWidget {
   final Map<String, dynamic> game;
-  const _GameCard({required this.game});
+  final String username;
+  const _GameCard({required this.game, required this.username});
 
   Color _resultColor(String? r) => switch (r) {
     'Win'  => DTheme.success,
@@ -624,12 +628,23 @@ class _GameCard extends StatelessWidget {
               Tooltip(
                 message: 'Open Analysis',
                 child: InkWell(
-                  onTap: () => context.push('/analysis', extra: {
-                    'moves':      game['moves'],
-                    'white_name': game['my_color'] == 'white' ? '(this user)' : opponent,
-                    'black_name': game['my_color'] == 'black' ? '(this user)' : opponent,
-                    'game_id':    game['game_id'],
-                  }),
+                  onTap: () {
+                    final whiteName = game['white_name'] as String? ??
+                        (game['my_color'] == 'white' ? username : opponent);
+                    final blackName = game['black_name'] as String? ??
+                        (game['my_color'] == 'black' ? username : opponent);
+                    Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => AnalysisScreen(initialRecord: {
+                        'board_id':   game['board_id'],
+                        'moves':      game['moves'] is String
+                            ? (jsonDecode(game['moves'] as String) as List? ?? [])
+                            : (game['moves'] as List? ?? []),
+                        'white_name': whiteName,
+                        'black_name': blackName,
+                        'game_id':    game['game_id'],
+                      }),
+                    ));
+                  },
                   borderRadius: BorderRadius.circular(8),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),

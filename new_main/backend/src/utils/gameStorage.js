@@ -1,7 +1,7 @@
 /**
  * gameStorage.js — Persists completed games and updates Glicko-2 ratings.
  *
- * Uses Firestore via the db.js facade.
+ * Uses PostgreSQL via the db.js facade.
  */
 
 'use strict';

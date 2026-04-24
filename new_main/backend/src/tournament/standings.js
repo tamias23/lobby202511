@@ -42,8 +42,11 @@ function computeStandings(participants, games, format) {
         return (b.wins || 0) - (a.wins || 0);
     });
 
-    // Add rank
-    standings.forEach((s, i) => { s.rank = i + 1; });
+    // Add rank + ensure rating is exposed
+    standings.forEach((s, i) => {
+        s.rank = i + 1;
+        s.rating = s.rating ?? 1500;
+    });
 
     return standings;
 }

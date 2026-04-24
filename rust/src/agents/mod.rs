@@ -35,6 +35,8 @@ pub trait Agent: Send + Sync {
 pub mod random;
 pub mod greedy_bob;
 pub mod greedy_jack;
+pub mod graph;
+#[cfg(feature = "onnx")]
 pub mod mcts;
 pub mod quick_diego;
 pub mod imprudent_klaus;

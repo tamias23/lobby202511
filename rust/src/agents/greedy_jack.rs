@@ -1,5 +1,5 @@
 use crate::agents::{Agent, AgentMove};
-use crate::agents::mcts::build_graph_data;
+use crate::agents::graph::build_graph_data;
 use crate::engine::{GameState, GamePhase, apply_move, apply_move_turnover, get_setup_legal_placements};
 use crate::models::PieceType;
 use ndarray::{Array1, Array2, Axis};

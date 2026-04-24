@@ -193,8 +193,8 @@ async function createTournament(opts) {
         has_password: passwordHash ? 1 : 0,
         max_participants: maxP,
         current_count: 0,
-        time_control_minutes: opts.timeControlMinutes || 10,
-        time_control_increment: opts.timeControlIncrement || 5,
+        time_control_minutes:   opts.timeControlMinutes  ?? 10,
+        time_control_increment: opts.timeControlIncrement ?? 0,
         board_id: opts.boardId || null,
         rating_min: opts.ratingMin || 0,
         rating_max: opts.ratingMax || 5000,
@@ -219,13 +219,18 @@ async function createTournament(opts) {
     await db.saveTournament(tournamentData);
 
     activeTournaments.set(id, tournament);
+    _syncToValkey();
 
-    // Auto-join creator if they want to participate
+    // Return the tournament immediately so the caller can respond to the client
+    // *before* the potentially slow auto-join + game-start chain executes.
+    // Auto-join creator in the next event-loop tick (non-blocking).
     if (tournament.creator_plays) {
-        await joinTournament(id, opts.creatorId, opts.creatorUsername, null, true);
+        setImmediate(() => {
+            joinTournament(id, opts.creatorId, opts.creatorUsername, null, true)
+                .catch(e => logger.warn('Tournament', `Auto-join creator failed: ${e.message}`));
+        });
     }
 
-    _syncToValkey();
     return tournament;
 }
 
@@ -271,11 +276,18 @@ async function joinTournament(tournamentId, userId, username, password, skipPass
         // Ignore DB errors for rating check
     }
 
+    let participantRating = 1500;
+    try {
+        const u = await db.getUser(userId);
+        if (u) participantRating = Math.round(Number(u.rating) || 1500);
+    } catch (_) {}
+
     const participant = {
         tournament_id: tournamentId,
         user_id: userId,
         username: username || userId,
         is_bot: userId.startsWith('bot_') ? 1 : 0,
+        rating: participantRating,
         score: 0, wins: 0, draws: 0, losses: 0, tiebreak: 0,
         joined_at: Date.now(),
     };
@@ -565,8 +577,8 @@ async function createTournamentGame(tournament, whiteId, blackId, timeControl) {
             white_name: whitePlayer.username,
             black_name: blackPlayer.username,
             timestamp: gameEntry.started_at,
-            time_control_minutes: timeControl.minutes || null,
-            time_control_increment: timeControl.increment || null,
+            time_control_minutes:   timeControl.minutes   ?? null,
+            time_control_increment: timeControl.increment ?? null,
         });
 
         // Notify players
@@ -667,7 +679,8 @@ async function onGameComplete(gameHash, winnerSide, moves = []) {
 
         // ── Glicko-2 rating update (skipped for abandoned/aborted) ──
         if (game.result !== 'abandoned' && game.result !== 'aborted') {
-            updateRatings(game.white_id, game.black_id, game.result, _ioRef, game.game_hash);
+            const tc = { minutes: t.time_control_minutes, increment: t.time_control_increment };
+            updateRatings(game.white_id, game.black_id, game.result, _ioRef, game.game_hash, tc);
         }
 
         // Check round completion

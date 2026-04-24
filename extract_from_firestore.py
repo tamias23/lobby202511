@@ -2,81 +2,71 @@
 # -*- coding: utf-8 -*-
 """
 Created on Sat Apr 18 10:46:01 2026
+Updated: migrated from Firestore to PostgreSQL.
 
 @author: mat
 """
 
-import os
 import json
+import os
 import pandas as pd
-from google.cloud import firestore
+import psycopg2
 
 # Configuration
-PROJECT_ID = "mylittleproject00"
-# Set this to True if you want to use your local Podman emulator
-USE_EMULATOR = True 
+PG_HOST = os.environ.get("PG_HOST", "localhost")
+PG_PORT = int(os.environ.get("PG_PORT", 5432))
+PG_DATABASE = os.environ.get("PG_DATABASE", "dedalthegame01")
+PG_USER = os.environ.get("PG_USER", "tamias23")
+PG_PASSWORD = os.environ.get("PG_PASSWORD", "TY-rre__U@345")
 
 os.chdir('/home/mat/Bureau/lobby202511/parquet/temp')
 
-def export_firestore_to_parquet():
-    # 1. Initialize Client
-    db = ''
-    if USE_EMULATOR:
-        os.environ["FIRESTORE_EMULATOR_HOST"] = "localhost:8080"
-        os.environ["GOOGLE_CLOUD_PROJECT"] = "my-local-firestore"
-        db = firestore.Client()
-    else:
-        db = firestore.Client(project=PROJECT_ID)
-    
-    # 2. List all top-level collections (tables)
-    collections = db.collections()
-    
-    print(f"Connected to project: {PROJECT_ID}")
-    
-    for coll in collections:
-        coll_name = coll.id
-        print(f"Exporting collection: {coll_name}...")
-        
-        # 3. Stream all documents from the collection
-        docs = coll.stream()
-        data = []
-        
-        for doc in docs:
-            doc_dict = doc.to_dict()
-            doc_dict['doc_id'] = doc.id  # Include the Firestore ID as a column
-            data.append(doc_dict)
-        
-        if not data:
-            print(f" - Collection {coll_name} is empty. Skipping.")
+TABLES = ['users', 'profiles', 'games', 'tournaments', 'tournament_participants',
+          'cron_jobs', 'jobs', 'subscriptions', 'leaderboards']
+
+def export_psql_to_parquet():
+    conn = psycopg2.connect(
+        host=PG_HOST, port=PG_PORT,
+        dbname=PG_DATABASE, user=PG_USER, password=PG_PASSWORD
+    )
+    cur = conn.cursor()
+
+    print(f"Connected to PostgreSQL at {PG_HOST}:{PG_PORT}/{PG_DATABASE}")
+
+    for table in TABLES:
+        print(f"Exporting table: {table}...")
+
+        try:
+            cur.execute(f"SELECT * FROM {table}")
+            columns = [desc[0] for desc in cur.description]
+            rows = cur.fetchall()
+        except Exception as e:
+            print(f" - Failed to read table {table}: {e}")
+            conn.rollback()
             continue
 
-        # 4. Convert to Pandas DataFrame
-        df = pd.DataFrame(data)
+        if not rows:
+            print(f" - Table {table} is empty. Skipping.")
+            continue
+
+        df = pd.DataFrame(rows, columns=columns)
+
+        # Serialize dicts/lists to JSON strings for Parquet/Excel compatibility
         for col in df.columns:
             if df[col].apply(lambda x: isinstance(x, (dict, list))).any():
                 df[col] = df[col].apply(lambda x: json.dumps(x) if isinstance(x, (dict, list)) else x)
-        
-        # 5. Save to Parquet (.paq)
-        # We use engine='pyarrow' to ensure complex types are handled
-        filename = f"{coll_name}"
+
+        filename = table
         try:
             df.to_parquet(filename + '.parquet', engine='pyarrow', index=False)
             with pd.ExcelWriter(filename + '.xlsx', engine='xlsxwriter') as writer:
-                df.to_excel(writer, sheet_name='data', index=False, startrow=0 , startcol=0)
-            print(f" - Success! Saved {len(data)} rows to {filename}")
+                df.to_excel(writer, sheet_name='data', index=False, startrow=0, startcol=0)
+            print(f" - Success! Saved {len(rows)} rows to {filename}")
         except Exception as e:
             print(f" - ko : {filename}")
             print(e)
 
-# if __name__ == "__main__":
-#     export_firestore_to_parquet()
+    cur.close()
+    conn.close()
 
-export_firestore_to_parquet()
-
-
-
-
-
-
-
-
+export_psql_to_parquet()

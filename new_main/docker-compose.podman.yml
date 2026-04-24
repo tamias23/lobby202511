@@ -1,7 +1,7 @@
 # docker-compose.podman.yml — Podman Compose deployment for Dedal.
 #
 # Usage:
-#   podman compose -f docker-compose.podman.yml up -d --scale nd6-app=5
+#   podman compose -f docker-compose.podman.yml up -d --scale nd6-app=3
 #   podman compose -f docker-compose.podman.yml --profile tunnel up -d
 #   podman compose -f docker-compose.podman.yml down
 #
@@ -37,36 +37,25 @@ services:
           cpus: "0.5"
           memory: 512M
 
-  # ── Firestore Emulator (persistent) ─────────────────────────────────────
-  firestore:
-    image: docker.io/google/cloud-sdk:emulators
-    container_name: dedal-firestore
+  # ── PostgreSQL (persistent relational database) ─────────────────────────
+  postgres:
+    image: docker.io/library/postgres:16-alpine
+    container_name: dedal-postgres
     restart: unless-stopped
     ports:
-      - "18080:8080"
-    stop_grace_period: 60s
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: dedalthegame01
+      POSTGRES_USER: tamias23
+      POSTGRES_PASSWORD: "TY-rre__U@345"
     volumes:
-      - /home/mat/Bureau/dedalthegame/firestore_db:/opt/data:Z
-    entrypoint: /bin/bash
-    command:
-      - -c
-      - |
-        METADATA=$(ls -1t /opt/data/export/firestore_export_*/firestore_export_*.overall_export_metadata 2>/dev/null | head -1)
-        ARGS="--host-port=0.0.0.0:8080 --project=my-local-firestore --export-on-exit=/opt/data/export"
-        if [ -n "$$METADATA" ]; then
-          echo "Found existing export, importing from: $$METADATA"
-          ARGS="$$ARGS --import-data=$$METADATA"
-        else
-          echo "No existing export data found, starting fresh."
-          mkdir -p /opt/data/export
-        fi
-        exec gcloud beta emulators firestore start $$ARGS
+      - /home/mat/Bureau/dedalthegame/PSQL:/var/lib/postgresql/data:Z
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080/ || exit 1"]
-      interval: 15s
-      timeout: 5s
+      test: ["CMD-SHELL", "pg_isready -U tamias23 -d dedalthegame01"]
+      interval: 10s
+      timeout: 3s
       retries: 5
-      start_period: 30s
+      start_period: 15s
     logging:
       driver: json-file
       options:
@@ -75,54 +64,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "2.0"
-          memory: 3G
+          cpus: "1.5"
+          memory: 2G
         reservations:
-          cpus: "1.0"
-          memory: 1G
-
-  # ── Firestore periodic backup (every 15 min) ───────────────────────────
-  firestore-backup:
-    image: docker.io/library/alpine:latest
-    container_name: dedal-firestore-backup
-    restart: unless-stopped
-    depends_on:
-      - firestore
-    volumes:
-      - /home/mat/Bureau/dedalthegame/firestore_db:/opt/data:Z
-    entrypoint: /bin/sh
-    command:
-      - -c
-      - |
-        apk add --no-cache curl > /dev/null 2>&1
-        echo "Firestore backup sidecar started (every 15 min)"
-        while true; do
-          sleep 900
-          echo "[$(date -u)] Triggering Firestore export..."
-          if curl -sf -X POST "http://firestore:8080/emulator/v1/projects/my-local-firestore:export" \
-            -H "Content-Type: application/json" \
-            -d '{"database":"projects/my-local-firestore/databases/(default)","export_directory":"/opt/data/export"}'; then
-            echo " Export OK — pruning old snapshots..."
-            # Keep only the newest timestamped subdir; delete all others
-            ls -1dt /opt/data/export/firestore_export_* 2>/dev/null | tail -n +2 | xargs rm -rf
-            echo " Pruned. Kept: $(ls -1d /opt/data/export/firestore_export_* 2>/dev/null | tail -1)"
-          else
-            echo " Export FAILED"
-          fi
-        done
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "2"
-    deploy:
-      resources:
-        limits:
-          cpus: "0.2"
-          memory: 256M
-        reservations:
-          cpus: "0.05"
-          memory: 64M
+          cpus: "0.5"
+          memory: 512M
 
   # ── Bot Server (Rust) ───────────────────────────────────────────────────
   bot-server:
@@ -161,7 +107,7 @@ services:
     restart: unless-stopped
     depends_on:
       - valkey
-      - firestore
+      - postgres
       - bot-server
     logging:
       driver: json-file
@@ -196,8 +142,8 @@ services:
       BOT_POLL_INTERVAL_MS: "120000"
       BOT_MOVE_DELAY_MS: "500"
       MCTS_DEFAULT_BUDGET_MS: "500"
-      BOT_MATCH_INTERVAL_MS: "3600000"
-      BOT_MATCH_PROBABILITY: "0.01"
+      BOT_MATCH_INTERVAL_MS: "300000"
+      BOT_MATCH_PROBABILITY: "0.5"
       # Tournaments
       TOURNAMENTS_ENABLED: "true"
       MAX_CONCURRENT_TOURNAMENTS: "20"
@@ -211,9 +157,12 @@ services:
       VALKEY_ENABLED: "true"
       VALKEY_HOST: "valkey"
       VALKEY_PORT: "6379"
-      # Firestore
-      FIRESTORE_EMULATOR_HOST: "firestore:8080"
-      FIRESTORE_PROJECT_ID: "my-local-firestore"
+      # PostgreSQL
+      PG_HOST: "postgres"
+      PG_PORT: "5432"
+      PG_DATABASE: "dedalthegame01"
+      PG_USER: "tamias23"
+      PG_PASSWORD: "TY-rre__U@345"
       # Game history offload (local volume, no GCS)
       GAME_RETENTION_DAYS: "3"
     volumes:

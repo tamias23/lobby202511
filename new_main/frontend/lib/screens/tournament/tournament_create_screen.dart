@@ -138,15 +138,15 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
   void _listenSocket() {
     final socket = ref.read(socketServiceProvider);
     socket.on('tournament_created', (data) {
-      final d = data as Map<String,dynamic>;
+      final d = Map<String, dynamic>.from(data as Map);
       if (!mounted) return;
       setState(() => _creating = false);
       context.go('/tournament/${d['id']}');
     });
     socket.on('tournament_error', (data) {
-      final d = data as Map<String,dynamic>;
+      final d = Map<String, dynamic>.from(data as Map);
       if (!mounted) return;
-      setState(() { _creating = false; _error = d['message'] ?? 'Failed to create.'; });
+      setState(() { _creating = false; _error = d['message'] as String? ?? 'Failed to create.'; });
     });
   }
 

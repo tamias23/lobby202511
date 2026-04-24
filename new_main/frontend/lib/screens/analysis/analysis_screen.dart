@@ -93,18 +93,38 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
 
   int get _totalSteps => _record == null ? 0 : ((_record!['moves'] as List?)?.length ?? 0) + 1;
 
+  /// Deep-convert a Map<dynamic,dynamic> (as delivered by socket / GoRouter extra)
+  /// into Map<String,dynamic> so all subsequent 'as Map' casts are safe in dart2js.
+  static Map<String, dynamic> _normalise(Map raw) {
+    return raw.map((k, v) {
+      dynamic val;
+      if (v is Map)        val = _normalise(v);
+      else if (v is List)  val = _normaliseList(v);
+      else                 val = v;
+      return MapEntry(k.toString(), val);
+    });
+  }
+
+  static List<dynamic> _normaliseList(List raw) =>
+      raw.map((v) => v is Map ? _normalise(v) : (v is List ? _normaliseList(v) : v)).toList();
+
   @override
   void initState() {
     super.initState();
-    // Pre-load a game record if navigated here from game-over overlay
-    final rec = widget.initialRecord;
-    if (rec != null) {
-      _record = rec;
-      final boardId = rec['board_id'] as String?;
-      if (boardId != null) {
+    // Pre-load a game record if navigated here from game-over overlay or game history.
+    // Deep-normalise to Map<String,dynamic> — socket data arrives as Map<dynamic,dynamic>
+    // in dart2js and hard 'as' casts would throw at runtime.
+    final raw = widget.initialRecord;
+    if (raw != null) {
+      _record = _normalise(raw);
+      final boardId = _record!['board_id'] as String?;
+      debugPrint('[Analysis] initState: board_id=$boardId, moves=${(_record!['moves'] as List?)?.length} moves');
+      if (boardId != null && boardId.isNotEmpty) {
         SchedulerBinding.instance.addPostFrameCallback((_) {
           _fetchBoard(boardId).then((_) => _fetchReplayState(0));
         });
+      } else {
+        debugPrint('[Analysis] WARNING: board_id is null/empty — board will not load');
       }
     }
   }
@@ -177,12 +197,18 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
   Future<void> _fetchBoard(String boardId) async {
     try {
       final base = AppConfig.apiUrl.isEmpty ? '' : AppConfig.apiUrl;
-      final res  = await http.get(Uri.parse('$base/api/boards/${Uri.encodeComponent(boardId)}'));
-      if (!mounted || res.statusCode != 200) return;
+      final url = '$base/api/boards/${Uri.encodeComponent(boardId)}';
+      debugPrint('[Analysis] fetchBoard: GET $url');
+      final res  = await http.get(Uri.parse(url));
+      debugPrint('[Analysis] fetchBoard: status=${res.statusCode} bodyLen=${res.body.length}');
+      if (!mounted || res.statusCode != 200) {
+        debugPrint('[Analysis] fetchBoard FAILED: ${res.statusCode} ${res.body.substring(0, res.body.length.clamp(0, 200))}');
+        return;
+      }
       final data = jsonDecode(res.body) as Map<String,dynamic>;
       _parseBoard(data);
     } catch (e) {
-      debugPrint('Analysis: board fetch error: $e');
+      debugPrint('[Analysis] board fetch error: $e');
     }
   }
 
@@ -433,11 +459,19 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
         border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08)))),
       child: Row(children: [
         GestureDetector(
-          onTap: () => context.go('/'),
+          onTap: () {
+            // Works whether we arrived via GoRouter OR plain Navigator.push
+            // (e.g. from the admin panel which has no GoRouter ancestor).
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            } else {
+              context.go('/');
+            }
+          },
           child: Row(children: [
             const Icon(Icons.arrow_back_ios_new, color: Colors.white70, size: 14),
             const SizedBox(width: 4),
-            Text('Lobby', style: GoogleFonts.outfit(color: Colors.white70, fontSize: 13)),
+            Text('Back', style: GoogleFonts.outfit(color: Colors.white70, fontSize: 13)),
           ]),
         ),
         const SizedBox(width: 16),

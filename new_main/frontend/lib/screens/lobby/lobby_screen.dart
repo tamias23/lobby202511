@@ -422,7 +422,8 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                       }),
                     );
                   }),
-                if (auth != null && lobby.tournamentsEnabled)
+                if (auth != null && lobby.tournamentsEnabled &&
+                    Roles.canUser(auth.role, 'tournament_creator'))
                   _TCButton(
                     label: 'Tourney', description: 'Create',
                     color: DTheme.success,
@@ -433,14 +434,34 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
             ),
           ),
         ),
-        // Cancel my request
+        // Cancel my request — compact chip, not a full-width button
         if (lobby.myRequestId != null)
           Padding(
-            padding: const EdgeInsets.only(top: 14),
-            child: _GradientButton(
-              label: '✕ Cancel my request',
-              onTap: () => ref.read(lobbyProvider.notifier).cancelGameRequest(),
-              danger: true,
+            padding: const EdgeInsets.only(top: 10),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: GestureDetector(
+                onTap: () => ref.read(lobbyProvider.notifier).cancelGameRequest(),
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.45)),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.close, size: 13, color: Color(0xFFEF4444)),
+                      const SizedBox(width: 5),
+                      Text('Cancel request',
+                        style: GoogleFonts.outfit(
+                          fontSize: 12, fontWeight: FontWeight.w600,
+                          color: const Color(0xFFEF4444))),
+                    ]),
+                  ),
+                ),
+              ),
             ),
           ),
       ],
@@ -639,13 +660,16 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
       count: lobby.openTournaments.length,
       emptyLine1: 'No open tournaments.',
       emptyLine2: 'Create one!',
-      children: lobby.openTournaments.map((t) => _TournamentOpenCard(
-        username: t.name ?? formatLabel[t.format] ?? t.format,
-        tc: 'by ${t.creatorUsername ?? 'System'} · ${t.timeControl['category'] ?? ''} ${t.timeControl['minutes']}+${t.timeControl['increment']}',
-        info: '${t.currentCount ?? 0}/${t.maxParticipants ?? '?'}${t.hasPassword ? ' 🔒' : ''}',
-        onView: () => context.go('/tournament/${t.id}'),
-        onJoin: auth == null ? null : () => ref.read(lobbyProvider.notifier).joinTournament(t.id),
-      )).toList(),
+      children: lobby.openTournaments.map((t) {
+        final fmt = formatLabel[t.format] ?? t.format;
+        return _TournamentOpenCard(
+          username: t.name ?? fmt,
+          tc: 'by ${t.creatorUsername ?? 'System'} · ${t.timeControl['category'] ?? ''} ${t.timeControl['minutes']}+${t.timeControl['increment']} · $fmt',
+          info: '${t.currentCount ?? 0}/${t.maxParticipants ?? '?'}${t.hasPassword ? ' 🔒' : ''}',
+          onView: () => context.go('/tournament/${t.id}'),
+          onJoin: auth == null ? null : () => ref.read(lobbyProvider.notifier).joinTournament(t.id),
+        );
+      }).toList(),
     );
   }
 
@@ -658,16 +682,19 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
       emptyLine1: 'No active tournaments.',
       emptyLine2: '',
       accentColor: DTheme.success,
-      children: lobby.activeTournaments.map((t) => _ActiveGameCard(
-        whiteName: t.name ?? formatLabel[t.format] ?? t.format,
-        blackName: 'by ${t.creatorUsername ?? 'System'}',
-        tc: '${t.timeControl['category'] ?? ''} ${t.timeControl['minutes']}+${t.timeControl['increment']}',
-        moveCount: t.currentCount ?? 0,
-        hasDisconnect: false,
-        isMe: false,
-        label: t.status == 'completed' ? 'View ✅' : 'View',
-        onAction: () => context.go('/tournament/${t.id}'),
-      )).toList(),
+      children: lobby.activeTournaments.map((t) {
+        final fmt = formatLabel[t.format] ?? t.format;
+        return _ActiveGameCard(
+          whiteName: t.name ?? fmt,
+          blackName: 'by ${t.creatorUsername ?? 'System'}',
+          tc: '${t.timeControl['category'] ?? ''} ${t.timeControl['minutes']}+${t.timeControl['increment']} · $fmt',
+          moveCount: t.currentCount ?? 0,
+          hasDisconnect: false,
+          isMe: false,
+          label: t.status == 'completed' ? 'View ✅' : 'View',
+          onAction: () => context.go('/tournament/${t.id}'),
+        );
+      }).toList(),
     );
   }
 }

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -69,11 +70,18 @@ class _GameHistoryScreenState extends State<GameHistoryScreen> {
   // ── Navigation to analysis ─────────────────────────────────────────────────
 
   void _openAnalysis(Map<String, dynamic> g) {
+    // moves may arrive as a JSON string from the DB — decode defensively
+    dynamic rawMoves = g['moves'];
+    final List<dynamic> moves = rawMoves is String
+        ? (jsonDecode(rawMoves) as List? ?? [])
+        : (rawMoves as List? ?? []);
+
     context.push('/analysis', extra: {
-      'moves':       g['moves'],
-      'white_name':  g['my_color'] == 'white' ? 'Me' : g['opponent'],
-      'black_name':  g['my_color'] == 'black' ? 'Me' : g['opponent'],
-      'game_id':     g['game_id'],
+      'board_id':   g['board_id'],
+      'moves':      moves,
+      'white_name': g['my_color'] == 'white' ? 'Me' : g['opponent'],
+      'black_name': g['my_color'] == 'black' ? 'Me' : g['opponent'],
+      'game_id':    g['game_id'],
     });
   }
 

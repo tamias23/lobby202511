@@ -217,7 +217,7 @@ class GameOverOverlay extends StatelessWidget {
   Map<String, dynamic> _buildRecord() {
     return {
       'version': 3,
-      'board_id': boardName ?? 'Template',
+      'board_id': (boardName != null && boardName!.isNotEmpty) ? boardName : 'board',
       'whiteName': gameState.whiteName ?? 'White',
       'blackName': gameState.blackName ?? 'Black',
       'winner': gameOverInfo?.winner,

@@ -91,18 +91,21 @@ pub async fn list_models() -> Json<ModelsResponse> {
     // Sort greedy_jack models by name so rank ordering is preserved
     models.sort_by(|a, b| a.model_name.cmp(&b.model_name));
 
-    // Scan mcts/*.onnx
-    let mcts_dir = format!("{}/mcts", models_dir);
-    if let Ok(entries) = std::fs::read_dir(&mcts_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) == Some("onnx") {
-                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                    models.push(ModelInfo {
-                        agent_type: "mcts".to_string(),
-                        model_name: stem.to_string(),
-                        display_name: format!("MCTS ({})", stem),
-                    });
+    // Scan mcts/*.onnx (only when onnx feature is enabled)
+    #[cfg(feature = "onnx")]
+    {
+        let mcts_dir = format!("{}/mcts", models_dir);
+        if let Ok(entries) = std::fs::read_dir(&mcts_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("onnx") {
+                    if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                        models.push(ModelInfo {
+                            agent_type: "mcts".to_string(),
+                            model_name: stem.to_string(),
+                            display_name: format!("MCTS ({})", stem),
+                        });
+                    }
                 }
             }
         }
@@ -372,6 +375,7 @@ fn build_agent(req: &MoveRequest) -> Result<std::sync::Arc<dyn rust::agents::Age
             Ok(std::sync::Arc::new(agents::greedy_jack::GreedyJackAgent::new(weights)))
         }
 
+        #[cfg(feature = "onnx")]
         "mcts" => {
             let budget_ms = req.mcts_budget_ms.unwrap_or(500);
             let model_name = req.model_name.as_deref().unwrap_or("model");
@@ -392,6 +396,11 @@ fn build_agent(req: &MoveRequest) -> Result<std::sync::Arc<dyn rust::agents::Age
                 false, // don't record training data
                 0,     // verbosity
             )))
+        }
+
+        #[cfg(not(feature = "onnx"))]
+        "mcts" => {
+            Err("MCTS agent requires the 'onnx' feature which is not enabled in this build.".to_string())
         }
 
         "quick_diego" => {

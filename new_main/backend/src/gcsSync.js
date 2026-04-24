@@ -3,8 +3,8 @@
 // ─── Game Offload Module ──────────────────────────────────────────────────────
 //
 // Strategy:
-//   Periodically offload old games from Firestore to Parquet files on /mnt/db.
-//   Games older than GAME_RETENTION_DAYS are exported, then deleted from Firestore.
+//   Periodically offload old games from PostgreSQL to Parquet files on /mnt/db.
+//   Games older than GAME_RETENTION_DAYS are exported, then deleted from PostgreSQL.
 //
 // Only active when both GCS_BUCKET and NODE_ENV=production are set (i.e. on GCP).
 // Locally, offloadOldGames() is a silent no-op.
@@ -37,7 +37,7 @@ function timestamp() {
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
- * Export old games from Firestore to Parquet, then delete them.
+ * Export old games from PostgreSQL to Parquet, then delete them.
  * Uses DuckDB in-memory for the Parquet export.
  */
 async function offloadOldGames(db) {
@@ -107,11 +107,11 @@ async function offloadOldGames(db) {
 
         logger.info('Offload', `Exported ${games.length} game(s) → ${localParquet}`);
 
-        // Delete from Firestore only after successful export
+        // Delete from PostgreSQL only after successful export
         const gameIds = games.map(g => g.game_id);
         await db.deleteGamesByIds(gameIds);
 
-        logger.info('Offload', `Offload complete: ${games.length} game(s) exported and removed from Firestore.`);
+        logger.info('Offload', `Offload complete: ${games.length} game(s) exported and removed from PostgreSQL.`);
 
     } catch (e) {
         logger.error('Offload', 'Game offload failed:', e.message);

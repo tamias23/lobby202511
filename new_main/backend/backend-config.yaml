@@ -45,10 +45,12 @@ VALKEY_ENABLED: "true"
 VALKEY_HOST: "127.0.0.1"
 VALKEY_PORT: "6379"
 
-# Firestore
-# Locally: FIRESTORE_EMULATOR_HOST is set in the launch script.
-# On GCP: the SDK auto-discovers via default credentials.
-FIRESTORE_PROJECT_ID: "my-local-firestore"
+# PostgreSQL
+PG_HOST: "127.0.0.1"
+PG_PORT: "5432"
+PG_DATABASE: "dedalthegame01"
+PG_USER: "tamias23"
+PG_PASSWORD: "TY-rre__U@345"
 
 # Game History Offload
 # Games older than GAME_RETENTION_DAYS are exported to /mnt/db as Parquet files.

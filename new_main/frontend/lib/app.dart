@@ -39,15 +39,23 @@ final _router = GoRouter(
       path: '/games/:hash',
       builder: (context, state) {
         final hash = state.pathParameters['hash']!;
-        // Optional navigation extras (side, initialState, opponent, tournamentId)
-        final extra = state.extra as Map<String, dynamic>?;
+        // Deep-convert extra from Map<dynamic,dynamic> (socket) to Map<String,dynamic>
+        final rawExtra = state.extra;
+        final extra = rawExtra is Map
+            ? _deepMapStr(rawExtra)
+            : null;
         return GameScreen(hash: hash, extra: extra);
       },
     ),
     GoRoute(
       path: '/analysis',
       builder: (context, state) {
-        final record = state.extra as Map<String, dynamic>?;
+        // state.extra may be Map<dynamic,dynamic> from socket data in dart2js;
+        // convert safely instead of hard-casting.
+        final raw = state.extra;
+        final record = raw is Map
+            ? Map<String, dynamic>.from(raw.map((k, v) => MapEntry(k.toString(), v)))
+            : null;
         return AnalysisScreen(initialRecord: record);
       },
     ),
@@ -145,3 +153,18 @@ class _DedalAppState extends ConsumerState<DedalApp> {
     );
   }
 }
+
+/// Deep-converts Map<dynamic,dynamic> (as delivered by Socket.IO / dart2js) to
+/// Map<String,dynamic> so all downstream 'as Map<String,dynamic>' casts are safe.
+Map<String, dynamic> _deepMapStr(Map raw) {
+  return raw.map((k, v) {
+    dynamic val;
+    if (v is Map)       val = _deepMapStr(v);
+    else if (v is List) val = _deepListStr(v);
+    else                val = v;
+    return MapEntry(k.toString(), val);
+  });
+}
+
+List<dynamic> _deepListStr(List raw) =>
+    raw.map((v) => v is Map ? _deepMapStr(v) : (v is List ? _deepListStr(v) : v)).toList();

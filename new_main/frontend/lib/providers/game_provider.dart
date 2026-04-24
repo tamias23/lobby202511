@@ -3,6 +3,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/socket_service.dart';
 import '../models/models.dart';
 
+// ── Deep-map helper (socket delivers Map<dynamic,dynamic> in dart2js) ─────────
+
+Map<String, dynamic> _deepMap(Map raw) {
+  return raw.map((k, v) {
+    dynamic val;
+    if (v is Map)       val = _deepMap(v);
+    else if (v is List) val = _deepList(v);
+    else                val = v;
+    return MapEntry(k.toString(), val);
+  });
+}
+
+List<dynamic> _deepList(List raw) =>
+    raw.map((v) => v is Map ? _deepMap(v) : (v is List ? _deepList(v) : v)).toList();
+
 // ── Per-game state ─────────────────────────────────────────────────────────────
 
 class GameBoardState {
@@ -80,7 +95,7 @@ class GameNotifier extends Notifier<GameBoardState> {
   // ── Socket listeners ──────────────────────────────────────────────────────
 
   void _onGameUpdate(dynamic data) {
-    final d = Map<String, dynamic>.from(data as Map);
+    final d = _deepMap(data as Map);
     final gs = state.gameState;
     if (gs == null) return;
 
@@ -88,7 +103,7 @@ class GameNotifier extends Notifier<GameBoardState> {
     if (d['pieces'] != null) {
       updated = updated.copyWith(
         pieces: (d['pieces'] as List)
-            .map((e) => Piece.fromJson(Map<String, dynamic>.from(e as Map)))
+            .map((e) => Piece.fromJson(e as Map<String, dynamic>))
             .toList(),
       );
     }
@@ -104,17 +119,17 @@ class GameNotifier extends Notifier<GameBoardState> {
     }
     if (d['heroeTakeCounter'] != null) updated = updated.copyWith(heroeTakeCounter: (d['heroeTakeCounter'] as num).toInt());
     if (d['clocks'] != null) updated = updated.copyWith(
-      clocks: (d['clocks'] as Map).map((k, v) => MapEntry(k as String, (v as num).toInt())),
+      clocks: (d['clocks'] as Map<String, dynamic>).map((k, v) => MapEntry(k, (v as num).toInt())),
     );
     if (d['lastTurnTimestamp'] != null) updated = updated.copyWith(lastTurnTimestamp: (d['lastTurnTimestamp'] as num).toInt());
-    if (d['colorChosen'] != null) updated = updated.copyWith(colorChosen: Map<String, dynamic>.from(d['colorChosen'] as Map));
+    if (d['colorChosen'] != null) updated = updated.copyWith(colorChosen: d['colorChosen'] as Map<String, dynamic>);
     if (d['colorsEverChosen'] != null) updated = updated.copyWith(colorsEverChosen: List<String>.from(d['colorsEverChosen'] as List));
     if (d['mageUnlocked'] != null) updated = updated.copyWith(mageUnlocked: d['mageUnlocked'] as bool);
     if (d['passCount'] != null) updated = updated.copyWith(
-      passCount: (d['passCount'] as Map).map((k, v) => MapEntry(k as String, (v as num).toInt())),
+      passCount: (d['passCount'] as Map<String, dynamic>).map((k, v) => MapEntry(k, (v as num).toInt())),
     );
     if (d['moves'] != null) updated = updated.copyWith(
-      moves: (d['moves'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+      moves: (d['moves'] as List).map((e) => e as Map<String, dynamic>).toList(),
     );
 
     debugPrint('[GameUpdate] turn=${updated.turn} phase=${updated.phase}'
@@ -126,7 +141,7 @@ class GameNotifier extends Notifier<GameBoardState> {
   }
 
   void _onLegalMoves(dynamic data) {
-    final d = Map<String, dynamic>.from(data as Map);
+    final d = _deepMap(data as Map);
     final pieceId = d['pieceId'] as String? ?? '';
     final targets = List<String>.from(d['targets'] as List? ?? []);
     debugPrint('[LegalMoves] received ${targets.length} targets for $pieceId: $targets');
@@ -150,7 +165,7 @@ class GameNotifier extends Notifier<GameBoardState> {
   }
 
   void _onGameOver(dynamic data) {
-    final d = Map<String, dynamic>.from(data as Map);
+    final d = _deepMap(data as Map);
     final info = GameOverInfo.fromJson(d);
     final gs = state.gameState?.copyWith(phase: 'GameOver');
     state = state.copyWith(gameState: gs, gameOverInfo: info);
@@ -170,7 +185,7 @@ class GameNotifier extends Notifier<GameBoardState> {
   }
 
   void _onRatingUpdated(dynamic data) {
-    final d = Map<String, dynamic>.from(data as Map);
+    final d = _deepMap(data as Map);
     state = state.copyWith(ratingDelta: RatingDelta.fromJson(d));
   }
 
@@ -271,41 +286,44 @@ class GameNotifier extends Notifier<GameBoardState> {
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   GameState _parseGameState(Map<String, dynamic> raw, String side) {
-    final pieces = (raw['pieces'] as List? ?? [])
+    // Deep-normalise: socket delivers Map<dynamic,dynamic>; models.g.dart expects
+    // Map<String,dynamic> for every nested map (board, timeControl, clocks, …)
+    final r = _deepMap(raw);
+    final pieces = (r['pieces'] as List? ?? [])
         .map((e) => Piece.fromJson(e as Map<String, dynamic>))
         .toList();
     return GameState(
-      board: raw['board'] as Map<String, dynamic>? ?? {},
+      board: r['board'] as Map<String, dynamic>? ?? {},
       pieces: pieces,
-      turn: raw['turn'] as String? ?? 'white',
-      phase: raw['phase'] as String? ?? 'Setup',
-      setupStep: (raw['setupStep'] as num?)?.toInt() ?? 0,
-      turnCounter: (raw['turnCounter'] as num?)?.toInt() ?? 0,
-      isNewTurn: raw['isNewTurn'] as bool? ?? true,
-      movesThisTurn: (raw['movesThisTurn'] as num?)?.toInt() ?? 0,
-      lockedSequencePiece: raw['lockedSequencePiece'] as String?,
-      heroeTakeCounter: (raw['heroeTakeCounter'] as num?)?.toInt() ?? 0,
-      clocks: raw['clocks'] != null
-          ? (raw['clocks'] as Map).map((k, v) => MapEntry(k as String, (v as num).toInt()))
+      turn: r['turn'] as String? ?? 'white',
+      phase: r['phase'] as String? ?? 'Setup',
+      setupStep: (r['setupStep'] as num?)?.toInt() ?? 0,
+      turnCounter: (r['turnCounter'] as num?)?.toInt() ?? 0,
+      isNewTurn: r['isNewTurn'] as bool? ?? true,
+      movesThisTurn: (r['movesThisTurn'] as num?)?.toInt() ?? 0,
+      lockedSequencePiece: r['lockedSequencePiece'] as String?,
+      heroeTakeCounter: (r['heroeTakeCounter'] as num?)?.toInt() ?? 0,
+      clocks: r['clocks'] != null
+          ? (r['clocks'] as Map<String, dynamic>).map((k, v) => MapEntry(k, (v as num).toInt()))
           : {'white': 900000, 'black': 900000},
-      lastTurnTimestamp: (raw['lastTurnTimestamp'] as num?)?.toInt(),
-      colorChosen: raw['colorChosen'] != null ? Map<String, dynamic>.from(raw['colorChosen'] as Map) : {},
-      colorsEverChosen: raw['colorsEverChosen'] != null ? List<String>.from(raw['colorsEverChosen'] as List) : [],
-      mageUnlocked: raw['mageUnlocked'] as bool? ?? false,
-      passCount: raw['passCount'] != null
-          ? (raw['passCount'] as Map).map((k, v) => MapEntry(k as String, (v as num).toInt()))
+      lastTurnTimestamp: (r['lastTurnTimestamp'] as num?)?.toInt(),
+      colorChosen: r['colorChosen'] as Map<String, dynamic>? ?? {},
+      colorsEverChosen: r['colorsEverChosen'] != null ? List<String>.from(r['colorsEverChosen'] as List) : [],
+      mageUnlocked: r['mageUnlocked'] as bool? ?? false,
+      passCount: r['passCount'] != null
+          ? (r['passCount'] as Map<String, dynamic>).map((k, v) => MapEntry(k, (v as num).toInt()))
           : {'white': 0, 'black': 0},
-      moves: raw['moves'] != null
-          ? (raw['moves'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList()
+      moves: r['moves'] != null
+          ? (r['moves'] as List).map((e) => e as Map<String, dynamic>).toList()
           : [],
-      timeControl: raw['timeControl'] as Map<String, dynamic>?,
-      whiteName: raw['whiteName'] as String?,
-      blackName: raw['blackName'] as String?,
-      whiteRole: raw['whiteRole'] as String?,
-      blackRole: raw['blackRole'] as String?,
-      whiteRating: (raw['whiteRating'] as num?)?.toDouble(),
-      blackRating: (raw['blackRating'] as num?)?.toDouble(),
-      boardName: raw['boardName'] as String?,
+      timeControl: r['timeControl'] as Map<String, dynamic>?,
+      whiteName: r['whiteName'] as String?,
+      blackName: r['blackName'] as String?,
+      whiteRole: r['whiteRole'] as String?,
+      blackRole: r['blackRole'] as String?,
+      whiteRating: (r['whiteRating'] as num?)?.toDouble(),
+      blackRating: (r['blackRating'] as num?)?.toDouble(),
+      boardName: r['boardName'] as String?,
       side: side,
     );
   }

@@ -33,15 +33,19 @@ else
       docker.io/valkey/valkey:latest
 fi
 
-if podman container exists "local-firestore"; then
-    echo "Container 'local-firestore' already exists. Ensuring it is started..."
-    podman start "local-firestore"
+if podman container exists "local-postgres"; then
+    echo "Container 'local-postgres' already exists. Ensuring it is started..."
+    podman start "local-postgres"
 else
-    echo "Container 'local-firestore' does not exist. Creating and starting..."
-    podman run -d --name local-firestore \
-      -p 8080:8080 \
-      -e FIRESTORE_PROJECT_ID=my-local-firestore \
-      docker.io/mtlynch/firestore-emulator
+    echo "Container 'local-postgres' does not exist. Creating and starting..."
+    mkdir -p /home/mat/Bureau/dedalthegame/PSQL
+    podman run -d --name "local-postgres" \
+      -p 5432:5432 \
+      -e POSTGRES_DB=dedalthegame01 \
+      -e POSTGRES_USER=tamias23 \
+      -e POSTGRES_PASSWORD="TY-rre__U@345" \
+      -v /home/mat/Bureau/dedalthegame/PSQL:/var/lib/postgresql/data:Z \
+      docker.io/library/postgres:16-alpine
 fi
 
 source ~/.nvm/nvm.sh && nvm use default
@@ -88,7 +92,7 @@ done
 # --- 3. Start Game Server (also serves the built frontend on port 4000) ---
 echo "==> Starting Game Server on port 4000..."
 cd "${SCRIPT_DIR}"
-BOT_SERVER_URL=http://localhost:5001 VALKEY_ENABLED=${VALKEY_ENABLED:-true} FIRESTORE_EMULATOR_HOST=localhost:8080 FIRESTORE_PROJECT_ID=my-local-firestore node backend/src/index.js &
+BOT_SERVER_URL=http://localhost:5001 VALKEY_ENABLED=${VALKEY_ENABLED:-true} PG_HOST=localhost PG_PORT=5432 PG_DATABASE=dedalthegame01 PG_USER=tamias23 PG_PASSWORD="TY-rre__U@345" node backend/src/index.js &
 GAME_PID=$!
 
 echo ""

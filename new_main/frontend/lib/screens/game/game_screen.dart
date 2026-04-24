@@ -5,6 +5,20 @@ import '../../core/theme.dart';
 import '../../providers/game_provider.dart';
 import 'game_board.dart';
 
+// Mirrors the helper in game_provider.dart / app.dart — avoids a circular import.
+Map<String, dynamic> _deepMap(Map raw) {
+  return raw.map((k, v) {
+    dynamic val;
+    if (v is Map)       val = _deepMap(v);
+    else if (v is List) val = _deepList(v);
+    else                val = v;
+    return MapEntry(k.toString(), val);
+  });
+}
+List<dynamic> _deepList(List raw) =>
+    raw.map((v) => v is Map ? _deepMap(v) : (v is List ? _deepList(v) : v)).toList();
+
+
 /// GameScreen wraps GameBoard, handling:
 /// - `join_game_by_hash` socket emit (replaces GamePage.jsx)
 /// - Loading/error states while server responds with game_joined
@@ -54,7 +68,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     // Otherwise join by hash (direct URL open / rejoin / spectate)
     _socket.once('game_joined', (data) {
       if (!mounted) return;
-      final d = Map<String, dynamic>.from(data as Map);
+      final d = _deepMap(data as Map);
       if (d['error'] != null) {
         if (mounted) setState(() {}); // trigger rebuild to show error
         return;
@@ -62,9 +76,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       _side = d['side'] as String? ?? 'spectator';
       _spectator = _side == 'spectator';
       _tournamentId = d['tournamentId'] as String?;
-      final rawState = d['initialState'] != null
-          ? Map<String, dynamic>.from(d['initialState'] as Map)
-          : null;
+      final rawState = d['initialState'] as Map<String, dynamic>?;
       if (rawState != null) {
         ref.read(gameProvider(widget.hash).notifier)
             .applyInitialState(rawState, _spectator ? 'spectator' : (_side ?? 'spectator'));

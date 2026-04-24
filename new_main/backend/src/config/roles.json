@@ -18,6 +18,6 @@
   },
   "limits": {
     "rated_games_per_24h": { "guest": 0, "registered": 3, "subscriber": -1, "admin": -1 },
-    "bot_games_per_24h": { "guest": 1, "registered": 10, "subscriber": -1, "admin": -1 }
+    "bot_games_per_24h": { "guest": 3, "registered": 10, "subscriber": -1, "admin": -1 }
   }
 }

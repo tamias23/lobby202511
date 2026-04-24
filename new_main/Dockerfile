@@ -76,4 +76,4 @@ WORKDIR /app/backend
 # Final configuration
 EXPOSE 8080
 # Explicitly set max-old-space-size to 450MB to fit within typical 512MB Cloud Run containers
-CMD ["node", "--max-old-space-size=450", "src/index.js"]
+CMD ["node", "--max-old-space-size=1800", "src/index.js"]

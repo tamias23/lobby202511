@@ -13,7 +13,7 @@
 set -euo pipefail
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
-REPLICAS=5
+REPLICAS=3
 REMOTE=""
 TUNNEL=false
 CF_TOKEN=""
@@ -81,13 +81,13 @@ if ! systemctl --user is-active podman.socket &>/dev/null; then
 fi
 
 # ── Ensure data directories exist ────────────────────────────────────────────
-mkdir -p /home/mat/Bureau/dedalthegame/firestore_db
+mkdir -p /home/mat/Bureau/dedalthegame/PSQL
 mkdir -p /home/mat/Bureau/dedalthegame/parquet
 
 
 if [[ -n "$REMOTE" ]]; then
     echo "==> Ensuring data directories on remote host..."
-    ssh "$REMOTE" "mkdir -p /home/mat/Bureau/dedalthegame/firestore_db /home/mat/Bureau/dedalthegame/parquet ~/dedal-deploy"
+    ssh "$REMOTE" "mkdir -p /home/mat/Bureau/dedalthegame/PSQL /home/mat/Bureau/dedalthegame/parquet ~/dedal-deploy"
 fi
 
 # ── Build phase ───────────────────────────────────────────────────────────────

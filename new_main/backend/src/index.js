@@ -8,7 +8,7 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const geoip = require('geoip-lite');
 const { v4: uuidv4 } = require('uuid');
-const { initDb, isDbUp, getUser, getUserByEmailOrUsername, getUserByVerificationToken, createUser, updateUser, updateUserRating, getLeaderboard } = require('./db');
+const { initDb, isDbUp, getUser, getUserByEmailOrUsername, getUserByEmailHash, getUserByVerificationToken, createUser, updateUser, updateUserRating, getLeaderboard } = require('./db');
 // startGameOffload removed, replaced by jobs system
 const tournamentManager = require('./tournament/tournamentManager');
 const { generateGuestId } = require('./utils/auth');
@@ -781,7 +781,7 @@ valkeyAdapter.init(io);
 
 const PORT = process.env.PORT || 4000;
 
-// Initialize Database — connect to Firestore, then start services
+// Initialize Database — connect to PostgreSQL, then start services
 initDb()
     .then(async () => {
     logger.info('Server', 'Database layer initialized.');
@@ -1077,33 +1077,88 @@ app.get('/api/boards/random/:count', (req, res) => {
     res.json({ boards });
 });
 
+// ── Registration helpers ──────────────────────────────────────────────────────
+
+/**
+ * Returns true if the string contains any emoji or non-text Unicode symbol.
+ * Covers: emoji, pictographs, dingbats, enclosed alphanumerics, variation selectors, ZWJ sequences.
+ */
+function containsEmoji(str) {
+    // Broad Unicode ranges for emoji & symbols
+    return /[\u00A9\u00AE\u203C\u2049\u20E3\u2122\u2139\u2194-\u2199\u21A9-\u21AA\u231A-\u231B\u2328\u23CF\u23E9-\u23F3\u23F8-\u23FA\u24C2\u25AA-\u25AB\u25B6\u25C0\u25FB-\u25FE\u2600-\u2604\u260E\u2611\u2614-\u2615\u2618\u261D\u2620\u2622-\u2623\u2626\u262A\u262E-\u262F\u2638-\u263A\u2640\u2642\u2648-\u2653\u265F-\u2660\u2663\u2665-\u2666\u2668\u267B\u267E-\u267F\u2692-\u2697\u2699\u269B-\u269C\u26A0-\u26A1\u26A7\u26AA-\u26AB\u26B0-\u26B1\u26BD-\u26BE\u26C4-\u26C5\u26CE-\u26CF\u26D1\u26D3-\u26D4\u26E9-\u26EA\u26F0-\u26F5\u26F7-\u26FA\u26FD\u2702\u2705\u2708-\u270D\u270F\u2712\u2714\u2716\u271D\u2721\u2728\u2733-\u2734\u2744\u2747\u274C\u274E\u2753-\u2755\u2757\u2763-\u2764\u2795-\u2797\u27A1\u27B0\u27BF\u2934-\u2935\u2B05-\u2B07\u2B1B-\u2B1C\u2B50\u2B55\u3030\u303D\u3297\u3299]|\uD83C[\uDC04\uDCCF\uDD70-\uDD71\uDD7E-\uDD7F\uDD8E\uDD91-\uDD9A\uDDE6-\uDDFF\uDE01-\uDE02\uDE1A\uDE2F\uDE32-\uDE3A\uDE50-\uDE51\uDF00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDD00-\uDDFF]/.test(str);
+}
+
+/** Normalise email: lowercase, trim. */
+function normaliseEmail(raw) {
+    return raw.trim().toLowerCase();
+}
+
+/** SHA-256 hex of normalised email (built-in crypto, no extra deps). */
+function hashEmail(normEmail) {
+    return crypto.createHash('sha256').update(normEmail).digest('hex');
+}
+
+// ── Registration endpoint ─────────────────────────────────────────────────────
+
 app.post('/register', async (req, res) => {
     const { username, email, password } = req.body;
-    
+
+    // ── 1. Required-field check (no delay needed yet) ─────────────────────────
     if (!username || !email || !password) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    if (username.toLowerCase().startsWith('guest_')) {
-        return res.status(400).json({ error: 'Username cannot start with "guest_"' });
+    // ── 2. Username format validation (no DB, no delay) ───────────────────────
+
+    // Must be 3–30 chars, only letters, digits, underscores, hyphens
+    if (!/^[a-zA-Z0-9_\-]{3,30}$/.test(username)) {
+        return res.status(400).json({
+            error: 'Username must be 3–30 characters and contain only letters, digits, _ or -'
+        });
     }
 
-    if (username.toLowerCase().startsWith('bot_')) {
+    // Must not start with reserved prefixes (case-insensitive)
+    const userLower = username.toLowerCase();
+    if (userLower.startsWith('guest')) {
+        return res.status(400).json({ error: 'Username cannot start with "guest"' });
+    }
+    if (userLower.startsWith('bot_')) {
         return res.status(400).json({ error: 'Username cannot start with "bot_"' });
     }
+    if (userLower.startsWith('system')) {
+        return res.status(400).json({ error: 'Username cannot start with "system"' });
+    }
 
+    // Must not contain emoji or Unicode icons
+    if (containsEmoji(username)) {
+        return res.status(400).json({ error: 'Username must not contain emoji or special icons' });
+    }
+
+    // ── 3. 300ms anti-enumeration delay before any DB lookups ─────────────────
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    // ── 4. Email hash uniqueness (one account per email address) ──────────────
+    const normEmail  = normaliseEmail(email);
+    const emailHash  = hashEmail(normEmail);
+    const hashExists = await getUserByEmailHash(emailHash);
+    if (hashExists) {
+        return res.status(400).json({ error: 'An account with this email already exists' });
+    }
+
+    // ── 5. Create the account ─────────────────────────────────────────────────
     try {
-        const userId = uuidv4();
+        const userId      = uuidv4();
         const passwordHash = await bcrypt.hash(password, 10);
-        
+
         // Determine timezone by IP
-        const geo = geoip.lookup(req.ip);
+        const geo      = geoip.lookup(req.ip);
         const timezone = geo?.timezone || 'UTC';
 
         await createUser({
             id: userId,
             username,
-            email,
+            email: normEmail,
+            email_hash: emailHash,
             password_hash: passwordHash,
             timezone,
             role: 'registered',
@@ -1113,12 +1168,13 @@ app.post('/register', async (req, res) => {
         res.status(201).json({ message: 'User registered successfully. You can now log in.' });
     } catch (err) {
         if (err.message.includes('already registered')) {
-            return res.status(400).json({ error: err.message });
+            return res.status(400).json({ error: 'Username or email already in use' });
         }
         logger.error('Auth', 'Registration error:', err);
         res.status(500).json({ error: err.message });
     }
 });
+
 
 app.get('/verify-email', async (req, res) => {
     const { token } = req.query;
@@ -1296,6 +1352,9 @@ app.get('/api/me/games', async (req, res) => {
                 timestamp_utc:  g.timestamp_utc || g.started_at_utc || null,
                 tournament_id:  g.tournament_id || null,
                 moves:          g.moves || null,
+                board_id:       g.board_id || 'board',
+                white_name:     g.white_name || g.white_player_id || '?',
+                black_name:     g.black_name || g.black_player_id || '?',
             };
         });
 
@@ -1374,16 +1433,19 @@ app.get('/api/admin/users/:id/games', requireAdmin, async (req, res) => {
         merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
         const result = merged.slice(0, 50).map(g => {
-            const isWhite  = g.white_player_id === userId;
-            const opponent = isWhite ? g.black_name : g.white_name;
+            const isWhite    = g.white_player_id === userId;
+            // Resolve opponent name: prefer the stored name, strip 'unknown'
+            const rawOpponent = isWhite ? g.black_name : g.white_name;
+            const opponent    = (rawOpponent && rawOpponent !== 'unknown') ? rawOpponent : null;
             const myResult = g.winner === 'draw' ? 'Draw'
                 : (isWhite ? (g.winner === 'white' ? 'Win' : 'Loss')
                            : (g.winner === 'black' ? 'Win' : 'Loss'));
             const minutes   = g.time_control_minutes  || 0;
             const increment = g.time_control_increment || 0;
+            const tid       = g.tournament_id && String(g.tournament_id).trim() !== '' ? g.tournament_id : null;
             return {
                 game_id:       g.game_id,
-                opponent:      opponent || '?',
+                opponent:      opponent || (isWhite ? g.black_player_id : g.white_player_id) || '?',
                 my_color:      isWhite ? 'white' : 'black',
                 result:        myResult,
                 winner:        g.winner,
@@ -1392,8 +1454,12 @@ app.get('/api/admin/users/:id/games', requireAdmin, async (req, res) => {
                 category:      getCategoryLabel(minutes, increment),
                 timestamp:     g.timestamp || g.started_at || null,
                 timestamp_utc: g.timestamp_utc || g.started_at_utc || null,
-                tournament_id: g.tournament_id || null,
+                tournament_id: tid,
                 moves:         g.moves || null,
+                // Pass both names so the analysis screen can show them correctly
+                white_name:    g.white_name || g.white_player_id || '?',
+                black_name:    g.black_name || g.black_player_id || '?',
+                board_id:      g.board_id || 'board',
             };
         });
 
@@ -2241,8 +2307,9 @@ io.on('connection', (socket) => {
             socket.emit('tournament_error', { message: 'Tournaments are disabled on this server.' });
             return;
         }
-        if (!socket.userId || socket.userId.startsWith('guest_')) {
-            socket.emit('tournament_error', { message: 'Only registered users can create tournaments.' });
+        const { canUser } = require('./utils/permissions');
+        if (!canUser(socket.userRole, 'tournament_creator')) {
+            socket.emit('tournament_error', { message: 'Only subscribers and admins can create tournaments.' });
             return;
         }
         try {
@@ -2267,13 +2334,14 @@ io.on('connection', (socket) => {
             // Auto-join creator to tournament room
             socket.join(`tournament:${tournament.id}`);
 
+            // ── Respond immediately so the client never hits its safety timeout ──
+            // The creator is already in the room; game-start events arrive via
+            // socket updates even if the tournament starts before the client renders.
             socket.emit('tournament_created', {
                 id: tournament.id,
                 format: tournament.format,
                 status: tournament.status,
             });
-
-            // Persistently fill missing bots via background task
 
             broadcastLobbyUpdate(io);
         } catch (e) {
@@ -3134,6 +3202,34 @@ io.on('connection', (socket) => {
         }
         const db = require('./db');
         await db.deleteJobsByIds([jobId]);
+        callback({ success: true });
+    });
+
+    socket.on('admin:get_tournament_schedule', async (data, callback) => {
+        if (typeof data === 'function') callback = data;
+        if (!permissions.canUser(socket.userRole, 'manage_jobs')) {
+            return callback({ success: false, error: 'Forbidden' });
+        }
+        const db = require('./db');
+        const rows = await db.getTournamentSchedule();
+        callback({ success: true, schedule: rows });
+    });
+
+    socket.on('admin:upsert_tournament_schedule', async (data, callback) => {
+        if (!permissions.canUser(socket.userRole, 'manage_jobs')) {
+            return callback({ success: false, error: 'Forbidden' });
+        }
+        const db = require('./db');
+        const id = await db.upsertTournamentScheduleItem(data);
+        callback({ success: true, id });
+    });
+
+    socket.on('admin:delete_tournament_schedule', async ({ id }, callback) => {
+        if (!permissions.canUser(socket.userRole, 'manage_jobs')) {
+            return callback({ success: false, error: 'Forbidden' });
+        }
+        const db = require('./db');
+        await db.deleteTournamentScheduleItem(id);
         callback({ success: true });
     });
 

@@ -725,12 +725,28 @@ class _TutorialScreenState extends State<TutorialScreen> {
       width: 220,
       color: Colors.white.withValues(alpha: 0.03),
       child: Column(children: [
-        // Header
+        // Header — back button + DEDAL / Tutorial title
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
           decoration: BoxDecoration(
             border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08)))),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // ← Lobby above the title
+            GestureDetector(
+              onTap: () => context.go('/'),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.12))),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.arrow_back_ios_new, size: 11, color: Colors.white54),
+                  const SizedBox(width: 5),
+                  Text('Lobby', style: GoogleFonts.outfit(color: Colors.white54, fontSize: 12)),
+                ]),
+              ),
+            ),
+            const SizedBox(height: 10),
             Text('DEDAL', style: GoogleFonts.outfit(
               fontSize: 18, fontWeight: FontWeight.w900, color: DTheme.primary,
               letterSpacing: 4)),
@@ -740,29 +756,11 @@ class _TutorialScreenState extends State<TutorialScreen> {
         ),
         // Language dropdown
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
           child: _buildLangDropdown(),
         ),
         // Section list
         Expanded(child: ListView(children: _sections.map((sec) => _buildNavItem(sec)).toList())),
-        // Back button
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: GestureDetector(
-            onTap: () => context.go('/'),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.12))),
-              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                const Icon(Icons.arrow_back_ios_new, size: 12, color: Colors.white54),
-                const SizedBox(width: 6),
-                Text('Lobby', style: GoogleFonts.outfit(color: Colors.white54, fontSize: 13)),
-              ]),
-            ),
-          ),
-        ),
       ]),
     );
   }
