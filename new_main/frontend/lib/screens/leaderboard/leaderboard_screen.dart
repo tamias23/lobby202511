@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/api_service.dart';
 import '../../core/theme.dart';
+import '../../providers/translations_provider.dart';
 import '../../widgets/glass_panel.dart';
+import '../../widgets/lobby_back_button.dart';
 
 // Column width constants
 const double _colRank     = 44;
@@ -12,14 +14,14 @@ const double _colRating   = 72;
 const double _colTotal    = _colRank + _colUsername + _colRating;
 const double _colPad      = 20; // horizontal padding between categories
 
-class LeaderboardScreen extends StatefulWidget {
+class LeaderboardScreen extends ConsumerStatefulWidget {
   const LeaderboardScreen({super.key});
 
   @override
-  State<LeaderboardScreen> createState() => _LeaderboardScreenState();
+  ConsumerState<LeaderboardScreen> createState() => _LeaderboardScreenState();
 }
 
-class _LeaderboardScreenState extends State<LeaderboardScreen> {
+class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
   final _api = ApiService.instance;
   Map<String, dynamic>? _data;
   bool _loading = true;
@@ -60,23 +62,34 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: DTheme.textMainDark),
-          onPressed: () => context.go('/'),
-        ),
-        title: Text('Leaderboard',
-            style: GoogleFonts.outfit(color: DTheme.textMainDark, fontWeight: FontWeight.bold)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: DTheme.textMainDark),
-            onPressed: _fetchLeaderboard,
+      body: SafeArea(
+        child: Column(children: [
+          // ── Header ────────────────────────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(
+                color: Colors.white.withValues(alpha: 0.08)))),
+            child: Row(children: [
+              const LobbyBackButton(),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(ref.tr('ui.leaderboard'),
+                  style: GoogleFonts.outfit(
+                    color: DTheme.textMainDark,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18)),
+              ),
+              IconButton(
+                icon: const Icon(Icons.refresh, color: DTheme.textMainDark),
+                onPressed: _fetchLeaderboard,
+              ),
+            ]),
           ),
-        ],
+          // ── Body ──────────────────────────────────────────────────────────
+          Expanded(child: _buildBody()),
+        ]),
       ),
-      body: _buildBody(),
     );
   }
 

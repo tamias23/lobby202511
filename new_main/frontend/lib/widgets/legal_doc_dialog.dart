@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/theme.dart';
+import '../providers/locale_provider.dart';
+import '../providers/translations_provider.dart';
 
 /// Generic dialog that loads a markdown asset and renders it with simple
 /// formatting (h1/h2, bold, bullets, horizontal rules, plain text).
 /// No external markdown package required.
-class LegalDocDialog extends StatelessWidget {
+class LegalDocDialog extends ConsumerWidget {
   final String title;
   final String assetPath; // e.g. 'assets/legal/privacy.md'
 
@@ -24,8 +27,24 @@ class LegalDocDialog extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final screenH = MediaQuery.of(context).size.height;
+    final locale = ref.watch(localeProvider);
+    final lang = locale.languageCode;
+    
+    // Try to load localized version first (e.g. privacy_fr.md)
+    final localizedPath = assetPath.replaceAll('.md', '_$lang.md');
+
+    Future<String> loadDoc() async {
+      try {
+        // We can't easily check if asset exists without a list, 
+        // so we try the localized one and catch the exception to fallback.
+        return await rootBundle.loadString(localizedPath);
+      } catch (_) {
+        return await rootBundle.loadString(assetPath);
+      }
+    }
+
     return AlertDialog(
       backgroundColor: DTheme.cardBgDark,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -47,13 +66,13 @@ class LegalDocDialog extends StatelessWidget {
         width: 560,
         height: screenH * 0.65,
         child: FutureBuilder<String>(
-          future: rootBundle.loadString(assetPath),
+          future: loadDoc(),
           builder: (context, snap) {
             if (snap.connectionState != ConnectionState.done) {
               return const Center(child: CircularProgressIndicator());
             }
             if (snap.hasError) {
-              return Center(child: Text('Failed to load document.',
+              return Center(child: Text(ref.tr('ui.no_data'),
                 style: GoogleFonts.outfit(color: DTheme.textMutedDark)));
             }
             return Scrollbar(
@@ -70,7 +89,7 @@ class LegalDocDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: Text('Close', style: GoogleFonts.outfit(color: DTheme.primary, fontWeight: FontWeight.w600)),
+          child: Text(ref.tr('ui.close'), style: GoogleFonts.outfit(color: DTheme.primary, fontWeight: FontWeight.w600)),
         ),
       ],
     );

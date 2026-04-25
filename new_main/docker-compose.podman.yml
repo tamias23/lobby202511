@@ -165,6 +165,7 @@ services:
       PG_PASSWORD: "TY-rre__U@345"
       # Game history offload (local volume, no GCS)
       GAME_RETENTION_DAYS: "3"
+      SHOW_SUBSCRIBE_BUTTON: "false"
     volumes:
       - /home/mat/Bureau/dedalthegame/parquet:/mnt/db:Z
 

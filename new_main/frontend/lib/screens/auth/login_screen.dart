@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/translations_provider.dart';
 import '../../widgets/glass_panel.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -69,18 +70,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text('Welcome back', style: DTheme.heading),
+                        Text(ref.tr('ui.welcome_back'), style: DTheme.heading),
                         const SizedBox(height: 8),
-                        Text('Sign in to play Dedal', style: DTheme.subtitle),
+                        Text(ref.tr('ui.sign_in_to_play'), style: DTheme.subtitle),
                         const SizedBox(height: 32),
 
                         // Username / email
                         TextFormField(
                           controller: _usernameCtrl,
                           style: DTheme.body,
-                          decoration: const InputDecoration(
-                            labelText: 'Username or Email',
-                            prefixIcon: Icon(Icons.person_outline, color: DTheme.primary),
+                          decoration: InputDecoration(
+                            labelText: ref.tr('ui.username_or_email'),
+                            prefixIcon: const Icon(Icons.person_outline, color: DTheme.primary),
                           ),
                           validator: (v) => (v?.isEmpty ?? true) ? 'Required' : null,
                         ),
@@ -92,7 +93,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           obscureText: _obscure,
                           style: DTheme.body,
                           decoration: InputDecoration(
-                            labelText: 'Password',
+                            labelText: ref.tr('ui.password'),
                             prefixIcon: const Icon(Icons.lock_outline, color: DTheme.primary),
                             suffixIcon: IconButton(
                               icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility, color: DTheme.textMutedDark),
@@ -111,7 +112,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             onPressed: isLoading ? null : _submit,
                             child: isLoading
                                 ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                : const Text('Sign In'),
+                                : Text(ref.tr('ui.sign_in')),
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -120,16 +121,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text("Don't have an account? ", style: DTheme.bodyMuted),
+                            Text('${ref.tr('ui.no_account')} ', style: DTheme.bodyMuted),
                             TextButton(
                               onPressed: () => context.go('/register'),
-                              child: Text('Register', style: TextStyle(color: DTheme.primary, fontWeight: FontWeight.w600)),
+                              child: Text(ref.tr('ui.register'), style: const TextStyle(color: DTheme.primary, fontWeight: FontWeight.w600)),
                             ),
                           ],
                         ),
                         TextButton(
                           onPressed: () => context.go('/'),
-                          child: Text('Continue as guest', style: DTheme.bodyMuted),
+                          child: Text(ref.tr('ui.continue_as_guest'), style: DTheme.bodyMuted),
                         ),
                       ],
                     ),

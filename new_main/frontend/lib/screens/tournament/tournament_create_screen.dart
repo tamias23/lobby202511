@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,7 +8,8 @@ import 'package:http/http.dart' as http;
 import '../../core/theme.dart';
 import '../../core/config.dart';
 import '../../providers/socket_provider.dart';
-import '../../providers/auth_provider.dart';
+import '../../providers/translations_provider.dart';
+import '../../widgets/lobby_back_button.dart';
 
 // ── Format definition ─────────────────────────────────────────────────────────
 
@@ -243,23 +245,16 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: Row(children: [
-        GestureDetector(
-          onTap: () => context.go('/'),
-          child: Row(children: [
-            const Icon(Icons.arrow_back_ios_new, color: Colors.white70, size: 16),
-            const SizedBox(width: 6),
-            Text('Lobby', style: GoogleFonts.outfit(color: Colors.white70, fontSize: 14)),
-          ]),
-        ),
+        const LobbyBackButton(),
         const SizedBox(width: 16),
-        Text('Create Tournament', style: GoogleFonts.outfit(
+        Text(ref.tr('ui.create_tournament'), style: GoogleFonts.outfit(
           fontSize: 20, fontWeight: FontWeight.w700, color: DTheme.textMainDark)),
       ]),
     );
   }
 
   Widget _buildStepper() {
-    final labels = ['Format', 'Settings', 'Board', 'Review'];
+    final labels = [ref.tr('ui.step_format'), ref.tr('ui.step_settings'), ref.tr('ui.step_board'), ref.tr('ui.step_review')];
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
       child: Row(children: List.generate(labels.length, (i) {
@@ -311,7 +306,7 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
   Widget _buildStep1() {
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       const SizedBox(height: 8),
-      Text('Choose Format', style: GoogleFonts.outfit(
+      Text(ref.tr('ui.choose_format'), style: GoogleFonts.outfit(
         fontSize: 22, fontWeight: FontWeight.w700, color: DTheme.textMainDark)),
       const SizedBox(height: 16),
       ..._formats.map((f) => _FormatCard(
@@ -320,7 +315,7 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
       )),
       const SizedBox(height: 20),
       _PrimaryBtn(
-        label: 'Next: Settings →',
+        label: ref.tr('ui.next_settings'),
         enabled: _format != null,
         onTap: () { if (_format != null) setState(() => _step = 2); },
       ),
@@ -332,13 +327,13 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
     final f = _format!;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       const SizedBox(height: 8),
-      Text('Settings', style: GoogleFonts.outfit(
+      Text(ref.tr('ui.settings'), style: GoogleFonts.outfit(
         fontSize: 22, fontWeight: FontWeight.w700, color: DTheme.textMainDark)),
       const SizedBox(height: 20),
 
       // Max participants slider
       _SettingsSection(
-        label: 'Participants (${f.minP}–${f.maxP})',
+        label: '${ref.tr('ui.participants')} (${f.minP}–${f.maxP})',
         child: Row(children: [
           Expanded(child: Slider(
             value: _maxP.toDouble(),
@@ -362,7 +357,7 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
       // Duration
       if (f.durationType == 'minutes' || (f.durationType == 'rounds' && f.defaultDur != null))
         _SettingsSection(
-          label: 'Duration (${f.durationType})',
+          label: '${ref.tr('ui.duration')} (${f.durationType})',
           child: Row(children: [
             Expanded(child: Slider(
               value: _durationValue.toDouble(),
@@ -377,14 +372,14 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
         ),
       if (f.key == 'knockout' || f.key == 'round_robin')
         _SettingsSection(
-          label: 'Duration (auto)',
+          label: '${ref.tr('ui.duration')} (auto)',
           child: Text('$_durationValue rounds (auto-calculated)',
             style: GoogleFonts.outfit(color: DTheme.primary, fontSize: 14)),
         ),
 
       // Time Control
       _SettingsSection(
-        label: 'Time Control',
+        label: ref.tr('ui.time_control'),
         child: Column(children: [
           Wrap(spacing: 8, runSpacing: 8, children: _tcPresets.map((tc) {
             final active = _tcMinutes == tc['m'] && _tcIncrement == tc['i'];
@@ -407,13 +402,13 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
 
       // Password
       _SettingsSection(
-        label: 'Password Protection',
+        label: ref.tr('ui.password_protection'),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            _ToggleBtn(label: 'Open', active: !_usePassword,
+            _ToggleBtn(label: ref.tr('ui.open'), active: !_usePassword,
               onTap: () => setState(() => _usePassword = false)),
             const SizedBox(width: 8),
-            _ToggleBtn(label: '🔒 Password', active: _usePassword,
+            _ToggleBtn(label: ref.tr('ui.password'), active: _usePassword,
               onTap: () => setState(() => _usePassword = true)),
           ]),
           if (_usePassword) ...[
@@ -423,7 +418,7 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
               obscureText: true,
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                hintText: 'Enter password',
+                hintText: ref.tr('ui.enter_password'),
                 hintStyle: const TextStyle(color: Colors.white38),
                 filled: true, fillColor: Colors.white.withValues(alpha: 0.05),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
@@ -438,7 +433,7 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
 
       // Rating
       _SettingsSection(
-        label: 'Rating Range ($_ratingMin – $_ratingMax)',
+        label: '${ref.tr('ui.rating_range')} ($_ratingMin – $_ratingMax)',
         child: RangeSlider(
           values: RangeValues(_ratingMin.toDouble(), _ratingMax.toDouble()),
           min: 0, max: 5000, divisions: 50,
@@ -449,7 +444,7 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
 
       // Bots
       _SettingsSection(
-        label: 'Invite Bots (0–$_maxBots)',
+        label: '${ref.tr('ui.invite_bots')} (0–$_maxBots)',
         child: Row(children: [
           Expanded(child: Slider(
             value: _invitedBots.toDouble(), min: 0, max: _maxBots.toDouble().clamp(0, 99),
@@ -465,32 +460,32 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
 
       // Creator plays
       _SettingsSection(
-        label: 'Will you play?',
+        label: ref.tr('ui.will_you_play'),
         child: Row(children: [
-          _ToggleBtn(label: 'Yes', active: _creatorPlays,
+          _ToggleBtn(label: ref.tr('ui.yes'), active: _creatorPlays,
             onTap: () => setState(() { _creatorPlays = true; _invitedBots = _invitedBots.clamp(0, _maxBots); })),
           const SizedBox(width: 8),
-          _ToggleBtn(label: 'No (spectate)', active: !_creatorPlays,
+          _ToggleBtn(label: ref.tr('ui.no_spectate'), active: !_creatorPlays,
             onTap: () => setState(() => _creatorPlays = false)),
         ]),
       ),
 
       // Launch mode
       _SettingsSection(
-        label: 'When to Start',
+        label: ref.tr('ui.when_to_start'),
         child: Column(children: [
           Wrap(spacing: 8, runSpacing: 8, children: [
-            _ToggleBtn(label: 'When Full', active: _launchMode == 'when_complete',
+            _ToggleBtn(label: ref.tr('ui.when_full'), active: _launchMode == 'when_complete',
               onTap: () => setState(() => _launchMode = 'when_complete')),
-            _ToggleBtn(label: 'At Time', active: _launchMode == 'at_time',
+            _ToggleBtn(label: ref.tr('ui.at_time'), active: _launchMode == 'at_time',
               onTap: () => setState(() => _launchMode = 'at_time')),
-            _ToggleBtn(label: 'Either', active: _launchMode == 'both',
+            _ToggleBtn(label: ref.tr('ui.either'), active: _launchMode == 'both',
               onTap: () => setState(() => _launchMode = 'both')),
           ]),
           if (_launchMode == 'at_time' || _launchMode == 'both') ...[
             const SizedBox(height: 12),
             Row(children: [
-              Text('Start in', style: GoogleFonts.outfit(color: Colors.white54, fontSize: 13)),
+              Text(ref.tr('ui.start_in'), style: GoogleFonts.outfit(color: Colors.white54, fontSize: 13)),
               const SizedBox(width: 12),
               Expanded(child: Slider(
                 value: _launchDelay.toDouble(), min: 5, max: 120, divisions: 23,
@@ -507,9 +502,9 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
 
       const SizedBox(height: 24),
       Row(children: [
-        _SecondaryBtn(label: '← Back', onTap: () => setState(() => _step = 1)),
+        _SecondaryBtn(label: ref.tr('ui.back_step'), onTap: () => setState(() => _step = 1)),
         const SizedBox(width: 12),
-        Expanded(child: _PrimaryBtn(label: 'Next: Board Selection →',
+        Expanded(child: _PrimaryBtn(label: ref.tr('ui.next_board'),
           onTap: () => setState(() { _step = 3; if (_boardMode == 'fixed') _loadBoards(); }))),
       ]),
     ]);
@@ -520,14 +515,14 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
     if (_boardMode == 'fixed' && _boards.isEmpty && !_loadingBoards) _loadBoards();
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       const SizedBox(height: 8),
-      Text('Board Selection', style: GoogleFonts.outfit(
+      Text(ref.tr('ui.board_selection'), style: GoogleFonts.outfit(
         fontSize: 22, fontWeight: FontWeight.w700, color: DTheme.textMainDark)),
       const SizedBox(height: 16),
       Row(children: [
-        _ToggleBtn(label: 'Random Boards', active: _boardMode == 'random',
+        _ToggleBtn(label: ref.tr('ui.random_boards'), active: _boardMode == 'random',
           onTap: () => setState(() => _boardMode = 'random')),
         const SizedBox(width: 8),
-        _ToggleBtn(label: 'Fixed Board', active: _boardMode == 'fixed',
+        _ToggleBtn(label: ref.tr('ui.fixed_board'), active: _boardMode == 'fixed',
           onTap: () { setState(() => _boardMode = 'fixed'); _loadBoards(); }),
       ]),
       const SizedBox(height: 16),
@@ -576,7 +571,7 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
                   Text(bid, style: GoogleFonts.outfit(
                     fontSize: 11, fontWeight: FontWeight.w600, color: Colors.white70),
                     overflow: TextOverflow.ellipsis),
-                  Text('${b['polygonCount']} tiles', style: GoogleFonts.outfit(
+                  Text('${b['polygonCount']} ${ref.tr('ui.tiles')}', style: GoogleFonts.outfit(
                     fontSize: 10, color: Colors.white38)),
                   const SizedBox(height: 4),
                   GestureDetector(
@@ -591,10 +586,10 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
 
       const SizedBox(height: 24),
       Row(children: [
-        _SecondaryBtn(label: '← Back', onTap: () => setState(() => _step = 2)),
+        _SecondaryBtn(label: ref.tr('ui.back_step'), onTap: () => setState(() => _step = 2)),
         const SizedBox(width: 12),
         Expanded(child: _PrimaryBtn(
-          label: 'Next: Review →',
+          label: ref.tr('ui.next_review'),
           enabled: _boardMode == 'random' || _selectedBoardId != null,
           onTap: () => setState(() => _step = 4),
         )),
@@ -624,10 +619,10 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
                       painter: _BoardMiniPainter(_expandedBoard!),
                       child: const SizedBox.expand())),
                     const SizedBox(height: 8),
-                    Text('${_expandedBoard!['polygonCount']} tiles',
+                    Text('${_expandedBoard!['polygonCount']} ${ref.tr('ui.tiles')}',
                       style: GoogleFonts.outfit(color: Colors.white54)),
                     const SizedBox(height: 12),
-                    _PrimaryBtn(label: 'Select this board', onTap: () => setState(() {
+                    _PrimaryBtn(label: ref.tr('ui.select_this_board'), onTap: () => setState(() {
                       _selectedBoardId = _expandedBoard!['id'] as String;
                       _expandedBoard = null;
                     })),
@@ -644,22 +639,22 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
   Widget _buildStep4() {
     final f = _format!;
     final rows = <(String, String)>[
-      ('Format',  '${f.emoji} ${f.label}'),
-      ('Players', '$_maxP'),
-      ('Time',    '$_tcMinutes+$_tcIncrement'),
-      ('Duration','$_durationValue ${f.durationType}'),
-      ('Password',_usePassword ? '🔒 Yes' : '🔓 Open'),
-      ('Rating',  '$_ratingMin – $_ratingMax'),
-      ('Bots',    '$_invitedBots'),
-      ('You play',_creatorPlays ? 'Yes' : 'No'),
-      ('Board',   _boardMode == 'fixed' ? (_selectedBoardId ?? 'Random') : 'Random'),
-      ('Launch',  _launchMode == 'when_complete' ? 'When full'
-                : _launchMode == 'at_time'       ? 'In ${_launchDelay}m'
-                :                                  'When full or in ${_launchDelay}m'),
+      (ref.tr('ui.step_format'),  '${f.emoji} ${f.label}'),
+      (ref.tr('ui.participants'), '$_maxP'),
+      (ref.tr('ui.time_control'), '$_tcMinutes+$_tcIncrement'),
+      (ref.tr('ui.duration'),     '$_durationValue ${f.durationType}'),
+      (ref.tr('ui.password_protection'), _usePassword ? '🔒 ${ref.tr("ui.yes")}' : '🔓 ${ref.tr("ui.open")}'),
+      (ref.tr('ui.rating_range'), '$_ratingMin – $_ratingMax'),
+      (ref.tr('ui.invite_bots'),  '$_invitedBots'),
+      (ref.tr('ui.will_you_play'), _creatorPlays ? ref.tr('ui.yes') : ref.tr('ui.no_spectate')),
+      (ref.tr('ui.step_board'),   _boardMode == 'fixed' ? (_selectedBoardId ?? ref.tr('ui.random')) : ref.tr('ui.random')),
+      (ref.tr('ui.when_to_start'), _launchMode == 'when_complete' ? ref.tr('ui.when_full')
+                : _launchMode == 'at_time' ? '${ref.tr("ui.start_in")} ${_launchDelay}m'
+                :                            '${ref.tr("ui.when_full")} / ${ref.tr("ui.start_in")} ${_launchDelay}m'),
     ];
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       const SizedBox(height: 8),
-      Text('Review', style: GoogleFonts.outfit(
+      Text(ref.tr('ui.review'), style: GoogleFonts.outfit(
         fontSize: 22, fontWeight: FontWeight.w700, color: DTheme.textMainDark)),
       const SizedBox(height: 16),
       _GlassCard(child: Column(children: rows.map((row) => Padding(
@@ -675,10 +670,10 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
       ],
       const SizedBox(height: 20),
       Row(children: [
-        _SecondaryBtn(label: '← Back', onTap: () => setState(() => _step = 3)),
+        _SecondaryBtn(label: ref.tr('ui.back_step'), onTap: () => setState(() => _step = 3)),
         const SizedBox(width: 12),
         Expanded(child: _PrimaryBtn(
-          label: _creating ? 'Creating…' : '🏆 Create Tournament',
+          label: _creating ? ref.tr('ui.creating') : ref.tr('ui.create_tournament'),
           enabled: !_creating,
           onTap: _handleCreate,
         )),
@@ -689,14 +684,14 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
 
 // ── Shared sub-widgets ────────────────────────────────────────────────────────
 
-class _FormatCard extends StatefulWidget {
+class _FormatCard extends ConsumerStatefulWidget {
   final _FormatInfo info;
   final bool selected;
   final VoidCallback onTap;
   const _FormatCard({required this.info, required this.selected, required this.onTap});
-  @override State<_FormatCard> createState() => _FormatCardState();
+  @override ConsumerState<_FormatCard> createState() => _FormatCardState();
 }
-class _FormatCardState extends State<_FormatCard> {
+class _FormatCardState extends ConsumerState<_FormatCard> {
   bool _hovered = false;
   @override Widget build(BuildContext context) {
     final c = DTheme.primary;
@@ -724,7 +719,7 @@ class _FormatCardState extends State<_FormatCard> {
               Text(widget.info.label, style: GoogleFonts.outfit(
                 fontSize: 16, fontWeight: FontWeight.w700, color: DTheme.textMainDark)),
               const SizedBox(height: 4),
-              Text(widget.info.desc, style: GoogleFonts.outfit(
+              Text(ref.tr('ui.fmt_${widget.info.key}_desc'), style: GoogleFonts.outfit(
                 fontSize: 13, color: Colors.white54)),
             ])),
             if (widget.selected)
@@ -755,21 +750,32 @@ class _SettingsSection extends StatelessWidget {
 class _ToggleBtn extends StatelessWidget {
   final String label; final bool active; final VoidCallback onTap;
   const _ToggleBtn({required this.label, required this.active, required this.onTap});
-  @override Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        color: active ? DTheme.primary.withValues(alpha: 0.25) : Colors.white.withValues(alpha: 0.06),
-        border: Border.all(
-          color: active ? DTheme.primary : Colors.white.withValues(alpha: 0.12))),
-      child: Text(label, style: GoogleFonts.outfit(
-        fontSize: 13, fontWeight: FontWeight.w600,
-        color: active ? DTheme.primary : Colors.white60)),
-    ),
-  );
+  @override Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, bc) {
+      final availW = (bc.maxWidth.isFinite ? bc.maxWidth : 140.0) - 28.0;
+      final tp = TextPainter(
+        text: TextSpan(text: label, style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600)),
+        maxLines: 1, textDirection: TextDirection.ltr,
+      )..layout(maxWidth: double.infinity);
+      final fontSize = tp.width > availW && availW > 0
+          ? (13.0 * availW / tp.width).clamp(8.0, 13.0) : 13.0;
+      return GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            color: active ? DTheme.primary.withValues(alpha: 0.25) : Colors.white.withValues(alpha: 0.06),
+            border: Border.all(
+              color: active ? DTheme.primary : Colors.white.withValues(alpha: 0.12))),
+          child: Text(label, maxLines: 1, overflow: TextOverflow.clip,
+            style: GoogleFonts.outfit(
+              fontSize: fontSize, fontWeight: FontWeight.w600,
+              color: active ? DTheme.primary : Colors.white60)),
+        ),
+      );
+    });
 }
 
 class _NumField extends StatelessWidget {
@@ -796,40 +802,62 @@ class _NumField extends StatelessWidget {
 class _PrimaryBtn extends StatelessWidget {
   final String label; final VoidCallback onTap; final bool enabled;
   const _PrimaryBtn({required this.label, required this.onTap, this.enabled = true});
-  @override Widget build(BuildContext context) => GestureDetector(
-    onTap: enabled ? onTap : null,
-    child: AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
-      padding: const EdgeInsets.symmetric(vertical: 14),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        gradient: enabled ? const LinearGradient(
-          colors: [Color(0xFF46B0D4), Color(0xFFF27813)],
-          begin: Alignment.centerLeft, end: Alignment.centerRight)
-          : null,
-        color: enabled ? null : Colors.white.withValues(alpha: 0.08),
-      ),
-      child: Center(child: Text(label, style: GoogleFonts.outfit(
-        fontSize: 15, fontWeight: FontWeight.w700,
-        color: enabled ? Colors.white : Colors.white38))),
-    ),
-  );
+  @override Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, bc) {
+      final availW = (bc.maxWidth.isFinite ? bc.maxWidth : 200.0) - 16.0;
+      final tp = TextPainter(
+        text: TextSpan(text: label, style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700)),
+        maxLines: 1, textDirection: TextDirection.ltr,
+      )..layout(maxWidth: double.infinity);
+      final fontSize = tp.width > availW && availW > 0
+          ? (15.0 * availW / tp.width).clamp(9.0, 15.0) : 15.0;
+      return GestureDetector(
+        onTap: enabled ? onTap : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            gradient: enabled ? const LinearGradient(
+              colors: [Color(0xFF46B0D4), Color(0xFFF27813)],
+              begin: Alignment.centerLeft, end: Alignment.centerRight)
+              : null,
+            color: enabled ? null : Colors.white.withValues(alpha: 0.08),
+          ),
+          child: Text(label, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.clip,
+            style: GoogleFonts.outfit(
+              fontSize: fontSize, fontWeight: FontWeight.w700,
+              color: enabled ? Colors.white : Colors.white38)),
+        ),
+      );
+    });
 }
 
 class _SecondaryBtn extends StatelessWidget {
   final String label; final VoidCallback onTap;
   const _SecondaryBtn({required this.label, required this.onTap});
-  @override Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        color: Colors.white.withValues(alpha: 0.08),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.15))),
-      child: Text(label, style: GoogleFonts.outfit(color: Colors.white70, fontSize: 14)),
-    ),
-  );
+  @override Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, bc) {
+      final availW = (bc.maxWidth.isFinite ? bc.maxWidth : 160.0) - 48.0;
+      final tp = TextPainter(
+        text: TextSpan(text: label, style: GoogleFonts.outfit(fontSize: 14)),
+        maxLines: 1, textDirection: TextDirection.ltr,
+      )..layout(maxWidth: double.infinity);
+      final fontSize = tp.width > availW && availW > 0
+          ? (14.0 * availW / tp.width).clamp(9.0, 14.0) : 14.0;
+      return GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            color: Colors.white.withValues(alpha: 0.08),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.15))),
+          child: Text(label, maxLines: 1, overflow: TextOverflow.clip,
+            style: GoogleFonts.outfit(color: Colors.white70, fontSize: fontSize)),
+        ),
+      );
+    });
 }
 
 class _GlassCard extends StatelessWidget {

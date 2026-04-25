@@ -1,0 +1,2250 @@
+{
+  "en": {
+    "menu": {
+      "intro": "Introduction",
+      "setup_phase": "Setup Phase",
+      "board": "The Board & Topology",
+      "turn": "Turn Mechanics",
+      "goddess": "Goddess",
+      "heroe": "Heroe",
+      "mage": "Mage",
+      "siren": "Siren",
+      "ghoul": "Ghoul",
+      "witch": "Witch",
+      "soldier": "Soldier",
+      "minotaur": "Minotaur"
+    },
+    "sections": {
+      "intro": {
+        "title": "Introduction",
+        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">The Goal</h2>\n                        <p>The primary objective is to <span class=\"accent\">capture the opponent's Goddess</span>. The game ends immediately when a Goddess is removed from the board.</p>\n                    </div>\n                    <p>Two sides compete: <span class=\"accent\">White</span> and <span class=\"accent\">Black</span>. White starts at the top of the board, and Black starts at the bottom. White moves first by selecting a starting color.</p>\n                    <p>Strategy involves managing your piece's lifecycle: from the reserve to the battlefield, and potentially back to being \"returned\" if captured.</p>\n\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">Two Movement Types</h2>\n                        <p><span class=\"accent\">Jump / Leap / Hop</span> — A piece jumps directly from one polygon to another, regardless of what lies between them. Each hop counts as one step in range. <span class=\"highlight\">Jumping pieces ignore edge colours and blocked paths.</span></p>\n                        <p><span class=\"accent\">Slide / Chain</span> — A piece travels along the adjacency graph, moving through connected polygons step by step. <span class=\"highlight\">Red edges act as walls</span>: slide-based pieces cannot cross them.</p>\n                        <p>Goddesses, Heroes, Witches, Mages and Sirens are <span class=\"accent\">jump</span> pieces. Soldiers, Ghouls and Golems are <span class=\"accent\">slide/chain</span> pieces.</p>\n                    </div>\n                "
+      },
+      "setup_phase": {
+        "title": "Setup Phase",
+        "content": "\n                    <p>Before the \"Playing\" phase begins, players must position their core forces. Placement is strictly regulated in 5 steps:</p>\n                    <ol class=\"setup-steps\">\n                        <li>\n                            <h3 class=\"accent\">The Goddess</h3>\n                            <p>Must be placed on the <span class=\"highlight\">far edge</span> of your side of the board.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">The Heroes</h3>\n                            <p>Placed on edges, between <span class=\"highlight\">4 and 6 jumps</span> away from the Goddess, and at least 6 jumps away from each other.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">The Minotaurs</h3>\n                            <p><span class=\"accent\">Minotaurs</span> are placed within 1-2 jump-hops of the Goddess to form a defensive shell.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">The Chromatic Ring</h3>\n                            <p><span class=\"accent\">Witchs</span> are distributed on 4 unique colors as near as possible to your anchor pieces.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">Infantry Deployment</h3>\n                            <p><span class=\"accent\">Ghouls</span> and <span class=\"accent\">Sirens</span> fill the remaining tactical positions as close as possible to your anchor pieces.</p>\n                        </li>\n                    </ol>\n                    <div class=\"card\" style=\"margin-top: 2rem\">\n                        <p><i>Note: <span class=\"accent\">Mages</span> and <span class=\"accent\">Soldiers</span> always start in the \"Returned\" reserve and are deployed during active play.</i></p>\n                    </div>\n                "
+      },
+      "board": {
+        "title": "Board & Topology",
+        "content": "\n                    <p>The board is a network of polygons where movement depends on how they are connected.</p>\n                    <div class=\"card\">\n                        <h3><span class=\"accent\">Walking</span> (Slide)</h3>\n                        <p>Pieces move from one Polygon to the next, between Polygons that share an edge. <span class=\"highlight\">Red Edges block walking</span>.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3><span class=\"accent\">Jumping</span></h3>\n                        <p>Pieces \"leap\" over edges, ignoring both (possible) intermediate polygons and <span class=\"highlight\">Red Edges</span>.</p>\n                    </div>\n                    <div class=\"card\" style=\"border-color: #ef4444;\">\n                        <h3 style=\"color: #ef4444;\">The Red Edge</h3>\n                        <p>These thick red borders are <span class=\"accent\">impassable walls</span> for walking pieces. Only jumpers can bypass these boundaries.</p>\n                    </div>\n                "
+      },
+      "turn": {
+        "title": "Turn Mechanics",
+        "content": "\n                    <div class=\"card\">\n                        <h3>1. Choose Color</h3>\n                        <p>Select one of the colors that allows at least one legal move.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3>2. Activate Piece</h3>\n                        <p>Any piece matching the chosen color can move. Also, pieces in the Graveyard (returned) can be deployed.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3>3. Turn End</h3>\n                        <p>If your piece ends its movement on your <span class=\"highlight\">chosen color</span>, your turn ends. Land on a different color to keep moving another piece in the ame turn.</p>\n                    </div>\n                "
+      },
+      "goddess": {
+        "title": "The Goddess",
+        "content": "\n                    <p>The Goddess is the most vital piece on the board. Protecting her is the highest priority.</p>\n                    <div class=\"card\">\n                        <h3>Type: <span class=\"accent\">Jumper</span></h3>\n                        <p>Movement: <span class=\"highlight\">Jump Range 2</span>. She leaps over obstacles with grace but limited speed.</p>\n                    </div>\n                    <p>If your Goddess is captured, the game ends instantly. She is often protected by Minotaurs in the early game.</p>\n                "
+      },
+      "heroe": {
+        "title": "The Heroe",
+        "content": "\n                    <p>Elite warriors with unmatched mobility and strike potential.</p>\n                    <div class=\"card\">\n                        <h3>Type: <span class=\"accent\">Jumper</span></h3>\n                        <p>Movement: <span class=\"highlight\">Jump Range 3</span>. Allows for deep strikes into enemy territory.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3>Special: <span class=\"accent\">Bonus Jump</span></h3>\n                        <p>Capturing an enemy allows the Heroe to jump <span class=\"highlight\">immediately again</span>, potentially for a second strike, or a tactical retreat.</p>\n                    </div>\n                "
+      },
+      "mage": {
+        "title": "The Mage",
+        "content": "\n                    <p>Arcane mastery allows the Mage to control the battlefield through blasts and portals.</p>\n                    <div class=\"card\">\n                        <h3>Type: <span class=\"accent\">Jumper</span></h3>\n                        <p>Movement: <span class=\"highlight\">Jump Range 3</span>. <span class=\"accent\">Must change color</span> every jump.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3>Special: <span class=\"accent\">Chromatic Unlock</span></h3>\n                        <p>The Mage is <span class=\"highlight\">Locked</span> at the start. She only becomes available once all 4 board colors have been used as turn colors.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3>Ability: <span class=\"accent\">Chain Attack</span></h3>\n                        <p>Upon <span class=\"accent\">successful capture</span>, the Mage unleashes energy that destroys all slide-adjacent enemies. She also enables \"returned\" pieces to land adjacent to her.</p>\n                    </div>\n                "
+      },
+      "siren": {
+        "title": "The Siren",
+        "content": "\n                    <p>A pacifist with a paralyzing aura. She cannot capture pieces but can disable them.</p>\n                    <div class=\"card\">\n                        <h3>Type: <span class=\"accent\">Jumper</span></h3>\n                        <p>Movement: <span class=\"highlight\">Jump Range 2</span>.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3>Special: <span class=\"accent\">The Pin</span></h3>\n                        <p>Enemy pieces <span class=\"highlight\">slide-adjacent</span> to the Siren are \"pinned\" and cannot move. This is a powerful defensive tool.</p>\n                    </div>\n                "
+      },
+      "ghoul": {
+        "title": "The Ghoul",
+        "content": "\n                    <p>Relentless infantry that crawls through the battlefield.</p>\n                    <div class=\"card\">\n                        <h3>Type: <span class=\"accent\">Slider</span></h3>\n                        <p>Movement: <span class=\"highlight\">Slide Range 3</span>. Must follow shared edges and is blocked by <span class=\"accent\">Red Edges</span>.</p>\n                    </div>\n                    <p>Ghouls are numerous and effective at screening enemy jumpers or forming chains with Soldiers. They can chain through empty, non-chosen-color polygons.</p>\n                "
+      },
+      "soldier": {
+        "title": "The Soldier",
+        "content": "\n                    <p>The Phalanx: pieces that form long-range chains of movement.</p>\n                    <div class=\"card\">\n                        <h3>Soldier (Slider)</h3>\n                        <p>Moves via <span class=\"accent\">Sliding</span> to an adjacent polygon. Has the ability to continue sliding when landing on the chosen color or a friendly unit, allowing further movement. Can also capture multiple enemy units if they are on the chosen color.</p>\n                    </div>\n                    <p>Soldiers are blocked by <span class=\"accent\">Red Edges</span>. Their special <span class=\"accent\">Sliding</span> ability makes them the most dangerous pieces in the game.</p>\n                "
+      },
+      "minotaur": {
+        "title": "The Minotaur",
+        "content": "\n                    <p>The Unmovable Guard: ancient constructs that cannot be destroyed.</p>\n                    <div class=\"card\">\n                        <h3>Minotaur (Slider)</h3>\n                        <p>Identical to Soldiers but <span class=\"accent\">Invulnerable</span>. They cannot be captured or targeted by AoE effects. They act as strategic obstacles that block enemy movement.</p>\n                    </div>\n                "
+      },
+      "witch": {
+        "title": "The Witch",
+        "content": "\n                    <p>Mystics that manipulate the chromatic essence of the board.</p>\n                    <div class=\"card\">\n                        <h3>Type: <span class=\"accent\">Jumper</span></h3>\n                        <p>Movement: <span class=\"highlight\">Jump Range 4</span>. <span class=\"accent\">Must land on its starting color</span>.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3>Ability: <span class=\"accent\">Landing Blast</span></h3>\n                        <p>Upon landing on an empty polygon, the Witch destroys all enemy pieces <span class=\"accent\">slide-adjacent</span> to her destination.</p>\n                    </div>\n                "
+      }
+    },
+    "ui": {
+      "settings": "Settings",
+      "language": "Language",
+      "login": "Login",
+      "register": "Register",
+      "play_guest": "Play as Guest",
+      "about": "About",
+      "privacy": "Privacy Policy",
+      "terms": "Terms of Use",
+      "legal_notice": "Legal Notice",
+      "logout": "Logout",
+      "about_dedal": "About Dedal",
+      "tagline": "A high-strategy polygonal board game.",
+      "contact": "Contact",
+      "build": "Build",
+      "close": "Close",
+      "analysis": "Analysis",
+      "tutorial": "Tutorial",
+      "leaderboard": "Leaderboard",
+      "active_games": "Active Games",
+      "no_games": "No games in progress.",
+      "start_one": "Start one above!",
+      "interactive_board": "Interactive Board",
+      "reset": "Reset",
+      "lobby": "Lobby",
+      "welcome_to": "WELCOME TO …",
+      "choose_tc": "Choose a time control and jump into a game",
+      "welcome_back": "Welcome back",
+      "sign_in_to_play": "Sign in to play Dedal",
+      "username_or_email": "Username or Email",
+      "password": "🔒 Password",
+      "sign_in": "Sign In",
+      "no_account": "Don't have an account?",
+      "continue_as_guest": "Continue as guest",
+      "create_account": "Create Account",
+      "join_community": "Join the Dedal community",
+      "username": "Username",
+      "email": "Email",
+      "already_account": "Already have an account?",
+      "my_games": "My Games",
+      "delete_account": "Delete Account",
+      "user_profile": "User Profile",
+      "registered": "Registered",
+      "load_dedal_json": "Load a Dedal game JSON",
+      "load_file": "Load File",
+      "paste": "Paste",
+      "privacy_policy": "Privacy Policy",
+      "terms_of_use": "Terms of Use",
+      "analysis_room": "Analysis Room",
+      "open_requests": "Open Requests",
+      "no_open_requests": "No open requests yet.",
+      "be_first": "Be the first!",
+      "open_tournaments": "Open Tournaments",
+      "no_open_tournaments": "No open tournaments.",
+      "create_one": "Create one!",
+      "active_tournaments": "Active Tournaments",
+      "no_active_tournaments": "No active tournaments.",
+      "user_choice": "User Choice",
+      "last_rating": "Last Rating",
+      "rated_today": "Rated Today",
+      "bots_today": "Bots Today",
+      "unlock_premium": "Unlock Premium Features",
+      "subscribe_now": "Subscribe Now",
+      "play_unlimited": "Play unlimited rated & bot games.",
+      "active_subscriber": "Active Subscriber",
+      "sub_coming_soon": "Subscription coming soon!",
+      "admin_dashboard": "Admin Dashboard",
+      "user_management": "User Management",
+      "not_logged_in": "Not logged in",
+      "post_request": "Post Request",
+      "play_vs_ai": "Play vs AI",
+      "limit_reached": "Limit reached",
+      "first_move_note": "First move may take a few seconds on cold start.",
+      "min_label": "MIN",
+      "inc_label": "INC (s)",
+      "retry": "Retry",
+      "no_data": "No data available.",
+      "confirm_deletion": "Confirm Deletion",
+      "type_username_to_confirm": "Type your username to confirm",
+      "delete_forever": "Delete Forever",
+      "cancel": "Cancel",
+      "continue_btn": "Continue",
+      "permanently_delete_warning": "This will permanently delete your account and all your data. This action cannot be undone.",
+      "blitz": "Blitz",
+      "rapid": "Rapid",
+      "medium": "Medium",
+      "long": "Long",
+      "locked": "Locked",
+      "custom": "Custom",
+      "vs_bot": "vs Bot",
+      "play_ai": "Play AI",
+      "tourney": "Tourney",
+      "create": "Create",
+      "cancel_request": "Cancel request",
+      "waiting": "Waiting…",
+      "unrated": "Unrated",
+      "rated": "Rated",
+      "in_game": "In a game…",
+      "accept": "Accept",
+      "your_request": "Your request",
+      "rejoin": "Rejoin",
+      "watch": "Watch",
+      "reconnecting": "Reconnecting…",
+      "view": "View",
+      "join": "Join",
+      "by": "by",
+      "system": "System",
+      "bullet": "Bullet",
+      "classical": "Classical",
+      "move": "Move",
+      "registered_plus": "registered+",
+      "role_guest": "Guest",
+      "role_user": "Registered",
+      "role_moderator": "Moderator",
+      "role_admin": "Admin",
+      "click_to_browse": "Click to browse your files",
+      "load_game_record": "Load game record",
+      "paste_json_hint": "Paste game JSON here or click the folder icon to browse…",
+      "load": "Load",
+      "back_to_lobby": "← Lobby",
+      "back_step": "← Back",
+      "choose_format": "Choose Format",
+      "next_settings": "Next: Settings →",
+      "next_board": "Next: Board Selection →",
+      "next_review": "Next: Review →",
+      "create_tournament": "🏆 Create Tournament",
+      "creating": "Creating…",
+      "board_selection": "Board Selection",
+      "review": "Review",
+      "step_format": "Format",
+      "step_settings": "Settings",
+      "step_board": "Board",
+      "step_review": "Review",
+      "participants": "Participants",
+      "duration": "Duration",
+      "time_control": "Time Control",
+      "password_protection": "Password Protection",
+      "rating_range": "Rating Range",
+      "invite_bots": "Invite Bots",
+      "will_you_play": "Will you play?",
+      "yes": "Yes",
+      "no_spectate": "No (spectate)",
+      "when_to_start": "When to Start",
+      "when_full": "When Full",
+      "at_time": "At Time",
+      "either": "Either",
+      "start_in": "Start in",
+      "open": "Open",
+      "enter_password": "Enter password",
+      "random_boards": "Random Boards",
+      "fixed_board": "Fixed Board",
+      "select_this_board": "Select this board",
+      "tiles": "tiles",
+      "random": "Random",
+      "tournament": "Tournament",
+      "review_game": "Review",
+      "download": "Download",
+      "fmt_swiss_desc": "Paired by score each round. Everyone plays every round.",
+      "fmt_arena_desc": "Continuous re-pairing immediately after finishing. Fastest format.",
+      "fmt_knockout_desc": "Single-elimination. Lose and you're out!",
+      "fmt_round_robin_desc": "Everyone plays everyone. The true test of strength.",
+      "phase_setup": "SETUP",
+      "phase_play": "PLAY",
+      "phase_end": "END",
+      "move_history": "Move History",
+      "connection_lost": "Connection lost — reconnecting…",
+      "waiting_opponent": "Waiting for opponent…",
+      "random_setup": "Random Setup",
+      "end_turn": "End Turn",
+      "pass_turn": "Pass Turn",
+      "confirm_pass": "Confirm Pass",
+      "flip_board": "Flip Board",
+      "unflip_board": "Unflip Board",
+      "resign": "Resign",
+      "confirm_resign": "Confirm Resign",
+      "white_color": "White Color",
+      "black_color": "Black Color",
+      "white_deciding": "White Deciding…",
+      "black_deciding": "Black Deciding…",
+      "your_color": "◆ Your Color",
+      "choose_color": "Choose Color",
+      "opponent_color": "Opponent Color",
+      "opponent_deciding": "Opponent Deciding…",
+      "mage_locked": "MAGE LOCKED",
+      "choose_all_4": "Choose all 4 colors",
+      "seen_count": "{n} / 4 seen",
+      "board_colors": "Board Colors",
+      "you_win": "You Win!",
+      "you_lose": "You Lose",
+      "draw": "Draw!",
+      "game_over": "Game Over",
+      "white_wins": "White Wins",
+      "black_wins": "Black Wins",
+      "reason_time_win": "Victory on time! Your speed was superior.",
+      "reason_time_lose": "Ran out of time. The clock is a cruel master.",
+      "reason_resign_win": "Opponent has surrendered to your might.",
+      "reason_resign_lose": "You have chosen to withdraw from the field.",
+      "reason_goddess_win": "Victory! The enemy Goddess has been captured.",
+      "reason_goddess_lose": "Your Goddess has been captured. Defeat.",
+      "reason_aborted": "Game aborted (tournament ended).",
+      "reason_draw": "A hard-fought draw. Peace is restored.",
+      "reason_time_neutral": "Victory on time.",
+      "reason_resign_neutral": "One side has resigned.",
+      "reason_goddess_neutral": "The Goddess has been captured.",
+      "reason_aborted_neutral": "Game aborted (tournament ended).",
+      "reason_draw_neutral": "A hard-fought draw.",
+      "rating_changes": "Rating Changes",
+      "game_json": "Game JSON",
+      "copy_clipboard": "Copy to clipboard",
+      "white": "White",
+      "black": "Black"
+    }
+  },
+  "fr": {
+    "menu": {
+      "intro": "Introduction",
+      "setup_phase": "Phase de Placement",
+      "board": "Plateau & Topologie",
+      "turn": "Mécaniques de Tour",
+      "goddess": "Déesse",
+      "heroe": "Héros",
+      "mage": "Mage",
+      "siren": "Sirène",
+      "ghoul": "Goule",
+      "witch": "Sorcière",
+      "soldier": "Soldat",
+      "minotaur": "Minotaur"
+    },
+    "sections": {
+      "intro": {
+        "title": "Introduction",
+        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">Le But</h2>\n                        <p>L'objectif principal est de <span class=\"accent\">capturer la Déesse adverse</span>. La partie se termine immédiatement lorsqu'une Déesse est retirée du plateau.</p>\n                    </div>\n                    <p>Deux camps s'affrontent : <span class=\"accent\">Blanc</span> et <span class=\"accent\">Noir</span>. Blanc commence en haut du plateau, et Noir en bas. Blanc joue en premier en choisissant une couleur de départ.</p>\n                    <p>La stratégie implique de gérer le cycle de vie de vos pièces : de la réserve au champ de bataille, et potentiellement retour à la réserve \"capturée\" si elles sont prises.</p>\n\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">Deux Types de Mouvement</h2>\n                        <p><span class=\"accent\">Saut / Bond / Hop</span> — Une pièce saute directement d’un polygone à un autre, indépendamment de ce qui se trouve entre les deux. Chaque bond compte comme une étape. <span class=\"highlight\">Les pièces qui sautent ignorent la couleur des bords et les chemins bloqués.</span></p>\n                        <p><span class=\"accent\">Glissade / Chaîne</span> — Une pièce se déplace le long du graphe d’adjacence, de polygone en polygone. <span class=\"highlight\">Les bords rouges sont des murs</span> : les pièces glissantes ne peuvent pas les franchir.</p>\n                        <p>Les Déesses, Héros, Sorcières, Mages et Sirènes sont des pièces de <span class=\"accent\">saut</span>. Les Soldats, Ghouls et Golems sont des pièces de <span class=\"accent\">glissade/chaîne</span>.</p>\n                    </div>\n                "
+      },
+      "setup_phase": {
+        "title": "Phase de Placement",
+        "content": "\n                    <p>Avant que la phase de \"Jeu\" ne commence, les joueurs doivent positionner leurs forces principales. Le placement est strictement réglementé en 5 étapes :</p>\n                    <ol class=\"setup-steps\">\n                        <li>\n                            <h3 class=\"accent\">La Déesse</h3>\n                            <p>Doit être placée sur le <span class=\"highlight\">bord éloigné</span> de votre côté du plateau.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">Les Héros</h3>\n                            <p>Placés sur les bords, entre <span class=\"highlight\">4 et 6 sauts</span> de la Déesse, et à au moins 6 sauts les uns des autres.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">Les Minotaurs</h3>\n                            <p>Les <span class=\"accent\">Minotaurs</span> sont placés à 1-2 sauts de la Déesse pour former une coque défensive.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">L'Anneau Chromatique</h3>\n                            <p>Les <span class=\"accent\">Sorcières</span> sont réparties sur 4 couleurs uniques aussi près que possible de vos pièces ancres.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">Déploiement de l'Infanterie</h3>\n                            <p>Les <span class=\"accent\">Goules</span> et les <span class=\"accent\">Sirènes</span> occupent les positions tactiques restantes aussi près que possible de vos pièces ancres.</p>\n                        </li>\n                    </ol>\n                    <div class=\"card\" style=\"margin-top: 2rem\">\n                        <p><i>Note : les <span class=\"accent\">Mages</span> et les <span class=\"accent\">Soldats</span> commencent toujours dans la réserve \"Capturée\" et sont déployés pendant le jeu actif.</i></p>\n                    </div>\n                "
+      },
+      "board": {
+        "title": "Plateau & Topologie",
+        "content": "\n                    <p>Le plateau est un réseau de polygones où le mouvement dépend de la façon dont ils sont connectés.</p>\n                    <div class=\"card\">\n                        <h3><span class=\"accent\">Marcher</span> (Glisser)</h3>\n                        <p>Les pièces se déplacent d'un polygone à l'autre, entre des polygones partageant une arête. Les <span class=\"highlight\">arêtes rouges bloquent la marche</span>.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3><span class=\"accent\">Sauter</span></h3>\n                        <p>Les pièces \"bondissent\" par-dessus les arêtes, ignorant les polygones intermédiaires (éventuels) et les <span class=\"highlight\">arêtes rouges</span>.</p>\n                    </div>\n                    <div class=\"card\" style=\"border-color: #ef4444;\">\n                        <h3 style=\"color: #ef4444;\">L'arête Rouge</h3>\n                        <p>Ces bordures rouges épaisses sont des <span class=\"accent\">murs infranchissables</span> pour les pièces qui marchent. Seuls les sauteurs peuvent contourner ces limites.</p>\n                    </div>\n                "
+      },
+      "turn": {
+        "title": "Mécaniques de Tour",
+        "content": "\n                    <div class=\"card\">\n                        <h3>1. Choisir une Couleur</h3>\n                        <p>Sélectionnez l'une des couleurs qui permet au moins un mouvement légal.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3>2. Activer une Pièce</h3>\n                        <p>Toute pièce correspondant à la couleur choisie peut bouger. De plus, les pièces dans le cimetière (capturées) peuvent être déployées.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3>3. Fin du Tour</h3>\n                        <p>Si votre pièce termine son mouvement sur votre <span class=\"highlight\">couleur choisie</span>, votre tour se termine. Atterrissez sur une couleur différente pour continuer à déplacer une autre pièce dans le même tour.</p>\n                    </div>\n                "
+      },
+      "goddess": {
+        "title": "La Déesse",
+        "content": "\n                    <p>La Déesse est la pièce la plus vitale du plateau. La protéger est la priorité absolue.</p>\n                    <div class=\"card\">\n                        <h3>Type : <span class=\"accent\">Sauteur</span></h3>\n                        <p>Mouvement : <span class=\"highlight\">Portée de Saut 2</span>. Elle survole les obstacles avec grâce mais une vitesse limitée.</p>\n                    </div>\n                    <p>Si votre Déesse est capturée, la partie se termine instantanément. Elle est souvent protégée par des Minotaurs en début de partie.</p>\n                "
+      },
+      "heroe": {
+        "title": "Le Héros",
+        "content": "\n                    <p>Des guerriers d'élite avec une mobilité et un potentiel de frappe inégalés.</p>\n                    <div class=\"card\">\n                        <h3>Type : <span class=\"accent\">Sauteur</span></h3>\n                        <p>Mouvement : <span class=\"highlight\">Portée de Saut 3</span>. Permet des frappes profondes en territoire ennemi.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3>Spécial : <span class=\"accent\">Saut Bonus</span></h3>\n                        <p>Capturer un ennemi permet au Héros de sauter <span class=\"highlight\">immédiatement à nouveau</span>, potentiellement pour une deuxième frappe ou une retraite tactique.</p>\n                    </div>\n                "
+      },
+      "mage": {
+        "title": "Le Mage",
+        "content": "\n                    <p>La maîtrise des arcanes permet au Mage de contrôler le champ de bataille via des explosions et des portails.</p>\n                    <div class=\"card\">\n                        <h3>Type : <span class=\"accent\">Sauteur</span></h3>\n                        <p>Mouvement : <span class=\"highlight\">Portée de Saut 3</span>. <span class=\"accent\">Doit changer de couleur</span> à chaque saut.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3>Spécial : <span class=\"accent\">Déverrouillage Chromatique</span></h3>\n                        <p>Le Mage est <span class=\"highlight\">Verrouillé</span> au début. Il ne devient disponible qu'une fois que les 4 couleurs du plateau ont été utilisées.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3>Capacité : <span class=\"accent\">Attaque en Chaîne</span></h3>\n                        <p>Après une <span class=\"accent\">capture réussie</span>, le Mage libère une énergie qui détruit tous les ennemis adjacents. Il permet aussi aux pièces capturées d'atterrir à côté de lui.</p>\n                    </div>\n                "
+      },
+      "siren": {
+        "title": "La Sirène",
+        "content": "\n                    <p>Une pacifiste avec une aura paralysante. Elle ne peut pas capturer de pièces mais peut les désactiver.</p>\n                    <div class=\"card\">\n                        <h3>Type : <span class=\"accent\">Sauteur</span></h3>\n                        <p>Mouvement : <span class=\"highlight\">Portée de Saut 2</span>.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3>Spécial : <span class=\"accent\">Le Blocage</span></h3>\n                        <p>Les pièces ennemies <span class=\"highlight\">adjacentes (glisse)</span> à la Sirène sont \"clouées\" et ne peuvent plus bouger. C'est un outil défensif puissant.</p>\n                    </div>\n                "
+      },
+      "ghoul": {
+        "title": "La Goule",
+        "content": "\n                    <p>Une infanterie implacable qui rampe sur le champ de bataille.</p>\n                    <div class=\"card\">\n                        <h3>Type : <span class=\"accent\">Glisseur</span></h3>\n                        <p>Mouvement : <span class=\"highlight\">Portée de Glissade 3</span>. Doit suivre les arêtes partagées et est bloquée par les <span class=\"accent\">Arêtes Rouges</span>.</p>\n                    </div>\n                    <p>Les Goules sont nombreuses et efficaces pour faire écran aux sauteurs ennemis ou former des chaînes avec les Soldats. Elles peuvent traverser des polygones vides non-choisis.</p>\n                "
+      },
+      "soldier": {
+        "title": "Le Soldat",
+        "content": "\n                    <p>La Phalange : des pièces qui forment des chaînes de mouvement à longue portée.</p>\n                    <div class=\"card\">\n                        <h3>Soldat (Glisseur)</h3>\n                        <p>Se déplace en <span class=\"accent\">Glissant</span> vers un polygone adjacent. A la capacité de continuer à glisser s'il atterrit sur la couleur choisie ou une unité alliée, permettant un mouvement prolongé. Peut aussi capturer plusieurs unités ennemies si elles sont sur la couleur choisie.</p>\n                    </div>\n                    <p>Les Soldats sont bloqués par les <span class=\"accent\">Arêtes Rouges</span>. Leur capacité spéciale de <span class=\"accent\">Glissade</span> en fait les pièces les plus dangereuses du jeu.</p>\n                "
+      },
+      "minotaur": {
+        "title": "Le Minotaur",
+        "content": "\n                    <p>La Garde Inamovible : des anciens minotaurs qui ne peuvent être détruits.</p>\n                    <div class=\"card\">\n                        <h3>Minotaur (Glisseur)</h3>\n                        <p>Identique aux Soldats mais <span class=\"accent\">Invulnérable</span>. Ils ne peuvent être capturés ni ciblés par des effets de zone. Ils agissent comme des obstacles stratégiques.</p>\n                    </div>\n                "
+      },
+      "witch": {
+        "title": "La Sorcière",
+        "content": "\n                    <p>Des mystiques manipulant l'essence chromatique du plateau.</p>\n                    <div class=\"card\">\n                        <h3>Type : <span class=\"accent\">Sauteur</span></h3>\n                        <p>Mouvement : <span class=\"highlight\">Portée de Saut 4</span>. <span class=\"accent\">Doit atterrir sur sa couleur de départ</span>.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3>Capacité : <span class=\"accent\">Explosion d'Atterrissage</span></h3>\n                        <p>En atterrissant sur un polygone vide, la Sorcière détruit toutes les pièces ennemies <span class=\"accent\">adjacentes par glissement</span> (slide-adjacent) à sa destination.</p>\n                    </div>\n                "
+      }
+    },
+    "ui": {
+      "settings": "Paramètres",
+      "language": "Langue",
+      "login": "Connexion",
+      "register": "S'inscrire",
+      "play_guest": "Jouer en Invité",
+      "about": "À propos",
+      "privacy": "Politique de Confidentialité",
+      "terms": "Conditions d'Utilisation",
+      "legal_notice": "Mentions Légales",
+      "logout": "Déconnexion",
+      "about_dedal": "À propos de Dedal",
+      "tagline": "Un jeu de plateau polygonal hautement stratégique.",
+      "contact": "Contact",
+      "build": "Version",
+      "close": "Fermer",
+      "analysis": "Analyse",
+      "tutorial": "Tutoriel",
+      "leaderboard": "Classement",
+      "active_games": "Parties en cours",
+      "no_games": "Aucune partie en cours.",
+      "start_one": "Lancez-en une ci-dessus !",
+      "interactive_board": "Plateau interactif",
+      "reset": "Réinitialiser",
+      "lobby": "Lobby",
+      "welcome_to": "BIENVENUE SUR …",
+      "choose_tc": "Choisissez un contrôle du temps et rejoignez une partie",
+      "welcome_back": "Bon retour",
+      "sign_in_to_play": "Connectez-vous pour jouer à Dedal",
+      "username_or_email": "Nom d'utilisateur ou e-mail",
+      "password": "🔒 Mot de passe",
+      "sign_in": "Se connecter",
+      "no_account": "Pas encore de compte ?",
+      "continue_as_guest": "Continuer en tant qu'invité",
+      "create_account": "Créer un compte",
+      "join_community": "Rejoindre la communauté Dedal",
+      "username": "Nom d'utilisateur",
+      "email": "E-mail",
+      "already_account": "Déjà un compte ?",
+      "my_games": "Mes parties",
+      "delete_account": "Supprimer le compte",
+      "user_profile": "Profil utilisateur",
+      "registered": "Inscrit",
+      "load_dedal_json": "Charger un fichier JSON Dedal",
+      "load_file": "Charger un fichier",
+      "paste": "Coller",
+      "privacy_policy": "Politique de Confidentialité",
+      "terms_of_use": "Conditions d'Utilisation",
+      "analysis_room": "Salle d'analyse",
+      "open_requests": "Requêtes Ouvertes",
+      "no_open_requests": "Aucune requête ouverte pour le moment.",
+      "be_first": "Soyez le premier !",
+      "open_tournaments": "Tournois Ouverts",
+      "no_open_tournaments": "Aucun tournoi ouvert.",
+      "create_one": "Créez-en un !",
+      "active_tournaments": "Tournois Actifs",
+      "no_active_tournaments": "Aucun tournoi actif.",
+      "user_choice": "Choix de l'Utilisateur",
+      "last_rating": "Dernier Classement",
+      "rated_today": "Classées Aujourd'hui",
+      "bots_today": "Bots Aujourd'hui",
+      "unlock_premium": "Débloquer les Fonctions Premium",
+      "subscribe_now": "S'abonner Maintenant",
+      "play_unlimited": "Jouez en illimité aux parties classées et contre l'IA.",
+      "active_subscriber": "Abonné Actif",
+      "sub_coming_soon": "Abonnement bientôt disponible !",
+      "admin_dashboard": "Tableau de Bord Admin",
+      "user_management": "Gestion des Utilisateurs",
+      "not_logged_in": "Non connecté",
+      "post_request": "Publier une Requête",
+      "play_vs_ai": "Jouer contre l'IA",
+      "limit_reached": "Limite atteinte",
+      "first_move_note": "Le premier coup peut prendre quelques secondes au démarrage.",
+      "min_label": "MIN",
+      "inc_label": "INC (s)",
+      "retry": "Réessayer",
+      "no_data": "Aucune donnée disponible.",
+      "confirm_deletion": "Confirmer la Suppression",
+      "type_username_to_confirm": "Tapez votre nom d'utilisateur pour confirmer",
+      "delete_forever": "Supprimer Définitivement",
+      "cancel": "Annuler",
+      "continue_btn": "Continuer",
+      "permanently_delete_warning": "Cela supprimera définitivement votre compte et toutes vos données. Cette action est irréversible.",
+      "blitz": "Blitz",
+      "rapid": "Rapide",
+      "medium": "Moyen",
+      "long": "Long",
+      "locked": "Verrouillé",
+      "custom": "Personnalisé",
+      "vs_bot": "vs Bot",
+      "play_ai": "Jouer l'IA",
+      "tourney": "Tournoi",
+      "create": "Créer",
+      "cancel_request": "Annuler la requête",
+      "waiting": "Attente…",
+      "unrated": "Amicale",
+      "rated": "Classée",
+      "in_game": "En partie…",
+      "accept": "Accepter",
+      "your_request": "Votre requête",
+      "rejoin": "Rejoindre",
+      "watch": "Regarder",
+      "reconnecting": "Reconnexion…",
+      "view": "Voir",
+      "join": "Rejoindre",
+      "by": "par",
+      "system": "Système",
+      "bullet": "Bullet",
+      "classical": "Classique",
+      "move": "Coup",
+      "registered_plus": "inscrit+",
+      "role_guest": "Invité",
+      "role_user": "Inscrit",
+      "role_moderator": "Modérateur",
+      "role_admin": "Admin",
+      "click_to_browse": "Cliquer pour parcourir vos fichiers",
+      "load_game_record": "Charger un enregistrement de partie",
+      "paste_json_hint": "Collez le JSON de la partie ici ou cliquez sur l'icône de dossier…",
+      "load": "Charger",
+      "back_to_lobby": "← Lobby",
+      "back_step": "← Retour",
+      "choose_format": "Choisir le format",
+      "next_settings": "Suivant : Paramètres →",
+      "next_board": "Suivant : Sélection du plateau →",
+      "next_review": "Suivant : Revue →",
+      "create_tournament": "🏆 Créer le tournoi",
+      "creating": "Création…",
+      "board_selection": "Sélection du plateau",
+      "review": "Revue",
+      "step_format": "Format",
+      "step_settings": "Paramètres",
+      "step_board": "Plateau",
+      "step_review": "Revue",
+      "participants": "Participants",
+      "duration": "Durée",
+      "time_control": "Contrôle du temps",
+      "password_protection": "Protection par mot de passe",
+      "rating_range": "Plage de classement",
+      "invite_bots": "Inviter des bots",
+      "will_you_play": "Jouerez-vous ?",
+      "yes": "Oui",
+      "no_spectate": "Non (spectateur)",
+      "when_to_start": "Quand commencer",
+      "when_full": "Quand complet",
+      "at_time": "À l'heure fixée",
+      "either": "L'un ou l'autre",
+      "start_in": "Commence dans",
+      "open": "Ouvert",
+      "enter_password": "Entrez le mot de passe",
+      "random_boards": "Plateaux aléatoires",
+      "fixed_board": "Plateau fixe",
+      "select_this_board": "Sélectionner ce plateau",
+      "tiles": "tuiles",
+      "random": "Aléatoire",
+      "tournament": "Tournoi",
+      "review_game": "Revoir",
+      "download": "Télécharger",
+      "fmt_swiss_desc": "Appairé par score à chaque ronde. Tout le monde joue chaque ronde.",
+      "fmt_arena_desc": "Ré-appairage continu dès la fin d'une partie. Format le plus rapide.",
+      "fmt_knockout_desc": "Élimination directe. Perdez et c'est terminé !",
+      "fmt_round_robin_desc": "Tout le monde joue contre tout le monde. Le vrai test de force.",
+      "phase_setup": "MISE EN PLACE",
+      "phase_play": "JEU",
+      "phase_end": "FIN",
+      "move_history": "Historique des coups",
+      "connection_lost": "Connexion perdue — reconnexion…",
+      "waiting_opponent": "En attente de l'adversaire…",
+      "random_setup": "Placement aléatoire",
+      "end_turn": "Fin du tour",
+      "pass_turn": "Passer le tour",
+      "confirm_pass": "Confirmer le passage",
+      "flip_board": "Retourner le plateau",
+      "unflip_board": "Rétablir le plateau",
+      "resign": "Abandonner",
+      "confirm_resign": "Confirmer l'abandon",
+      "white_color": "Couleur de Blanc",
+      "black_color": "Couleur de Noir",
+      "white_deciding": "Blanc choisit…",
+      "black_deciding": "Noir choisit…",
+      "your_color": "◆ Votre couleur",
+      "choose_color": "Choisir une couleur",
+      "opponent_color": "Couleur de l'adversaire",
+      "opponent_deciding": "L'adversaire choisit…",
+      "mage_locked": "MAGE VERROUILLÉ",
+      "choose_all_4": "Choisissez les 4 couleurs",
+      "seen_count": "{n} / 4 vues",
+      "board_colors": "Couleurs du plateau",
+      "you_win": "Vous gagnez !",
+      "you_lose": "Vous perdez",
+      "draw": "Nulle !",
+      "game_over": "Partie terminée",
+      "white_wins": "Blanc gagne",
+      "black_wins": "Noir gagne",
+      "reason_time_win": "Victoire au temps ! Votre rapidité était supérieure.",
+      "reason_time_lose": "Temps écoulé. L'horloge est un maître cruel.",
+      "reason_resign_win": "L'adversaire a capitulé devant votre puissance.",
+      "reason_resign_lose": "Vous avez choisi de vous retirer du champ de bataille.",
+      "reason_goddess_win": "Victoire ! La Déesse ennemie a été capturée.",
+      "reason_goddess_lose": "Votre Déesse a été capturée. Défaite.",
+      "reason_aborted": "Partie abandonnée (tournoi terminé).",
+      "reason_draw": "Nulle bien disputée. La paix est rétablie.",
+      "reason_time_neutral": "Victoire au temps.",
+      "reason_resign_neutral": "Un joueur a abandonné.",
+      "reason_goddess_neutral": "La Déesse a été capturée.",
+      "reason_aborted_neutral": "Partie abandonnée (tournoi terminé).",
+      "reason_draw_neutral": "Nulle bien disputée.",
+      "rating_changes": "Variations de classement",
+      "game_json": "JSON de la partie",
+      "copy_clipboard": "Copier dans le presse-papiers",
+      "white": "Blanc",
+      "black": "Noir"
+    }
+  },
+  "es": {
+    "menu": {
+      "intro": "Introducción",
+      "setup_phase": "Fase de Configuración",
+      "board": "El Tablero y Topología",
+      "turn": "Mecánicas de Turno",
+      "goddess": "La Diosa",
+      "heroe": "El Héroe",
+      "mage": "El Mago",
+      "siren": "La Sirena",
+      "ghoul": "El Necrófago",
+      "witch": "La Bruja",
+      "soldier": "El Soldado",
+      "minotaur": "El Minotauro"
+    },
+    "sections": {
+      "intro": {
+        "title": "Introducción",
+        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">El Objetivo</h2>\n                        <p>El objetivo principal es <span class=\"accent\">capturar la Diosa del oponente</span>. El juego termina inmediatamente cuando una Diosa es eliminada del tablero.</p>\n                    </div>\n                    <p>Compiten dos bandos: <span class=\"accent\">Blanco</span> y <span class=\"accent\">Negro</span>. El Blanco comienza en la parte superior del tablero y el Negro en la inferior. El Blanco mueve primero seleccionando un color inicial.</p>\n\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">Dos Tipos de Movimiento</h2>\n                        <p><span class=\"accent\">Salto / Brinco / Hop</span> — Una pieza salta directamente de un polígono a otro, sin importar lo que haya entre ellos. Cada salto cuenta como un paso. <span class=\"highlight\">Las piezas de salto ignoran el color de los bordes y los caminos bloqueados.</span></p>\n                        <p><span class=\"accent\">Deslizamiento / Cadena</span> — Una pieza se desplaza por el grafo de adyacencia, de polígono en polígono. <span class=\"highlight\">Los bordes rojos actúan como muros</span>: las piezas deslizantes no pueden cruzarlos.</p>\n                        <p>Diosas, Héroes, Brujas, Magos y Sirenas son piezas de <span class=\"accent\">salto</span>. Soldados, Ghouls y Golems son piezas de <span class=\"accent\">deslizamiento/cadena</span>.</p>\n                    </div>\n                "
+      },
+      "setup_phase": {
+        "title": "Fase de Configuración",
+        "content": "\n                    <p>Antes de que comience la fase de \"Juego\", los jugadores deben posicionar sus fuerzas centrales. La colocación está estrictamente regulada en 5 pasos:</p>\n                    <ol class=\"setup-steps\">\n                        <li>\n                            <h3 class=\"accent\">La Diosa</h3>\n                            <p>Debe colocarse en el <span class=\"highlight\">borde lejano</span> de tu lado del tablero.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">Los Héroes</h3>\n                            <p>Colocados en los bordes, entre <span class=\"highlight\">4 y 6 saltos</span> de distancia de la Diosa, y al menos a 6 saltos de distancia entre sí.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">Los Minotauros</h3>\n                            <p>Los <span class=\"accent\">Minotauros</span> se colocan a 1-2 saltos de distancia de la Diosa para formar un escudo defensivo.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">El Anillo Cromático</h3>\n                            <p>Las <span class=\"accent\">Brujas</span> se distribuyen en 4 colores únicos lo más cerca posible de tus piezas de anclaje.</p>\n                        </li>\n                        <li>\n                            <h3 class=\"accent\">Despliegue de Infantería</h3>\n                            <p><span class=\"accent\">Necrófagos</span> y <span class=\"accent\">Sirenas</span> ocupan las posiciones tácticas restantes cerca de tus anclas.</p>\n                        </li>\n                    </ol>\n                "
+      },
+      "board": {
+        "title": "Tablero y Topología",
+        "content": "\n                    <div class=\"card\">\n                        <h3><span class=\"accent\">Deslizar</span> (Slide)</h3>\n                        <p>Las piezas se mueven entre polígonos que comparten un borde. <span class=\"highlight\">Los Bordes Rojos bloquean el deslizamiento</span>.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3><span class=\"accent\">Saltar</span> (Jump)</h3>\n                        <p>Las piezas \"saltan\" sobre los bordes, ignorando polígonos intermedios y <span class=\"highlight\">Bordes Rojos</span>.</p>\n                    </div>\n                "
+      },
+      "turn": {
+        "title": "Mecánicas de Turno",
+        "content": "\n                    <div class=\"card\">\n                        <h3>1. Elegir Color</h3>\n                        <p>Selecciona uno de los colores que permita al menos un movimiento legal.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3>2. Activar Pieza</h3>\n                        <p>Cualquier pieza que coincida con el color elegido puede moverse. Las piezas en la reserva también pueden desplegarse.</p>\n                    </div>\n                "
+      },
+      "goddess": {
+        "title": "La Diosa",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Tipo: <span class=\"accent\">Saltadora</span></h3>\n                        <p>Movimiento: <span class=\"highlight\">Rango de Salto 2</span>. Es la pieza más vital; si es capturada, pierdes el juego.</p>\n                    </div>\n                "
+      },
+      "heroe": {
+        "title": "El Héroe",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Tipo: <span class=\"accent\">Saltador</span></h3>\n                        <p>Movimiento: <span class=\"highlight\">Rango de Salto 3</span>. Capturar a un enemigo le permite saltar <span class=\"highlight\">inmediatamente de nuevo</span>.</p>\n                    </div>\n                "
+      },
+      "mage": {
+        "title": "El Mago",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Tipo: <span class=\"accent\">Saltador</span></h3>\n                        <p>Movimiento: <span class=\"highlight\">Rango 3</span>. <span class=\"accent\">Debe cambiar de color</span> en cada salto.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3>Especial: <span class=\"accent\">Desbloqueo Cromático</span></h3>\n                        <p>El Mago está <span class=\"highlight\">Bloqueado</span> al inicio. Solo se activa cuando se han usado los 4 colores del tablero.</p>\n                    </div>\n                "
+      },
+      "siren": {
+        "title": "La Sirena",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Especial: <span class=\"accent\">El Anclaje</span></h3>\n                        <p>Las piezas enemigas <span class=\"highlight\">adyacentes</span> a la Sirena quedan \"ancladas\" y no pueden moverse.</p>\n                    </div>\n                "
+      },
+      "ghoul": {
+        "title": "El Necrófago",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Tipo: <span class=\"accent\">Deslizador</span></h3>\n                        <p>Movimiento: <span class=\"highlight\">Rango 3</span>. Útil para formar cadenas defensivas con los Soldados.</p>\n                    </div>\n                "
+      },
+      "soldier": {
+        "title": "El Soldado",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Tipo: <span class=\"accent\">Deslizador</span></h3>\n                        <p>Se mueve deslizándose por polígonos adyacentes. Puede capturar múltiples enemigos si están en el color elegido.</p>\n                    </div>\n                "
+      },
+      "minotaur": {
+        "title": "El Minotauro",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Tipo: <span class=\"accent\">Invulnerable</span></h3>\n                        <p>Idéntico al Soldado pero <span class=\"accent\">no puede ser capturado</span> ni afectado por explosiones de área.</p>\n                    </div>\n                "
+      },
+      "witch": {
+        "title": "La Bruja",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Tipo: <span class=\"accent\">Saltadora</span></h3>\n                        <p>Movimiento: <span class=\"highlight\">Rango 4</span>. <span class=\"accent\">Debe aterrizar en su color inicial</span>.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3>Habilidad: <span class=\"accent\">Explosión de Aterrizaje</span></h3>\n                        <p>Al aterrizar, destruye a todos los enemigos adyacentes a su destino.</p>\n                    </div>\n                "
+      }
+    },
+    "ui": {
+      "settings": "Ajustes",
+      "language": "Idioma",
+      "login": "Iniciar sesión",
+      "register": "Registrarse",
+      "play_guest": "Jugar como invitado",
+      "about": "Acerca de",
+      "privacy": "Política de Privacidad",
+      "terms": "Términos de Uso",
+      "legal_notice": "Aviso Legal",
+      "logout": "Cerrar sesión",
+      "about_dedal": "Sobre Dedal",
+      "tagline": "Un juego de tablero poligonal de alta estrategia.",
+      "contact": "Contacto",
+      "build": "Versión",
+      "close": "Cerrar",
+      "analysis": "Análisis",
+      "tutorial": "Tutorial",
+      "leaderboard": "Clasificación",
+      "active_games": "Partidas activas",
+      "no_games": "No hay partidas en curso.",
+      "start_one": "¡Empieza una arriba!",
+      "interactive_board": "Tablero interactivo",
+      "reset": "Reiniciar",
+      "lobby": "Lobby",
+      "welcome_to": "BIENVENIDO A …",
+      "choose_tc": "Elige un control de tiempo y empieza una partida",
+      "welcome_back": "Bienvenido de nuevo",
+      "sign_in_to_play": "Inicia sesión para jugar a Dedal",
+      "username_or_email": "Usuario o correo electrónico",
+      "password": "🔒 Contraseña",
+      "sign_in": "Iniciar sesión",
+      "no_account": "¿No tienes cuenta?",
+      "continue_as_guest": "Continuar como invitado",
+      "create_account": "Crear cuenta",
+      "join_community": "Únete a la comunidad Dedal",
+      "username": "Usuario",
+      "email": "Correo electrónico",
+      "already_account": "¿Ya tienes una cuenta?",
+      "my_games": "Mis partidas",
+      "delete_account": "Eliminar cuenta",
+      "user_profile": "Perfil de usuario",
+      "registered": "Registrado",
+      "load_dedal_json": "Cargar un JSON de Dedal",
+      "load_file": "Cargar archivo",
+      "paste": "Pegar",
+      "privacy_policy": "Política de Privacidad",
+      "terms_of_use": "Términos de Uso",
+      "analysis_room": "Sala de análisis",
+      "open_requests": "Solicitudes Abiertas",
+      "no_open_requests": "No hay solicitudes abiertas todavía.",
+      "be_first": "¡Sé el primero!",
+      "open_tournaments": "Torneos Abiertos",
+      "no_open_tournaments": "No hay torneos abiertos.",
+      "create_one": "¡Crea uno!",
+      "active_tournaments": "Torneos Activos",
+      "no_active_tournaments": "No hay torneos activos.",
+      "user_choice": "Elección del Usuario",
+      "last_rating": "Última Clasificación",
+      "rated_today": "Clasificadas Hoy",
+      "bots_today": "Bots Hoy",
+      "unlock_premium": "Desbloquear Funciones Premium",
+      "subscribe_now": "Suscribirse Ahora",
+      "play_unlimited": "Juega partidas clasificadas y contra la IA ilimitadas.",
+      "active_subscriber": "Suscriptor Activo",
+      "sub_coming_soon": "¡Suscripción disponible pronto!",
+      "admin_dashboard": "Panel de Administración",
+      "user_management": "Gestión de Usuarios",
+      "not_logged_in": "No ha iniciado sesión",
+      "post_request": "Publicar Solicitud",
+      "play_vs_ai": "Jugar contra la IA",
+      "limit_reached": "Límite alcanzado",
+      "first_move_note": "El primer movimiento puede tardar unos segundos al iniciar.",
+      "min_label": "MIN",
+      "inc_label": "INC (s)",
+      "retry": "Reintentar",
+      "no_data": "No hay datos disponibles.",
+      "confirm_deletion": "Confirmar Eliminación",
+      "type_username_to_confirm": "Escribe tu nombre de usuario para confirmar",
+      "delete_forever": "Eliminar para Siempre",
+      "cancel": "Cancelar",
+      "continue_btn": "Continuar",
+      "permanently_delete_warning": "Esto eliminará permanentemente tu cuenta y todos tus datos. Esta acción no se puede deshacer.",
+      "blitz": "Blitz",
+      "rapid": "Rápida",
+      "medium": "Media",
+      "long": "Larga",
+      "locked": "Bloqueado",
+      "custom": "Personalizado",
+      "vs_bot": "vs Bot",
+      "play_ai": "Jugar IA",
+      "tourney": "Torneo",
+      "create": "Crear",
+      "cancel_request": "Cancelar solicitud",
+      "waiting": "Esperando…",
+      "unrated": "Amistosa",
+      "rated": "Clasificada",
+      "in_game": "En partida…",
+      "accept": "Aceptar",
+      "your_request": "Tu solicitud",
+      "rejoin": "Reincorporarse",
+      "watch": "Ver",
+      "reconnecting": "Reconectando…",
+      "view": "Ver",
+      "join": "Unirse",
+      "by": "por",
+      "system": "Sistema",
+      "bullet": "Bullet",
+      "classical": "Clásica",
+      "move": "Jugada",
+      "registered_plus": "registrado+",
+      "role_guest": "Invitado",
+      "role_user": "Registrado",
+      "role_moderator": "Moderador",
+      "role_admin": "Admin",
+      "click_to_browse": "Haz clic para examinar tus archivos",
+      "load_game_record": "Cargar registro de partida",
+      "paste_json_hint": "Pega el JSON de la partida aquí o haz clic en el icono de carpeta…",
+      "load": "Cargar",
+      "back_to_lobby": "← Lobby",
+      "back_step": "← Atrás",
+      "choose_format": "Elegir formato",
+      "next_settings": "Siguiente: Ajustes →",
+      "next_board": "Siguiente: Selección de tablero →",
+      "next_review": "Siguiente: Revisión →",
+      "create_tournament": "🏆 Crear torneo",
+      "creating": "Creando…",
+      "board_selection": "Selección de tablero",
+      "review": "Revisión",
+      "step_format": "Formato",
+      "step_settings": "Ajustes",
+      "step_board": "Tablero",
+      "step_review": "Revisión",
+      "participants": "Participantes",
+      "duration": "Duración",
+      "time_control": "Control de tiempo",
+      "password_protection": "Protección por contraseña",
+      "rating_range": "Rango de clasificación",
+      "invite_bots": "Invitar bots",
+      "will_you_play": "¿Jugarás?",
+      "yes": "Sí",
+      "no_spectate": "No (espectador)",
+      "when_to_start": "Cuándo empezar",
+      "when_full": "Cuando esté completo",
+      "at_time": "A la hora fijada",
+      "either": "Cualquiera",
+      "start_in": "Empieza en",
+      "open": "Abierto",
+      "enter_password": "Introduce la contraseña",
+      "random_boards": "Tableros aleatorios",
+      "fixed_board": "Tablero fijo",
+      "select_this_board": "Seleccionar este tablero",
+      "tiles": "fichas",
+      "random": "Aleatorio",
+      "tournament": "Torneo",
+      "review_game": "Revisar",
+      "download": "Descargar",
+      "fmt_swiss_desc": "Emparejado por puntuación cada ronda. Todos juegan cada ronda.",
+      "fmt_arena_desc": "Re-emparejamiento continuo nada más terminar. El formato más rápido.",
+      "fmt_knockout_desc": "Eliminación directa. ¡Pierde y estás fuera!",
+      "fmt_round_robin_desc": "Todos juegan contra todos. La verdadera prueba de fuerza.",
+      "phase_setup": "COLOCACIÓN",
+      "phase_play": "JUEGO",
+      "phase_end": "FIN",
+      "move_history": "Historial de movimientos",
+      "connection_lost": "Conexión perdida — reconectando…",
+      "waiting_opponent": "Esperando al oponente…",
+      "random_setup": "Colocación aleatoria",
+      "end_turn": "Fin del turno",
+      "pass_turn": "Pasar turno",
+      "confirm_pass": "Confirmar paso",
+      "flip_board": "Voltear tablero",
+      "unflip_board": "Restablecer tablero",
+      "resign": "Rendirse",
+      "confirm_resign": "Confirmar rendición",
+      "white_color": "Color de Blancas",
+      "black_color": "Color de Negras",
+      "white_deciding": "Blancas eligiendo…",
+      "black_deciding": "Negras eligiendo…",
+      "your_color": "◆ Tu color",
+      "choose_color": "Elegir color",
+      "opponent_color": "Color del oponente",
+      "opponent_deciding": "El oponente está eligiendo…",
+      "mage_locked": "MAGO BLOQUEADO",
+      "choose_all_4": "Elige los 4 colores",
+      "seen_count": "{n} / 4 vistos",
+      "board_colors": "Colores del tablero",
+      "you_win": "¡Ganas!",
+      "you_lose": "Pierdes",
+      "draw": "¡Tablas!",
+      "game_over": "Fin de la partida",
+      "white_wins": "Ganan las Blancas",
+      "black_wins": "Ganan las Negras",
+      "reason_time_win": "¡Victoria por tiempo! Tu rapidez fue superior.",
+      "reason_time_lose": "Se acabó el tiempo. El reloj es un maestro cruel.",
+      "reason_resign_win": "El oponente se ha rendido ante tu poderío.",
+      "reason_resign_lose": "Has elegido retirarte del campo de batalla.",
+      "reason_goddess_win": "¡Victoria! La Diosa enemiga ha sido capturada.",
+      "reason_goddess_lose": "Tu Diosa ha sido capturada. Derrota.",
+      "reason_aborted": "Partida cancelada (torneo finalizado).",
+      "reason_draw": "Tablas bien disputadas. La paz ha sido restaurada.",
+      "reason_time_neutral": "Victoria por tiempo.",
+      "reason_resign_neutral": "Un lado se ha rendido.",
+      "reason_goddess_neutral": "La Diosa ha sido capturada.",
+      "reason_aborted_neutral": "Partida cancelada (torneo finalizado).",
+      "reason_draw_neutral": "Tablas bien disputadas.",
+      "rating_changes": "Cambios de clasificación",
+      "game_json": "JSON de la partida",
+      "copy_clipboard": "Copiar al portapapeles",
+      "white": "Blancas",
+      "black": "Negras"
+    }
+  },
+  "it": {
+    "menu": {
+      "intro": "Introduzione",
+      "setup_phase": "Fase de Configurazione",
+      "board": "Tabellone e Topologia",
+      "turn": "Meccaniche del Turno",
+      "goddess": "La Dea",
+      "heroe": "L'Eroe",
+      "mage": "Il Mago",
+      "siren": "La Sirena",
+      "ghoul": "Il Ghoul",
+      "witch": "La Strega",
+      "soldier": "Il Soldato",
+      "minotaur": "Il Minotaur"
+    },
+    "sections": {
+      "intro": {
+        "title": "Introduzione",
+        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">L'Obiettivo</h2>\n                        <p>L'obiettivo principale è <span class=\"accent\">catturare la Dea dell'avversario</span>. Il gioco termina immediatamente quando una Dea viene rimossa dal tabellone.</p>\n                    </div>\n                    <p>Due schieramenti competono: <span class=\"accent\">Bianco</span> e <span class=\"accent\">Nero</span>. Il Bianco inizia in cima al tabellone e il Nero in fondo.</p>\n\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">Due Tipi di Movimento</h2>\n                        <p><span class=\"accent\">Salto / Hop</span> — Un pezzo salta direttamente da un poligono a un altro, indipendentemente da ciò che si trova in mezzo. Ogni salto conta come un passo. <span class=\"highlight\">I pezzi che saltano ignorano il colore dei bordi e i percorsi bloccati.</span></p>\n                        <p><span class=\"accent\">Scivolamento / Catena</span> — Un pezzo si muove lungo il grafo di adiacenza, poligono per poligono. <span class=\"highlight\">I bordi rossi fungono da muri</span>: i pezzi scivolanti non possono attraversarli.</p>\n                        <p>Dee, Eroi, Streghe, Maghi e Sirene sono pezzi da <span class=\"accent\">salto</span>. Soldati, Ghoul e Golem sono pezzi da <span class=\"accent\">scivolamento/catena</span>.</p>\n                    </div>\n                "
+      },
+      "setup_phase": {
+        "title": "Fase di Configurazione",
+        "content": "\n                    <p>Prima della fase di \"Gioco\", i giocatori devono posizionare le loro forze. Il posizionamento segue 5 fasi:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">La Dea</h3><p>Deve stare sul <span class=\"highlight\">bordo estremo</span>.</p></li>\n                        <li><h3 class=\"accent\">Gli Eroi</h3><p>Tra <span class=\"highlight\">4 e 6 salti</span> dalla Dea.</p></li>\n                        <li><h3 class=\"accent\">I Minotaur</h3><p>Protezione ravvicinata (1-2 salti) per la Dea.</p></li>\n                        <li><h3 class=\"accent\">L'Anello Cromatico</h3><p>Le <span class=\"accent\">Streghe</span> distribuite su 4 colori diversi.</p></li>\n                        <li><h3 class=\"accent\">Fanteria</h3><p><span class=\"accent\">Ghoul</span> e <span class=\"accent\">Sirene</span> completano le linee.</p></li>\n                    </ol>\n                "
+      },
+      "board": {
+        "title": "Tabellone e Topologia",
+        "content": "\n                    <div class=\"card\">\n                        <h3><span class=\"accent\">Scivolata</span> (Slide)</h3>\n                        <p>Movimento tra poligoni adiacenti. <span class=\"highlight\">I Bordi Rossi bloccano la scivolata</span>.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3><span class=\"accent\">Salto</span> (Jump)</h3>\n                        <p>Le pezzi scavalcano i bordi, ignorando i <span class=\"highlight\">Bordi Rossi</span>.</p>\n                    </div>\n                "
+      },
+      "turn": {
+        "title": "Meccaniche del Turno",
+        "content": "\n                    <div class=\"card\">\n                        <h3>1. Scegli il Colore</h3>\n                        <p>Scegli un colore che permetta almeno una mossa legale.</p>\n                    </div>\n                "
+      },
+      "goddess": {
+        "title": "La Dea",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Tipo: <span class=\"accent\">Saltatore</span></h3>\n                        <p>Distanza di Salto: <span class=\"highlight\">2</span>. Proteggila a ogni costo.</p>\n                    </div>\n                "
+      },
+      "heroe": {
+        "title": "L'Eroe",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Tipo: <span class=\"accent\">Saltatore</span></h3>\n                        <p>Salto: <span class=\"highlight\">3</span>. Dopo una cattura, può saltare <span class=\"highlight\">di nuovo inmediatamente</span>.</p>\n                    </div>\n                "
+      },
+      "mage": {
+        "title": "Il Mago",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Speciale: <span class=\"accent\">Sblocco Cromatico</span></h3>\n                        <p>Il Mago è <span class=\"highlight\">Bloccato</span> all'inizio. Diventa disponibile solo dopo che tutti e 4 i colori sono stati scelti.</p>\n                    </div>\n                "
+      },
+      "siren": {
+        "title": "La Sirena",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Speciale: <span class=\"accent\">Blocco</span></h3>\n                        <p>I nemici <span class=\"highlight\">adiacenti</span> alla Sirena sono bloccati e non possono muoversi.</p>\n                    </div>\n                "
+      },
+      "ghoul": {
+        "title": "Il Ghoul",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Tipo: <span class=\"accent\">Marciatore</span></h3>\n                        <p>Movimento: <span class=\"highlight\">Distanza 3</span>.</p>\n                    </div>\n                "
+      },
+      "soldier": {
+        "title": "Il Soldato",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Tipo: <span class=\"accent\">Marciatore</span></h3>\n                        <p>Scivola attraverso catene di poligoni. Può catturare più nemici.</p>\n                    </div>\n                "
+      },
+      "minotaur": {
+        "title": "Il Minotaur",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Tipo: <span class=\"accent\">Invulnerabile</span></h3>\n                        <p>Non può essere catturato né distrutto dalle esplosioni.</p>\n                    </div>\n                "
+      },
+      "witch": {
+        "title": "La Strega",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Tipo: <span class=\"accent\">Saltatore</span></h3>\n                        <p>Salto: <span class=\"highlight\">4</span>. Deve atterrare sul suo colore di partenza.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3>Abilità: <span class=\"accent\">Esplosione</span></h3>\n                        <p>Distrugge i nemici adiacenti quando atterra.</p>\n                    </div>\n                "
+      }
+    },
+    "ui": {
+      "settings": "Impostazioni",
+      "language": "Lingua",
+      "login": "Accedi",
+      "register": "Registrati",
+      "play_guest": "Gioca come ospite",
+      "about": "Informazioni",
+      "privacy": "Informativa sulla Privacy",
+      "terms": "Termini di Utilizzo",
+      "legal_notice": "Note Legali",
+      "logout": "Esci",
+      "about_dedal": "Info su Dedal",
+      "tagline": "Un gioco da tavolo poligonale ad alta strategia.",
+      "contact": "Contatti",
+      "build": "Versione",
+      "close": "Chiudi",
+      "analysis": "Analisi",
+      "tutorial": "Tutorial",
+      "leaderboard": "Classifica",
+      "active_games": "Partite in corso",
+      "no_games": "Nessuna partita in corso.",
+      "start_one": "Iniziane una sopra!",
+      "interactive_board": "Scacchiera interattiva",
+      "reset": "Ripristina",
+      "lobby": "Lobby",
+      "welcome_to": "BENVENUTO IN …",
+      "choose_tc": "Scegli un controllo del tempo e inizia una partita",
+      "welcome_back": "Bentornato",
+      "sign_in_to_play": "Accedi per giocare a Dedal",
+      "username_or_email": "Nome utente o e-mail",
+      "password": "🔒 Password",
+      "sign_in": "Accedi",
+      "no_account": "Non hai un account?",
+      "continue_as_guest": "Continua come ospite",
+      "create_account": "Crea account",
+      "join_community": "Unisciti alla comunità Dedal",
+      "username": "Nome utente",
+      "email": "E-mail",
+      "already_account": "Hai già un account?",
+      "my_games": "Le mie partite",
+      "delete_account": "Elimina account",
+      "user_profile": "Profilo utente",
+      "registered": "Registrato",
+      "load_dedal_json": "Carica un JSON Dedal",
+      "load_file": "Carica file",
+      "paste": "Incolla",
+      "privacy_policy": "Informativa sulla Privacy",
+      "terms_of_use": "Termini di Utilizzo",
+      "analysis_room": "Sala analisi",
+      "open_requests": "Richieste Aperte",
+      "no_open_requests": "Ancora nessuna richiesta aperta.",
+      "be_first": "Sii il primo!",
+      "open_tournaments": "Tornei Aperti",
+      "no_open_tournaments": "Nessun torneo aperto.",
+      "create_one": "Creane uno!",
+      "active_tournaments": "Tornei Attivi",
+      "no_active_tournaments": "Nessun torneo attivo.",
+      "user_choice": "Scelta dell'Utente",
+      "last_rating": "Ultimo Punteggio",
+      "rated_today": "Classificate Oggi",
+      "bots_today": "Bot Oggi",
+      "unlock_premium": "Sblocca Funzioni Premium",
+      "subscribe_now": "Abbonati Ora",
+      "play_unlimited": "Gioca partite classificate e contro i bot illimitatamente.",
+      "active_subscriber": "Abbonato Attivo",
+      "sub_coming_soon": "Abbonamento in arrivo!",
+      "admin_dashboard": "Dashboard Admin",
+      "user_management": "Gestione Utenti",
+      "not_logged_in": "Non loggato",
+      "post_request": "Invia Richiesta",
+      "play_vs_ai": "Gioca contro IA",
+      "limit_reached": "Limite raggiunto",
+      "first_move_note": "La prima mossa potrebbe richiedere alcuni secondi all'avvio.",
+      "min_label": "MIN",
+      "inc_label": "INC (s)",
+      "retry": "Riprova",
+      "no_data": "Nessun dato disponibile.",
+      "confirm_deletion": "Conferma Eliminazione",
+      "type_username_to_confirm": "Digita il tuo nome utente per confermare",
+      "delete_forever": "Elimina per Sempre",
+      "cancel": "Annulla",
+      "continue_btn": "Continua",
+      "permanently_delete_warning": "Questo eliminerà permanentemente il tuo account e tutti i tuoi dati. L'azione è irreversibile.",
+      "blitz": "Blitz",
+      "rapid": "Rapida",
+      "medium": "Media",
+      "long": "Lunga",
+      "locked": "Bloccato",
+      "custom": "Personalizzato",
+      "vs_bot": "vs Bot",
+      "play_ai": "Gioca IA",
+      "tourney": "Torneo",
+      "create": "Crea",
+      "cancel_request": "Annulla richiesta",
+      "waiting": "In attesa…",
+      "unrated": "Amichevole",
+      "rated": "Classificata",
+      "in_game": "In gioco…",
+      "accept": "Accetta",
+      "your_request": "Tua richiesta",
+      "rejoin": "Rientra",
+      "watch": "Guarda",
+      "reconnecting": "Riconnessione…",
+      "view": "Vedi",
+      "join": "Partecipa",
+      "by": "da",
+      "system": "Sistema",
+      "bullet": "Bullet",
+      "classical": "Classica",
+      "move": "Mossa",
+      "registered_plus": "registrato+",
+      "role_guest": "Ospite",
+      "role_user": "Registrato",
+      "role_moderator": "Moderatore",
+      "role_admin": "Admin",
+      "click_to_browse": "Clicca per sfogliare i tuoi file",
+      "load_game_record": "Carica registrazione di partita",
+      "paste_json_hint": "Incolla il JSON della partita qui o clicca sull'icona della cartella…",
+      "load": "Carica",
+      "back_to_lobby": "← Lobby",
+      "back_step": "← Indietro",
+      "choose_format": "Scegli il formato",
+      "next_settings": "Avanti: Impostazioni →",
+      "next_board": "Avanti: Selezione tavola →",
+      "next_review": "Avanti: Revisione →",
+      "create_tournament": "🏆 Crea torneo",
+      "creating": "Creazione…",
+      "board_selection": "Selezione tavola",
+      "review": "Revisione",
+      "step_format": "Formato",
+      "step_settings": "Impostazioni",
+      "step_board": "Tavola",
+      "step_review": "Revisione",
+      "participants": "Partecipanti",
+      "duration": "Durata",
+      "time_control": "Controllo del tempo",
+      "password_protection": "Protezione con password",
+      "rating_range": "Intervallo di valutazione",
+      "invite_bots": "Invita bot",
+      "will_you_play": "Giocherai?",
+      "yes": "Sì",
+      "no_spectate": "No (spettatore)",
+      "when_to_start": "Quando iniziare",
+      "when_full": "Quando è pieno",
+      "at_time": "All'ora stabilita",
+      "either": "Entrambi",
+      "start_in": "Inizia tra",
+      "open": "Aperto",
+      "enter_password": "Inserisci la password",
+      "random_boards": "Tavole casuali",
+      "fixed_board": "Tavola fissa",
+      "select_this_board": "Seleziona questa tavola",
+      "tiles": "tessere",
+      "random": "Casuale",
+      "tournament": "Torneo",
+      "review_game": "Rivedi",
+      "download": "Scarica",
+      "fmt_swiss_desc": "Abbinato per punteggio ogni turno. Tutti giocano ogni turno.",
+      "fmt_arena_desc": "Riabbinamento continuo subito dopo la fine. Il formato più veloce.",
+      "fmt_knockout_desc": "Eliminazione diretta. Perdi e sei fuori!",
+      "fmt_round_robin_desc": "Tutti giocano contro tutti. Il vero banco di prova.",
+      "phase_setup": "POSIZIONAMENTO",
+      "phase_play": "GIOCO",
+      "phase_end": "FINE",
+      "move_history": "Storico mosse",
+      "connection_lost": "Connessione persa — riconnessione…",
+      "waiting_opponent": "In attesa dell'avversario…",
+      "random_setup": "Posizionamento casuale",
+      "end_turn": "Fine turno",
+      "pass_turn": "Passa turno",
+      "confirm_pass": "Conferma passaggio",
+      "flip_board": "Capovolgi tavola",
+      "unflip_board": "Ripristina tavola",
+      "resign": "Abbandonare",
+      "confirm_resign": "Conferma abbandono",
+      "white_color": "Colore del Bianco",
+      "black_color": "Colore del Nero",
+      "white_deciding": "Il Bianco sta scegliendo…",
+      "black_deciding": "Il Nero sta scegliendo…",
+      "your_color": "◆ Il tuo colore",
+      "choose_color": "Scegli un colore",
+      "opponent_color": "Colore dell'avversario",
+      "opponent_deciding": "L'avversario sta scegliendo…",
+      "mage_locked": "MAGO BLOCCATO",
+      "choose_all_4": "Scegli tutti e 4 i colori",
+      "seen_count": "{n} / 4 visti",
+      "board_colors": "Colori della tavola",
+      "you_win": "Hai vinto!",
+      "you_lose": "Hai perso",
+      "draw": "Patta!",
+      "game_over": "Partita terminata",
+      "white_wins": "Vince il Bianco",
+      "black_wins": "Vince il Nero",
+      "reason_time_win": "Vittoria al tempo! La tua velocità era superiore.",
+      "reason_time_lose": "Tempo scaduto. L'orologio è un maestro crudele.",
+      "reason_resign_win": "L'avversario si è arreso alla tua potenza.",
+      "reason_resign_lose": "Hai scelto di ritirarti dal campo di battaglia.",
+      "reason_goddess_win": "Vittoria! La Dea nemica è stata catturata.",
+      "reason_goddess_lose": "La tua Dea è stata catturata. Sconfitta.",
+      "reason_aborted": "Partita interrotta (torneo terminato).",
+      "reason_draw": "Patta ben combattuta. La pace è ristabilita.",
+      "reason_time_neutral": "Vittoria al tempo.",
+      "reason_resign_neutral": "Un lato si è arreso.",
+      "reason_goddess_neutral": "La Dea è stata catturata.",
+      "reason_aborted_neutral": "Partita interrotta (torneo terminato).",
+      "reason_draw_neutral": "Patta ben combattuta.",
+      "rating_changes": "Variazioni di punteggio",
+      "game_json": "JSON della partita",
+      "copy_clipboard": "Copia negli appunti",
+      "white": "Bianco",
+      "black": "Nero"
+    }
+  },
+  "de": {
+    "menu": {
+      "intro": "Einleitung",
+      "setup_phase": "Einstiegsphase",
+      "board": "Spielfeld & Topologie",
+      "turn": "Zugmechanik",
+      "goddess": "Die Göttin",
+      "heroe": "Der Held",
+      "mage": "Der Magier",
+      "siren": "Die Sirene",
+      "ghoul": "Der Ghul",
+      "witch": "Die Hexe",
+      "soldier": "Der Soldat",
+      "minotaur": "Der Minotaur"
+    },
+    "sections": {
+      "intro": {
+        "title": "Einleitung",
+        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">Das Ziel</h2>\n                        <p>Das Hauptziel ist es, die <span class=\"accent\">Göttin des Gegners zu schlagen</span>. Das Spiel endet sofort, wenn eine Göttin vom Feld entfernt wird.</p>\n                    </div>\n\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">Zwei Bewegungsarten</h2>\n                        <p><span class=\"accent\">Sprung / Hop</span> — Eine Figur springt direkt von einem Polygon zu einem anderen, unabhängig vom Zwischenraum. Jeder Sprung zählt als ein Schritt. <span class=\"highlight\">Springende Figuren ignorieren Kantenfarben und blockierte Pfade.</span></p>\n                        <p><span class=\"accent\">Gleiten / Kette</span> — Eine Figur bewegt sich entlang des Adjazenzgraphen, Polygon für Polygon. <span class=\"highlight\">Rote Kanten wirken als Wände</span>: gleitende Figuren können sie nicht überschreiten.</p>\n                        <p>Göttinnen, Helden, Hexen, Magier und Sirenen sind <span class=\"accent\">Sprung</span>-Figuren. Soldaten, Ghouls und Golems sind <span class=\"accent\">Gleit/Ketten</span>-Figuren.</p>\n                    </div>\n                "
+      },
+      "setup_phase": {
+        "title": "Einstiegsphase",
+        "content": "\n                    <p>Bevor die Spielphase beginnt, müssen die Spieler ihre Kräfte positionieren. Die Aufstellung erfolgt in 5 Schritten:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">Die Göttin</h3><p>Wird am <span class=\"highlight\">äußersten Rand</span> platziert.</p></li>\n                        <li><h3 class=\"accent\">Die Helden</h3><p>Zwischen <span class=\"highlight\">4 und 6 Sprüngen</span> von der Göttin entfernt.</p></li>\n                        <li><h3 class=\"accent\">Die Minotaurs</h3><p>Schutzschilde in der Nähe der Göttin.</p></li>\n                        <li><h3 class=\"accent\">Der Chromatische Ring</h3><p>Die <span class=\"accent\">Hexen</span> werden auf 4 verschiedene Farben verteilt.</p></li>\n                        <li><h3 class=\"accent\">Infanterie</h3><p><span class=\"accent\">Ghule</span> und <span class=\"accent\">Sirenen</span> füllen die taktischen Lücken.</p></li>\n                    </ol>\n                "
+      },
+      "board": {
+        "title": "Spielfeld & Topologie",
+        "content": "\n                    <div class=\"card\">\n                        <h3><span class=\"accent\">Gleiten</span> (Slide)</h3>\n                        <p>Bewegung zwischen benachbarten Polygonen. <span class=\"highlight\">Rote Kanten blockieren das Gleiten</span>.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3><span class=\"accent\">Springen</span> (Jump)</h3>\n                        <p>Figuren \"springen\" über Kanten und ignorieren <span class=\"highlight\">Rote Kanten</span>.</p>\n                    </div>\n                "
+      },
+      "turn": {
+        "title": "Zugmechanik",
+        "content": "\n                    <p>Wählen Sie eine Farbe, die mindestens einen legalen Zug ermöglicht. Alle Figuren dieser Farbe dürfen bewegt werden.</p>\n                "
+      },
+      "goddess": {
+        "title": "Die Göttin",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Typ: <span class=\"accent\">Springer</span></h3>\n                        <p>Sprungweite: <span class=\"highlight\">2</span>. Die wichtigste Figur; wird sie geschlagen, ist das Spiel verloren.</p>\n                    </div>\n                "
+      },
+      "heroe": {
+        "title": "Der Held",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Typ: <span class=\"accent\">Springer</span></h3>\n                        <p>Sprungweite: <span class=\"highlight\">3</span>. Nach einem Schlag darf er <span class=\"highlight\">sofort erneut springen</span>.</p>\n                    </div>\n                "
+      },
+      "mage": {
+        "title": "Der Magier",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Spezial: <span class=\"accent\">Chromatische Freischaltung</span></h3>\n                        <p>Der Magier ist zu Beginn <span class=\"highlight\">Gesperrt</span>. Er wird erst aktiviert, wenn alle 4 Farben auf dem Feld gewählt wurden.</p>\n                    </div>\n                "
+      },
+      "siren": {
+        "title": "Die Sirene",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Spezial: <span class=\"accent\">Verankerung</span></h3>\n                        <p>Gegnerische Figuren <span class=\"highlight\">neben</span> der Sirene sind verankert und können sich nicht bewegen.</p>\n                    </div>\n                "
+      },
+      "ghoul": {
+        "title": "Der Ghul",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Typ: <span class=\"accent\">Gleiter</span></h3>\n                        <p>Reichweite: <span class=\"highlight\">3</span>.</p>\n                    </div>\n                "
+      },
+      "soldier": {
+        "title": "Der Soldat",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Typ: <span class=\"accent\">Gleiter</span></h3>\n                        <p>Gleitet durch Polygonketten und kann mehrere Gegner schlagen.</p>\n                    </div>\n                "
+      },
+      "minotaur": {
+        "title": "Der Minotaur",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Typ: <span class=\"accent\">Unverwundbar</span></h3>\n                        <p>Kann nicht geschlagen oder durch Explosionen zerstört werden.</p>\n                    </div>\n                "
+      },
+      "witch": {
+        "title": "Die Hexe",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Typ: <span class=\"accent\">Springer</span></h3>\n                        <p>Sprungweite: <span class=\"highlight\">4</span>. Muss auf ihrer Startfarbe landen.</p>\n                    </div>\n                "
+      }
+    },
+    "ui": {
+      "settings": "Einstellungen",
+      "language": "Sprache",
+      "login": "Anmelden",
+      "register": "Registrieren",
+      "play_guest": "Als Gast spielen",
+      "about": "Über uns",
+      "privacy": "Datenschutzerklärung",
+      "terms": "Nutzungsbedingungen",
+      "legal_notice": "Impressum",
+      "logout": "Abmelden",
+      "about_dedal": "Über Dedal",
+      "tagline": "Ein hochstrategisches polygonales Brettspiel.",
+      "contact": "Kontakt",
+      "build": "Version",
+      "close": "Schließen",
+      "analysis": "Analyse",
+      "tutorial": "Tutorial",
+      "leaderboard": "Bestenliste",
+      "active_games": "Laufende Spiele",
+      "no_games": "Keine Spiele in Gange.",
+      "start_one": "Starte eins oben!",
+      "interactive_board": "Interaktives Brett",
+      "reset": "Zurücksetzen",
+      "lobby": "Lobby",
+      "welcome_to": "WILLKOMMEN BEI …",
+      "choose_tc": "Wähle eine Zeitkontrolle und starte ein Spiel",
+      "welcome_back": "Willkommen zurück",
+      "sign_in_to_play": "Melde dich an, um Dedal zu spielen",
+      "username_or_email": "Benutzername oder E-Mail",
+      "password": "🔒 Passwort",
+      "sign_in": "Anmelden",
+      "no_account": "Noch kein Konto?",
+      "continue_as_guest": "Als Gast fortfahren",
+      "create_account": "Konto erstellen",
+      "join_community": "Tritt der Dedal-Community bei",
+      "username": "Benutzername",
+      "email": "E-Mail",
+      "already_account": "Bereits ein Konto?",
+      "my_games": "Meine Spiele",
+      "delete_account": "Konto löschen",
+      "user_profile": "Benutzerprofil",
+      "registered": "Registriert",
+      "load_dedal_json": "Dedal-Spiel-JSON laden",
+      "load_file": "Datei laden",
+      "paste": "Einfügen",
+      "privacy_policy": "Datenschutzerklärung",
+      "terms_of_use": "Nutzungsbedingungen",
+      "analysis_room": "Analysesaal",
+      "open_requests": "Offene Anfragen",
+      "no_open_requests": "Noch keine offenen Anfragen.",
+      "be_first": "Sei der Erste!",
+      "open_tournaments": "Offene Turniere",
+      "no_open_tournaments": "Keine offenen Turniere.",
+      "create_one": "Erstelle eins!",
+      "active_tournaments": "Aktive Turniere",
+      "no_active_tournaments": "Keine aktiven Turniere.",
+      "user_choice": "Benutzerwahl",
+      "last_rating": "Letzte Bewertung",
+      "rated_today": "Heute gewertet",
+      "bots_today": "Bots heute",
+      "unlock_premium": "Premium-Funktionen freischalten",
+      "subscribe_now": "Jetzt abonnieren",
+      "play_unlimited": "Unbegrenzt gewertete Spiele & Bot-Spiele spielen.",
+      "active_subscriber": "Aktiver Abonnent",
+      "sub_coming_soon": "Abonnement in Kürze verfügbar!",
+      "admin_dashboard": "Admin-Dashboard",
+      "user_management": "Benutzerverwaltung",
+      "not_logged_in": "Nicht angemeldet",
+      "post_request": "Anfrage senden",
+      "play_vs_ai": "Gegen KI spielen",
+      "limit_reached": "Limit erreicht",
+      "first_move_note": "Der erste Zug kann beim Kaltstart einige Sekunden dauern.",
+      "min_label": "MIN",
+      "inc_label": "INC (s)",
+      "retry": "Wiederholen",
+      "no_data": "Keine Daten verfügbar.",
+      "confirm_deletion": "Löschung bestätigen",
+      "type_username_to_confirm": "Geben Sie Ihren Benutzernamen zur Bestätigung ein",
+      "delete_forever": "Endgültig löschen",
+      "cancel": "Abbrechen",
+      "continue_btn": "Weiter",
+      "permanently_delete_warning": "Dies löscht Ihr Konto und alle Ihre Daten dauerhaft. Diese Aktion kann nicht rückgängig gemacht werden.",
+      "blitz": "Blitz",
+      "rapid": "Schnell",
+      "medium": "Mittel",
+      "long": "Lang",
+      "locked": "Gesperrt",
+      "custom": "Benutzerdefiniert",
+      "vs_bot": "vs Bot",
+      "play_ai": "KI spielen",
+      "tourney": "Turnier",
+      "create": "Erstellen",
+      "cancel_request": "Anfrage abbrechen",
+      "waiting": "Warten…",
+      "unrated": "Ungewertet",
+      "rated": "Gewertet",
+      "in_game": "Im Spiel…",
+      "accept": "Annehmen",
+      "your_request": "Deine Anfrage",
+      "rejoin": "Beitreten",
+      "watch": "Zuschauen",
+      "reconnecting": "Verbindung wird hergestellt…",
+      "view": "Ansehen",
+      "join": "Beitreten",
+      "by": "von",
+      "system": "System",
+      "bullet": "Bullet",
+      "classical": "Klassisch",
+      "move": "Zug",
+      "registered_plus": "registriert+",
+      "role_guest": "Gast",
+      "role_user": "Registriert",
+      "role_moderator": "Moderator",
+      "role_admin": "Admin",
+      "click_to_browse": "Klicken zum Durchsuchen Ihrer Dateien",
+      "load_game_record": "Spielprotokoll laden",
+      "paste_json_hint": "Spielen-JSON hier einfügen oder auf das Ordner-Symbol klicken…",
+      "load": "Laden",
+      "back_to_lobby": "← Lobby",
+      "back_step": "← Zurück",
+      "choose_format": "Format wählen",
+      "next_settings": "Weiter: Einstellungen →",
+      "next_board": "Weiter: Brettauswahl →",
+      "next_review": "Weiter: Überprüfung →",
+      "create_tournament": "🏆 Turnier erstellen",
+      "creating": "Wird erstellt…",
+      "board_selection": "Brettauswahl",
+      "review": "Überprüfung",
+      "step_format": "Format",
+      "step_settings": "Einstellungen",
+      "step_board": "Brett",
+      "step_review": "Überprüfung",
+      "participants": "Teilnehmer",
+      "duration": "Dauer",
+      "time_control": "Zeitkontrolle",
+      "password_protection": "Passwortschutz",
+      "rating_range": "Bewertungsbereich",
+      "invite_bots": "Bots einladen",
+      "will_you_play": "Werden Sie spielen?",
+      "yes": "Ja",
+      "no_spectate": "Nein (Zuschauer)",
+      "when_to_start": "Wann starten",
+      "when_full": "Wenn voll",
+      "at_time": "Zur festgelegten Zeit",
+      "either": "Beides",
+      "start_in": "Startet in",
+      "open": "Offen",
+      "enter_password": "Passwort eingeben",
+      "random_boards": "Zufällige Bretter",
+      "fixed_board": "Festes Brett",
+      "select_this_board": "Dieses Brett auswählen",
+      "tiles": "Felder",
+      "random": "Zufällig",
+      "tournament": "Turnier",
+      "review_game": "Überprüfen",
+      "download": "Herunterladen",
+      "fmt_swiss_desc": "Nach Punkten gepaart jede Runde. Alle spielen jede Runde.",
+      "fmt_arena_desc": "Kontinuierliche Neuauslosung nach dem Spiel. Schnellstes Format.",
+      "fmt_knockout_desc": "K.-o.-System. Verliere und du bist raus!",
+      "fmt_round_robin_desc": "Alle spielen gegen alle. Der wahre Stärketest.",
+      "phase_setup": "AUFBAU",
+      "phase_play": "SPIEL",
+      "phase_end": "ENDE",
+      "move_history": "Zugverlauf",
+      "connection_lost": "Verbindung unterbrochen — Wiederverbindung…",
+      "waiting_opponent": "Warten auf Gegner…",
+      "random_setup": "Zufälliger Aufbau",
+      "end_turn": "Zug beenden",
+      "pass_turn": "Aussetzen",
+      "confirm_pass": "Aussetzen bestätigen",
+      "flip_board": "Brett drehen",
+      "unflip_board": "Brett zurückdrehen",
+      "resign": "Aufgeben",
+      "confirm_resign": "Aufgabe bestätigen",
+      "white_color": "Farbe Weiß",
+      "black_color": "Farbe Schwarz",
+      "white_deciding": "Weiß wählt…",
+      "black_deciding": "Schwarz wählt…",
+      "your_color": "◆ Deine Farbe",
+      "choose_color": "Farbe wählen",
+      "opponent_color": "Farbe des Gegners",
+      "opponent_deciding": "Gegner wählt…",
+      "mage_locked": "MAGIER GESPERRT",
+      "choose_all_4": "Wähle alle 4 Farben",
+      "seen_count": "{n} / 4 gesehen",
+      "board_colors": "Brettfarben",
+      "you_win": "Du gewinnst!",
+      "you_lose": "Du verlierst",
+      "draw": "Remis!",
+      "game_over": "Spiel beendet",
+      "white_wins": "Weiß gewinnt",
+      "black_wins": "Schwarz gewinnt",
+      "reason_time_win": "Zeitsieg! Deine Schnelligkeit war überlegen.",
+      "reason_time_lose": "Zeit abgelaufen. Die Uhr ist ein grausamer Meister.",
+      "reason_resign_win": "Der Gegner hat sich deiner Macht ergeben.",
+      "reason_resign_lose": "Du hast dich entschieden, das Feld zu räumen.",
+      "reason_goddess_win": "Sieg! Die feindliche Göttin wurde gefangen.",
+      "reason_goddess_lose": "Deine Göttin wurde gefangen. Niederlage.",
+      "reason_aborted": "Spiel abgebrochen (Turnier beendet).",
+      "reason_draw": "Hart umkämpftes Remis. Frieden ist wiederhergestellt.",
+      "reason_time_neutral": "Zeitsieg.",
+      "reason_resign_neutral": "Eine Seite hat aufgegeben.",
+      "reason_goddess_neutral": "Die Göttin wurde gefangen.",
+      "reason_aborted_neutral": "Spiel abgebrochen (Turnier beendet).",
+      "reason_draw_neutral": "Hart umkämpftes Remis.",
+      "rating_changes": "Bewertungsänderungen",
+      "game_json": "Spiel-JSON",
+      "copy_clipboard": "In Zwischenablage kopieren",
+      "white": "Weiß",
+      "black": "Schwarz"
+    }
+  },
+  "nl": {
+    "menu": {
+      "intro": "Inleiding",
+      "setup_phase": "Opstelfase",
+      "board": "Speelbord & Topologie",
+      "turn": "Beurtmechanica",
+      "goddess": "De Godin",
+      "heroe": "De Held",
+      "mage": "De Magiër",
+      "siren": "De Sirene",
+      "ghoul": "De Ghul",
+      "witch": "De Heks",
+      "soldier": "De Soldaat",
+      "minotaur": "De Minotaur"
+    },
+    "sections": {
+      "intro": {
+        "title": "Inleiding",
+        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">Het Doel</h2>\n                        <p>Het hoofddoel is om de <span class=\"accent\">Godin van de tegenstander te slaan</span>. Het spel eindigt direct als een Godin van het bord wordt verwijderd.</p>\n                    </div>\n                "
+      },
+      "setup_phase": {
+        "title": "Opstelfase",
+        "content": "\n                    <p>Voordat het spel begint, moeten spelers hun eenheden plaatsen. Dit gebeurt in 5 stappen:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">De Godin</h3><p>Wordt aan de <span class=\"highlight\">uiterste rand</span> geplaatst.</p></li>\n                        <li><h3 class=\"accent\">De Helden</h3><p>Tussen <span class=\"highlight\">4 en 6 sprongen</span> van de Godin.</p></li>\n                        <li><h3 class=\"accent\">De Minotaurs</h3><p>Beschermende schilden nabij de Godin.</p></li>\n                        <li><h3 class=\"accent\">De Chromatische Ring</h3><p>De <span class=\"accent\">Heksen</span> worden over 4 kleuren verdeeld.</p></li>\n                        <li><h3 class=\"accent\">Infanterie</h3><p><span class=\"accent\">Ghuls</span> en <span class=\"accent\">Sirenes</span> vullen de linies.</p></li>\n                    </ol>\n                "
+      },
+      "board": {
+        "title": "Speelbord & Topologie",
+        "content": "\n                    <div class=\"card\">\n                        <h3><span class=\"accent\">Glijden</span> (Slide)</h3>\n                        <p>Beweging tussen aangrenzende polygonen. <span class=\"highlight\">Rode Randen blokkeren het glijden</span>.</p>\n                    </div>\n                "
+      },
+      "turn": {
+        "title": "Beurtmechanica",
+        "content": "\n                    <p>Kies een kleur die minstens één legale zet toestaat. Alle eenheden van die kleur kunnen bewegen.</p>\n                "
+      },
+      "goddess": {
+        "title": "De Godin",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Type: <span class=\"accent\">Springer</span></h3>\n                        <p>Sprongbereik: <span class=\"highlight\">2</span>. Als zij wordt geslagen, verlies je.</p>\n                    </div>\n                "
+      },
+      "heroe": {
+        "title": "De Held",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Type: <span class=\"accent\">Springer</span></h3>\n                        <p>Sprongbereik: <span class=\"highlight\">3</span>. Mag <span class=\"highlight\">direct opnieuw springen</span> na een slag.</p>\n                    </div>\n                "
+      },
+      "mage": {
+        "title": "De Magiër",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Speciaal: <span class=\"accent\">Chromatische Ontgrendeling</span></h3>\n                        <p>De Magiër is <span class=\"highlight\">Vergrendeld</span> aan het begin.</p>\n                    </div>\n                "
+      },
+      "siren": {
+        "title": "De Sirene",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Speciaal: <span class=\"accent\">Verankering</span></h3>\n                        <p>Vijanden <span class=\"highlight\">naast</span> de Sirene kunnen niet bewegen.</p>\n                    </div>\n                "
+      },
+      "ghoul": {
+        "title": "De Ghul",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Type: <span class=\"accent\">Glijder</span></h3>\n                        <p>Bereik: <span class=\"highlight\">3</span>.</p>\n                    </div>\n                "
+      },
+      "soldier": {
+        "title": "De Soldaat",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Type: <span class=\"accent\">Glijder</span></h3>\n                        <p>Glijdt door reeksen polygonen.</p>\n                    </div>\n                "
+      },
+      "minotaur": {
+        "title": "De Minotaur",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Type: <span class=\"accent\">Onkwetsbaar</span></h3>\n                        <p>Kan niet worden geslagen.</p>\n                    </div>\n                "
+      },
+      "witch": {
+        "title": "De Heks",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Type: <span class=\"accent\">Springer</span></h3>\n                        <p>Sprongbereik: <span class=\"highlight\">4</span>.</p>\n                    </div>\n                "
+      }
+    }
+  },
+  "zh": {
+    "menu": {
+      "intro": "介绍",
+      "setup_phase": "配置阶段",
+      "board": "棋盘与地貌",
+      "turn": "回合机制",
+      "goddess": "女神",
+      "heroe": "英雄",
+      "mage": "法师",
+      "siren": "塞壬",
+      "ghoul": "食尸鬼",
+      "witch": "女巫",
+      "soldier": "士兵",
+      "minotaur": "弥诺陶洛斯"
+    },
+    "sections": {
+      "intro": {
+        "title": "介绍",
+        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">目标</h2>\n                        <p>主要目标是 <span class=\"accent\">俘获对方的女神</span>。一旦女神从棋盘上消失，比赛立即结束。</p>\n                    </div>\n                "
+      },
+      "setup_phase": {
+        "title": "配置阶段",
+        "content": "\n                    <p>在游戏正式开始前，玩家需布置兵力。放置过程分为5步：</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">女神</h3><p>必须放置在己方半场的 <span class=\"highlight\">远端边缘</span>。</p></li>\n                        <li><h3 class=\"accent\">英雄</h3><p>距女神 <span class=\"highlight\">4-6个跳跃</span> 的距离。</p></li>\n                        <li><h3 class=\"accent\">傀儡</h3><p>放置在女神附近（1-2个跳跃）作为防御盾牌。</p></li>\n                        <li><h3 class=\"accent\">色彩环</h3><p><span class=\"accent\">女巫</span> 需分布在4种不同的颜色上。</p></li>\n                        <li><h3 class=\"accent\">步兵部署</h3><p><span class=\"accent\">食尸鬼</span> 和 <span class=\"accent\">塞壬</span> 占据剩余的位置。</p></li>\n                    </ol>\n                "
+      },
+      "board": {
+        "title": "棋盘与地貌",
+        "content": "\n                    <div class=\"card\">\n                        <h3><span class=\"accent\">滑动</span> (Slide)</h3>\n                        <p>在共享边缘的多边形之间移动。<span class=\"highlight\">红色边缘阻挡滑动</span>。</p>\n                    </div>\n                "
+      },
+      "turn": {
+        "title": "回合机制",
+        "content": "\n                    <p>选择一种颜色，该颜色必须允许至少一个合法移动。该颜色的所有棋子均可移动。</p>\n                "
+      },
+      "goddess": {
+        "title": "女神",
+        "content": "\n                    <div class=\"card\">\n                        <h3>类型：<span class=\"accent\">跳跃者</span></h3>\n                        <p>跳跃范围：<span class=\"highlight\">2</span>。最重要的棋子；若被俘，比赛判负。</p>\n                    </div>\n                "
+      },
+      "heroe": {
+        "title": "英雄",
+        "content": "\n                    <div class=\"card\">\n                        <h3>类型：<span class=\"accent\">跳跃者</span></h3>\n                        <p>跳跃范围：<span class=\"highlight\">3</span>。俘获敌人后可 <span class=\"highlight\">立即再次跳跃</span>。</p>\n                    </div>\n                "
+      },
+      "mage": {
+        "title": "法师",
+        "content": "\n                    <div class=\"card\">\n                        <h3>特殊：<span class=\"accent\">色彩解锁</span></h3>\n                        <p>法师在开始时处于 <span class=\"highlight\">锁定</span> 状态。只有当棋盘上的4种颜色均被选择过一次后才会激活。</p>\n                    </div>\n                "
+      },
+      "siren": {
+        "title": "塞壬",
+        "content": "\n                    <div class=\"card\">\n                        <h3>特殊：<span class=\"accent\">锚定</span></h3>\n                        <p>与塞壬 <span class=\"highlight\">相邻</span> 的敌方棋子将被锚定，无法移动。</p>\n                    </div>\n                "
+      },
+      "ghoul": {
+        "title": "食尸鬼",
+        "content": "\n                    <div class=\"card\">\n                        <h3>类型：<span class=\"accent\">滑动者</span></h3>\n                        <p>范围：<span class=\"highlight\">3</span>。</p>\n                    </div>\n                "
+      },
+      "soldier": {
+        "title": "士兵",
+        "content": "\n                    <div class=\"card\">\n                        <h3>类型：<span class=\"accent\">滑动者</span></h3>\n                        <p>在多边形链中滑动，可一次俘获多个敌人。</p>\n                    </div>\n                "
+      },
+      "minotaur": {
+        "title": "傀儡",
+        "content": "\n                    <div class=\"card\">\n                        <h3>类型：<span class=\"accent\">无敌</span></h3>\n                        <p>无法被俘获，也不受区域爆炸影响。</p>\n                    </div>\n                "
+      },
+      "witch": {
+        "title": "女巫",
+        "content": "\n                    <div class=\"card\">\n                        <h3>类型：<span class=\"accent\">跳跃者</span></h3>\n                        <p>跳跃范围：<span class=\"highlight\">4</span>。必须降落在起始颜色上。</p>\n                    </div>\n                "
+      }
+    }
+  },
+  "ja": {
+    "menu": {
+      "intro": "はじめに",
+      "setup_phase": "配置フェーズ",
+      "board": "ボードとトポロジー",
+      "turn": "ターンの仕組み",
+      "goddess": "女神",
+      "heroe": "英雄",
+      "mage": "魔術師",
+      "siren": "セイレーン",
+      "ghoul": "グール",
+      "witch": "魔女",
+      "soldier": "兵士",
+      "minotaur": "ミノタウロス"
+    },
+    "sections": {
+      "intro": {
+        "title": "はじめに",
+        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">目的</h2>\n                        <p>主な目的は <span class=\"accent\">相手の女神を捕獲する</span> ことです。女神がボードから取り除かれると、その時点でゲーム終了となります。</p>\n                    </div>\n                "
+      },
+      "setup_phase": {
+        "title": "配置フェーズ",
+        "content": "\n                    <p>ゲームの「プレイ」フェーズが始まる前に、プレイヤーは部隊を配置する必要があります。配置は厳密に5つのステップで行われます：</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">女神</h3><p>ボード上の自陣の <span class=\"highlight\">最も遠い端</span> に配置します。</p></li>\n                        <li><h3 class=\"accent\">英雄</h3><p>女神から <span class=\"highlight\">4〜6ジャンプ</span> 離れた端に配置します。</p></li>\n                        <li><h3 class=\"accent\">ゴーレム</h3><p>女神の近く（1〜2ジャンプ）に守りの盾として配置します。</p></li>\n                        <li><h3 class=\"accent\">彩色の輪</h3><p><span class=\"accent\">魔女</span> は4種類の異なる色に分散して配置します。</p></li>\n                        <li><h3 class=\"accent\">歩兵の展開</h3><p><span class=\"accent\">グール</span> と <span class=\"accent\">セイレーン</span> が残りの位置を占めます。</p></li>\n                    </ol>\n                "
+      },
+      "board": {
+        "title": "ボードとトポロジー",
+        "content": "\n                    <div class=\"card\">\n                        <h3><span class=\"accent\">スライド</span> (Slide)</h3>\n                        <p>接する多角形の間を移動します。<span class=\"highlight\">赤いエッジはスライドをブロックします</span>。</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3><span class=\"accent\">ジャンプ</span> (Jump)</h3>\n                        <p>エッジを跳び越え、中間の多角形や <span class=\"highlight\">赤いエッジ</span> を無視します。</p>\n                    </div>\n                "
+      },
+      "turn": {
+        "title": "ターンの仕組み",
+        "content": "\n                    <p>合法な移動が少なくとも1つ可能な色を選択します。選択された色のすべての駒が移動可能です。</p>\n                "
+      },
+      "goddess": {
+        "title": "女神",
+        "content": "\n                    <div class=\"card\">\n                        <h3>型：<span class=\"accent\">ジャンパー</span></h3>\n                        <p>ジャンプ範囲：<span class=\"highlight\">2</span>。最も重要な駒であり、捕獲されると敗北します。</p>\n                    </div>\n                "
+      },
+      "heroe": {
+        "title": "英雄",
+        "content": "\n                    <div class=\"card\">\n                        <h3>型：<span class=\"accent\">ジャンパー</span></h3>\n                        <p>ジャンプ範囲：<span class=\"highlight\">3</span>。敵を捕獲すると <span class=\"highlight\">即座にもう一度ジャンプ</span> できます。</p>\n                    </div>\n                "
+      },
+      "mage": {
+        "title": "魔術師",
+        "content": "\n                    <div class=\"card\">\n                        <h3>特殊：<span class=\"accent\">彩色の解放</span></h3>\n                        <p>魔術師は開始時 <span class=\"highlight\">ロック</span> されています。ボード上の4色すべてが選択された後にアクティブになります。</p>\n                    </div>\n                "
+      },
+      "siren": {
+        "title": "セイレーン",
+        "content": "\n                    <div class=\"card\">\n                        <h3>特殊：<span class=\"accent\">固定</span></h3>\n                        <p>セイレーンに <span class=\"highlight\">隣接</span> する敵の駒は固定され、移動できなくなります。</p>\n                    </div>\n                "
+      },
+      "ghoul": {
+        "title": "グール",
+        "content": "\n                    <div class=\"card\">\n                        <h3>型：<span class=\"accent\">スライダー</span></h3>\n                        <p>範囲：<span class=\"highlight\">3</span>。</p>\n                    </div>\n                "
+      },
+      "soldier": {
+        "title": "兵士",
+        "content": "\n                    <div class=\"card\">\n                        <h3>型：<span class=\"accent\">スライダー</span></h3>\n                        <p>多角形の連鎖をスライドし、複数の敵を捕獲可能です。</p>\n                    </div>\n                "
+      },
+      "minotaur": {
+        "title": "ゴーレム",
+        "content": "\n                    <div class=\"card\">\n                        <h3>型：<span class=\"accent\">無敵</span></h3>\n                        <p>捕獲されず、エリア爆発の影響も受けません。</p>\n                    </div>\n                "
+      },
+      "witch": {
+        "title": "魔女",
+        "content": "\n                    <div class=\"card\">\n                        <h3>型：<span class=\"accent\">ジャンパー</span></h3>\n                        <p>ジャンプ範囲：<span class=\"highlight\">4</span>。開始時と同じ色に着地する必要があります。</p>\n                    </div>\n                "
+      }
+    }
+  },
+  "ko": {
+    "menu": {
+      "intro": "소개",
+      "setup_phase": "배치 단계",
+      "board": "보드 및 위상",
+      "turn": "턴 메커니즘",
+      "goddess": "여신",
+      "heroe": "영웅",
+      "mage": "마법사",
+      "siren": "세이렌",
+      "ghoul": "구울",
+      "witch": "마녀",
+      "soldier": "병사",
+      "minotaur": "미노타우로스"
+    },
+    "sections": {
+      "intro": {
+        "title": "소개",
+        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">목표</h2>\n                        <p>주요 목표는 <span class=\"accent\">상대의 여신을 포획</span>하는 것입니다. 여신이 보드에서 제거되면 게임이 즉시 종료됩니다.</p>\n                    </div>\n                "
+      },
+      "setup_phase": {
+        "title": "배치 단계",
+        "content": "\n                    <p>게임이 시작되기 전에 플레이어는 부대를 배치해야 합니다. 배치는 5단계로 진행됩니다:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">여신</h3><p>보드의 <span class=\"highlight\">가장 먼 가장자리</span>에 배치합니다.</p></li>\n                        <li><h3 class=\"accent\">영웅</h3><p>여신으로부터 <span class=\"highlight\">4~6회 점프</span> 거리 내에 배치합니다.</p></li>\n                        <li><h3 class=\"accent\">골렘</h3><p>여신 주변(1~2회 점프)에 방어막으로 배치합니다.</p></li>\n                        <li><h3 class=\"accent\">색상 링</h3><p><span class=\"accent\">마녀</span>는 4가지 서로 다른 색상에 분산 배치합니다.</p></li>\n                        <li><h3 class=\"accent\">보병 전개</h3><p><span class=\"accent\">구울</span>과 <span class=\"accent\">세이렌</span>이 나머지 위치를 채웁니다.</p></li>\n                    </ol>\n                "
+      },
+      "board": {
+        "title": "보드 및 위상",
+        "content": "\n                    <div class=\"card\">\n                        <h3><span class=\"accent\">슬라이드</span> (Slide)</h3>\n                        <p>가장자리를 공유하는 다각형 사이를 이동합니다. <span class=\"highlight\">빨간색 테두리는 슬라이드를 차단합니다</span>.</p>\n                    </div>\n                    <div class=\"card\">\n                        <h3><span class=\"accent\">점프</span> (Jump)</h3>\n                        <p>테두리를 뛰어넘어 중간의 다각형이나 <span class=\"highlight\">빨간색 테두리</span>를 무시합니다.</p>\n                    </div>\n                "
+      },
+      "turn": {
+        "title": "턴 메커니즘",
+        "content": "\n                    <p>최소 하나 이상의 유효한 이동이 가능한 색상을 선택합니다. 선택된 색상의 모든 기물이 이동 가능합니다.</p>\n                "
+      },
+      "goddess": {
+        "title": "여신",
+        "content": "\n                    <div class=\"card\">\n                        <h3>유형: <span class=\"accent\">점퍼</span></h3>\n                        <p>점프 범위: <span class=\"highlight\">2</span>. 가장 중요한 기물이며, 포획당하면 패배합니다.</p>\n                    </div>\n                "
+      },
+      "heroe": {
+        "title": "영웅",
+        "content": "\n                    <div class=\"card\">\n                        <h3>유형: <span class=\"accent\">점퍼</span></h3>\n                        <p>점프 범위: <span class=\"highlight\">3</span>. 적을 포획하면 <span class=\"highlight\">즉시 다시 점프</span>할 수 있습니다.</p>\n                    </div>\n                "
+      },
+      "mage": {
+        "title": "마법사",
+        "content": "\n                    <div class=\"card\">\n                        <h3>특수: <span class=\"accent\">색상 해제</span></h3>\n                        <p>마법사는 시작 시 <span class=\"highlight\">잠겨</span> 있습니다. 보드의 4가지 색상이 모두 선택된 후에 활성화됩니다.</p>\n                    </div>\n                "
+      },
+      "siren": {
+        "title": "세이렌",
+        "content": "\n                    <div class=\"card\">\n                        <h3>특수: <span class=\"accent\">앵커링</span></h3>\n                        <p>세이렌에 <span class=\"highlight\">인접한</span> 적 기물은 고정되어 이동할 수 없습니다.</p>\n                    </div>\n                "
+      },
+      "ghoul": {
+        "title": "구울",
+        "content": "\n                    <div class=\"card\">\n                        <h3>유형: <span class=\"accent\">슬라이더</span></h3>\n                        <p>범위: <span class=\"highlight\">3</span>.</p>\n                    </div>\n                "
+      },
+      "soldier": {
+        "title": "병사",
+        "content": "\n                    <div class=\"card\">\n                        <h3>유형: <span class=\"accent\">슬라이더</span></h3>\n                        <p>다각형 체인을 슬라이드하며 여러 적을 포획할 수 있습니다.</p>\n                    </div>\n                "
+      },
+      "minotaur": {
+        "title": "골렘",
+        "content": "\n                    <div class=\"card\">\n                        <h3>유형: <span class=\"accent\">무적</span></h3>\n                        <p>포획되지 않으며 광역 폭발의 영향을 받지 않습니다.</p>\n                    </div>\n                "
+      },
+      "witch": {
+        "title": "마녀",
+        "content": "\n                    <div class=\"card\">\n                        <h3>유형: <span class=\"accent\">점퍼</span></h3>\n                        <p>점프 범위: <span class=\"highlight\">4</span>. 시작한 색상과 같은 색상의 칸에 착지해야 합니다.</p>\n                    </div>\n                "
+      }
+    }
+  },
+  "ms": {
+    "menu": {
+      "intro": "Pengenalan",
+      "setup_phase": "Fasa Persiapan",
+      "board": "Papan & Topologi",
+      "turn": "Mekanik Giliran",
+      "goddess": "Dewi",
+      "heroe": "Wira",
+      "mage": "Ahli Sihir",
+      "siren": "Siren",
+      "ghoul": "Ghoul",
+      "witch": "Penyihir",
+      "soldier": "Askar",
+      "minotaur": "Minotaur"
+    },
+    "sections": {
+      "intro": {
+        "title": "Pengenalan",
+        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">Objektif</h2>\n                        <p>Objektif utama adalah untuk <span class=\"accent\">menangkap Dewi lawan</span>. Permainan tamat serta-merta apabila Dewi dikeluarkan dari papan.</p>\n                    </div>\n                "
+      },
+      "setup_phase": {
+        "title": "Fasa Persiapan",
+        "content": "\n                    <p>Sebelum fasa permainan bermula, pemain mesti mengatur kedudukan tentera. Penempatan dilakukan dalam 5 langkah:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">Dewi</h3><p>Mesti diletakkan di <span class=\"highlight\">tepi jauh</span> kawasan anda.</p></li>\n                        <li><h3 class=\"accent\">Wira</h3><p>Di tepi, antara <span class=\"highlight\">4 hingga 6 lompatan</span> dari Dewi.</p></li>\n                        <li><h3 class=\"accent\">Minotaur</h3><p>Sebagai perisai pertahanan berhampiran Dewi (1-2 lompatan).</p></li>\n                        <li><h3 class=\"accent\">Gelang Kromatik</h3><p><span class=\"accent\">Penyihir</span> diagihkan pada 4 warna berbeza.</p></li>\n                        <li><h3 class=\"accent\">Aturan Infantri</h3><p><span class=\"accent\">Ghoul</span> dan <span class=\"accent\">Siren</span> mengisi baki kedudukan taktikal.</p></li>\n                    </ol>\n                "
+      },
+      "board": {
+        "title": "Papan & Topologi",
+        "content": "\n                    <div class=\"card\">\n                        <h3><span class=\"accent\">Luncur</span> (Slide)</h3>\n                        <p>Bergerak antara poligon yang berkongsi sempadan. <span class=\"highlight\">Sempadan Merah menghalang luncuran</span>.</p>\n                    </div>\n                "
+      },
+      "turn": {
+        "title": "Mekanik Giliran",
+        "content": "\n                    <p>Pilih warna yang membolehkan sekurang-kurangnya satu pergerakan sah. Semua buah catur dengan warna yang dipilih boleh bergerak.</p>\n                "
+      },
+      "goddess": {
+        "title": "Dewi",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Jenis: <span class=\"accent\">Lompatan</span></h3>\n                        <p>Julat Lompatan: <span class=\"highlight\">2</span>. Buah paling penting; jika ditangkap, anda kalah.</p>\n                    </div>\n                "
+      },
+      "heroe": {
+        "title": "Wira",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Jenis: <span class=\"accent\">Lompatan</span></h3>\n                        <p>Julat Lompatan: <span class=\"highlight\">3</span>. Menangkap musuh membolehkannya <span class=\"highlight\">melompat semula serta-merta</span>.</p>\n                    </div>\n                "
+      },
+      "mage": {
+        "title": "Ahli Sihir",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Khas: <span class=\"accent\">Nyahkunci Kromatik</span></h3>\n                        <p>Ahli Sihir <span class=\"highlight\">Terkunci</span> pada mulanya. Ia diaktifkan hanya selepas 4 warna pada papan telah dipilih.</p>\n                    </div>\n                "
+      },
+      "siren": {
+        "title": "Siren",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Khas: <span class=\"accent\">Tambatan</span></h3>\n                        <p>Musuh yang <span class=\"highlight\">bersebelahan</span> dengan Siren akan tertambat dan tidak boleh bergerak.</p>\n                    </div>\n                "
+      },
+      "ghoul": {
+        "title": "Ghoul",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Jenis: <span class=\"accent\">Luncuran</span></h3>\n                        <p>Julat: <span class=\"highlight\">3</span>.</p>\n                    </div>\n                "
+      },
+      "soldier": {
+        "title": "Askar",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Jenis: <span class=\"accent\">Luncuran</span></h3>\n                        <p>Meluncur melalui rangkaian poligon dan boleh menangkap berbilang musuh.</p>\n                    </div>\n                "
+      },
+      "minotaur": {
+        "title": "Minotaur",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Jenis: <span class=\"accent\">Kebal</span></h3>\n                        <p>Tidak boleh ditangkap dan tidak terjejas oleh letupan kawasan.</p>\n                    </div>\n                "
+      },
+      "witch": {
+        "title": "Penyihir",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Jenis: <span class=\"accent\">Lompatan</span></h3>\n                        <p>Julat Lompatan: <span class=\"highlight\">4</span>. Mesti mendarat pada warna asalnya.</p>\n                    </div>\n                "
+      }
+    }
+  },
+  "hi": {
+    "menu": {
+      "intro": "परिचय",
+      "setup_phase": "तैयारी चरण",
+      "board": "बोर्ड और संरचना",
+      "turn": "बारी के नियम",
+      "goddess": "देवी",
+      "heroe": "वीर",
+      "mage": "जादूगर",
+      "siren": "सायरन",
+      "ghoul": "पिशाच",
+      "witch": "चुड़ैल",
+      "soldier": "सैनिक",
+      "minotaur": "मिनोटौर"
+    },
+    "sections": {
+      "intro": {
+        "title": "परिचय",
+        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">लक्ष्य</h2>\n                        <p>मुख्य लक्ष्य <span class=\"accent\">विरोधी की देवी को पकड़ना</span> है। जैसे ही देवी बोर्ड से हटाई जाती है, खेल तुरंत समाप्त हो जाता है।</p>\n                    </div>\n                "
+      },
+      "setup_phase": {
+        "title": "तैयारी चरण",
+        "content": "\n                    <p>खेल शुरू होने से पहले, खिलाड़ियों को अपनी सेना तैनात करनी होगी। इसके 5 चरण हैं:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">देवी</h3><p>इसे अपने पक्ष के <span class=\"highlight\">सबसे दूर के किनारे</span> पर रखना चाहिए।</p></li>\n                        <li><h3 class=\"accent\">वीर</h3><p>देवी से <span class=\"highlight\">4 से 6 छलांग</span> की दूरी पर।</p></li>\n                        <li><h3 class=\"accent\">गोलेम</h3><p>देवी के पास (1-2 छलांग) रक्षा कवच के रूप में।</p></li>\n                        <li><h3 class=\"accent\">रंगों का घेरा</h3><p><span class=\"accent\">चुड़ैलें</span> 4 अलग-अलग रंगों पर वितरित की जाती हैं।</p></li>\n                        <li><h3 class=\"accent\">पैदल सेना</h3><p><span class=\"accent\">पिशाच</span> और <span class=\"accent\">सायरन</span> बाकी रणनीतिक स्थानों को भरते हैं।</p></li>\n                    </ol>\n                "
+      },
+      "board": {
+        "title": "बोर्ड और संरचना",
+        "content": "\n                    <div class=\"card\">\n                        <h3><span class=\"accent\">फिसलना</span> (Slide)</h3>\n                        <p>समान किनारे वाले बहुभुजों के बीच चलना। <span class=\"highlight\">लाल किनारे फिसलने को रोकते हैं</span>।</p>\n                    </div>\n                "
+      },
+      "turn": {
+        "title": "बारी के नियम",
+        "content": "\n                    <p>एक ऐसा रंग चुनें जो कम से कम एक कानूनी चाल की अनुमति दे। उस रंग के सभी मोहरे चल सकते हैं।</p>\n                "
+      },
+      "goddess": {
+        "title": "देवी",
+        "content": "\n                    <div class=\"card\">\n                        <h3>प्रकार: <span class=\"accent\">कूदने वाला</span></h3>\n                        <p>कूदने की सीमा: <span class=\"highlight\">2</span>। सबसे महत्वपूर्ण मोहरा; यदि यह पकड़ा गया, तो आप हार जाएंगे।</p>\n                    </div>\n                "
+      },
+      "heroe": {
+        "title": "वीर",
+        "content": "\n                    <div class=\"card\">\n                        <h3>प्रकार: <span class=\"accent\">कूदने वाला</span></h3>\n                        <p>कूदने की सीमा: <span class=\"highlight\">3</span>। दुश्मन को पकड़ने पर यह <span class=\"highlight\">तुरंत फिर से कूद</span> सकता है।</p>\n                    </div>\n                "
+      },
+      "mage": {
+        "title": "जादूगर",
+        "content": "\n                    <div class=\"card\">\n                        <h3>विशेष: <span class=\"accent\">रंग अनलॉक</span></h3>\n                        <p>जादूगर शुरुआत में <span class=\"highlight\">लॉक</span> होता है। यह तभी सक्रिय होता है जब बोर्ड पर सभी 4 रंग चुन लिए जाते हैं।</p>\n                    </div>\n                "
+      },
+      "siren": {
+        "title": "सायरन",
+        "content": "\n                    <div class=\"card\">\n                        <h3>विशेष: <span class=\"accent\">स्थिरीकरण</span></h3>\n                        <p>सायरन के <span class=\"highlight\">बगल वाले</span> दुश्मन मोहरे स्थिर हो जाते हैं और चल नहीं सकते।</p>\n                    </div>\n                "
+      },
+      "ghoul": {
+        "title": "पिशाच",
+        "content": "\n                    <div class=\"card\">\n                        <h3>प्रकार: <span class=\"accent\">फिसलने वाला</span></h3>\n                        <p>सीमा: <span class=\"highlight\">3</span>।</p>\n                    </div>\n                "
+      },
+      "soldier": {
+        "title": "सैनिक",
+        "content": "\n                    <div class=\"card\">\n                        <h3>प्रकार: <span class=\"accent\">फिसलने वाला</span></h3>\n                        <p>बहुभुज श्रृंखला के माध्यम से फिसलता है और कई दुश्मनों को पकड़ सकता है।</p>\n                    </div>\n                "
+      },
+      "minotaur": {
+        "title": "गोलेम",
+        "content": "\n                    <div class=\"card\">\n                        <h3>प्रकार: <span class=\"accent\">अभेद्य</span></h3>\n                        <p>इसे पकड़ा नहीं जा सकता और इस पर विस्फोटों का असर नहीं होता।</p>\n                    </div>\n                "
+      },
+      "witch": {
+        "title": "चुड़ैल",
+        "content": "\n                    <div class=\"card\">\n                        <h3>प्रकार: <span class=\"accent\">कूदने वाला</span></h3>\n                        <p>कूदने की सीमा: <span class=\"highlight\">4</span>। इसे अपने शुरुआती रंग पर ही उतरना होगा।</p>\n                    </div>\n                "
+      }
+    }
+  },
+  "ta": {
+    "menu": {
+      "intro": "அறிமுகம்",
+      "setup_phase": "அமைப்பு கட்டம்",
+      "board": "பலகை மற்றும் இடவியல்",
+      "turn": "முறை மெக்கானிக்ஸ்",
+      "goddess": "தெய்வம்",
+      "heroe": "வீரன்",
+      "mage": "மந்திரவாதி",
+      "siren": "சைரன்",
+      "ghoul": "பூதம்",
+      "witch": "சூனியக்காரி",
+      "soldier": "போர்வீரன்",
+      "minotaur": "மினோட்டார்"
+    },
+    "sections": {
+      "intro": {
+        "title": "அறிமுகம்",
+        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">இலக்கு</h2>\n                        <p>முக்கிய இலக்கு <span class=\"accent\">எதிரியின் தெய்வத்தை பிடிப்பது</span> ஆகும். பலகையில் இருந்து தெய்வம் அகற்றப்பட்டவுடன் விளையாட்டு முடிவடைகிறது.</p>\n                    </div>\n                "
+      },
+      "setup_phase": {
+        "title": "அமைப்பு கட்டம்",
+        "content": "\n                    <p>விளையாட்டு தொடங்கும் முன், வீரர்கள் தங்கள் படைகளை நிலைநிறுத்த வேண்டும். இது 5 படிகளில் செய்யப்படுகிறது:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">தெய்வம்</h3><p>உங்கள் பக்கத்தின் <span class=\"highlight\">தொலைதூர விளிம்பில்</span> வைக்கப்பட வேண்டும்.</p></li>\n                        <li><h3 class=\"accent\">வீரர்கள்</h3><p>தெய்வத்திலிருந்து <span class=\"highlight\">4 முதல் 6 குதித்தல்</span> தொலைவில்.</p></li>\n                        <li><h3 class=\"accent\">கோலெம்கள்</h3><p>தெய்வத்திற்கு அருகில் பாதுகாப்பு கவசமாக.</p></li>\n                        <li><h3 class=\"accent\">வண்ண வளையம்</h3><p><span class=\"accent\">சூனியக்காரிகள்</span> 4 வெவ்வேறு வண்ணங்களில் விநியோகிக்கப்படுகிறார்கள்.</p></li>\n                        <li><h3 class=\"accent\">காலாட்படை</h3><p><span class=\"accent\">பூதங்கள்</span> மற்றும் <span class=\"accent\">சைரன்கள்</span> மீதமுள்ள இடங்களை நிரப்புகின்றன.</p></li>\n                    </ol>\n                "
+      },
+      "board": {
+        "title": "பலகை மற்றும் இடவியல்",
+        "content": "\n                    <div class=\"card\">\n                        <h3><span class=\"accent\">சறுக்குதல்</span> (Slide)</h3>\n                        <p>விளிம்பைப் பகிர்ந்து கொள்ளும் பலகோணங்களுக்கு இடையே நகரும். <span class=\"highlight\">சிவப்பு விளிம்புகள் சறுக்குவதைத் தடுக்கின்றன</span>.</p>\n                    </div>\n                "
+      },
+      "turn": {
+        "title": "முறை மெக்கானிக்ஸ்",
+        "content": "\n                    <p>குறைந்தது ஒரு சட்டபூர்வமான நகர்வை அனுமதிக்கும் ஒரு நிறத்தைத் தேர்வு செய்யவும். அந்த நிறத்தின் அனைத்து காய்களும் நகரலாம்.</p>\n                "
+      },
+      "goddess": {
+        "title": "தெய்வம்",
+        "content": "\n                    <div class=\"card\">\n                        <h3>வகை: <span class=\"accent\">குதிப்பவர்</span></h3>\n                        <p>குதித்தல் வரம்பு: <span class=\"highlight\">2</span>. மிக முக்கியமான காய்; இது பிடிக்கப்பட்டால் நீங்கள் தோற்பீர்கள்.</p>\n                    </div>\n                "
+      },
+      "heroe": {
+        "title": "வீரன்",
+        "content": "\n                    <div class=\"card\">\n                        <h3>வகை: <span class=\"accent\">குதிப்பவர்</span></h3>\n                        <p>குதித்தல் வரம்பு: <span class=\"highlight\">3</span>. எதிரியைப் பிடிக்கும்போது இது <span class=\"highlight\">உடனடியாக மீண்டும் குதிக்க</span> முடியும்.</p>\n                    </div>\n                "
+      },
+      "mage": {
+        "title": "மந்திரவாதி",
+        "content": "\n                    <div class=\"card\">\n                        <h3>சிறப்பு: <span class=\"accent\">வண்ணத் திறப்பு</span></h3>\n                        <p>மந்திரவாதி ஆரம்பத்தில் <span class=\"highlight\">பூட்டப்பட்டிருப்பார்</span>. 4 நிறங்களும் தேர்ந்தெடுக்கப்பட்ட பிறகு அவர் செயல்படுவார்.</p>\n                    </div>\n                "
+      },
+      "siren": {
+        "title": "சைரன்",
+        "content": "\n                    <div class=\"card\">\n                        <h3>சிறப்பு: <span class=\"accent\">நங்கூரமிடுதல்</span></h3>\n                        <p>சைரனுக்கு <span class=\"highlight\">அருகில் உள்ள</span> எதிரி காய்கள் நகர முடியாது.</p>\n                    </div>\n                "
+      },
+      "ghoul": {
+        "title": "பூதம்",
+        "content": "\n                    <div class=\"card\">\n                        <h3>வகை: <span class=\"accent\">சறுக்குபவர்</span></h3>\n                        <p>வரம்பு: <span class=\"highlight\">3</span>.</p>\n                    </div>\n                "
+      },
+      "soldier": {
+        "title": "போர்வீரன்",
+        "content": "\n                    <div class=\"card\">\n                        <h3>வகை: <span class=\"accent\">சறுக்குபவர்</span></h3>\n                        <p>பலகோணச் சங்கிலிகள் வழியாக சறுக்கி பல எதிரிகளைப் பிடிக்க முடியும்.</p>\n                    </div>\n                "
+      },
+      "minotaur": {
+        "title": "கோலெம்",
+        "content": "\n                    <div class=\"card\">\n                        <h3>வகை: <span class=\"accent\">வெல்ல முடியாதவர்</span></h3>\n                        <p>இவரைப் பிடிக்க முடியாது, வெடிப்புகளால் பாதிக்கப்பட மாட்டார்.</p>\n                    </div>\n                "
+      },
+      "witch": {
+        "title": "சூனியக்காரி",
+        "content": "\n                    <div class=\"card\">\n                        <h3>வகை: <span class=\"accent\">குதிப்பவர்</span></h3>\n                        <p>குதித்தல் வரம்பு: <span class=\"highlight\">4</span>.</p>\n                    </div>\n                "
+      }
+    }
+  },
+  "ar": {
+    "menu": {
+      "intro": "مقدمة",
+      "setup_phase": "مرحلة الإعداد",
+      "board": "اللوحة والتضاريس",
+      "turn": "ميكانيكا الدور",
+      "goddess": "الإلهة",
+      "heroe": "البطل",
+      "mage": "الساحر",
+      "siren": "سيرين",
+      "ghoul": "الغول",
+      "witch": "الساحرة",
+      "soldier": "الجندي",
+      "minotaur": "المينوتور"
+    },
+    "sections": {
+      "intro": {
+        "title": "مقدمة",
+        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">الهدف</h2>\n                        <p>الهدف الرئيسي هو <span class=\"accent\">أسر إلهة الخصم</span>. تنتهي اللعبة فور إزالة الإلهة من اللوحة.</p>\n                    </div>\n                "
+      },
+      "setup_phase": {
+        "title": "مرحلة الإعداد",
+        "content": "\n                    <p>قبل بدء اللعب، يجب على اللاعبين توزيع قواتهم. يتم الإعداد في 5 خطوات:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">الإلهة</h3><p>يجب وضعها على <span class=\"highlight\">الحافة البعيدة</span> من جانبك.</p></li>\n                        <li><h3 class=\"accent\">الأبطال</h3><p>على الحواف، على بعد <span class=\"highlight\">4 إلى 6 قفزات</span> من الإلهة.</p></li>\n                        <li><h3 class=\"accent\">الغولم</h3><p>دروع دفاعية بالقرب من الإلهة (1-2 قفزة).</p></li>\n                        <li><h3 class=\"accent\">الحلقة اللونية</h3><p>يتم توزيع <span class=\"accent\">الساحرات</span> على 4 ألوان مختلفة.</p></li>\n                        <li><h3 class=\"accent\">نشر المشاة</h3><p><span class=\"accent\">الغيلان</span> و <span class=\"accent\">السيرين</span> تشغل المواقع التكتيكية المتبقية.</p></li>\n                    </ol>\n                "
+      },
+      "board": {
+        "title": "اللوحة والتضاريس",
+        "content": "\n                    <div class=\"card\">\n                        <h3><span class=\"accent\">الانزلاق</span> (Slide)</h3>\n                        <p>التحرك بين المضلعات التي تشترك في حافة. <span class=\"highlight\">الحواف الحمراء تمنع الانزلاق</span>.</p>\n                    </div>\n                "
+      },
+      "turn": {
+        "title": "ميكانيكا الدور",
+        "content": "\n                    <p>اختر لونًا يسمح بحركة قانونية واحدة على الأقل. يمكن لجميع القطع من ذلك اللون التحرك.</p>\n                "
+      },
+      "goddess": {
+        "title": "الإلهة",
+        "content": "\n                    <div class=\"card\">\n                        <h3>النوع: <span class=\"accent\">قافزة</span></h3>\n                        <p>مدى القفز: <span class=\"highlight\">2</span>. أهم قطعة؛ إذا أُسرت، تخسر اللعبة.</p>\n                    </div>\n                "
+      },
+      "heroe": {
+        "title": "البطل",
+        "content": "\n                    <div class=\"card\">\n                        <h3>النوع: <span class=\"accent\">قافز</span></h3>\n                        <p>مدى القفز: <span class=\"highlight\">3</span>. أسر العدو يسمح له <span class=\"highlight\">بالقفز مجددًا فورًا</span>.</p>\n                    </div>\n                "
+      },
+      "mage": {
+        "title": "الساحر",
+        "content": "\n                    <div class=\"card\">\n                        <h3>خاص: <span class=\"accent\">فتح القفل اللوني</span></h3>\n                        <p>يكون الساحر <span class=\"highlight\">مغلقًا</span> في البداية. يتم تفعيله بعد اختيار جميع الألوان الأربعة.</p>\n                    </div>\n                "
+      },
+      "siren": {
+        "title": "سيرين",
+        "content": "\n                    <div class=\"card\">\n                        <h3>خاص: <span class=\"accent\">التثبيت</span></h3>\n                        <p>قطع الأعداء <span class=\"highlight\">المجاورة</span> للسيرين تصبح مثبتة ولا يمكنها التحرك.</p>\n                    </div>\n                "
+      },
+      "ghoul": {
+        "title": "الغول",
+        "content": "\n                    <div class=\"card\">\n                        <h3>النوع: <span class=\"accent\">منزلق</span></h3>\n                        <p>المدى: <span class=\"highlight\">3</span>.</p>\n                    </div>\n                "
+      },
+      "soldier": {
+        "title": "الجندي",
+        "content": "\n                    <div class=\"card\">\n                        <h3>النوع: <span class=\"accent\">منزلق</span></h3>\n                        <p>ينزلق عبر سلاسل المضلعات ويمكنه أسر أعداء متعددين.</p>\n                    </div>\n                "
+      },
+      "minotaur": {
+        "title": "الغولم",
+        "content": "\n                    <div class=\"card\">\n                        <h3>النوع: <span class=\"accent\">لا يقهر</span></h3>\n                        <p>لا يمكن أسره ولا يتأثر بالانفجارات المحيطة.</p>\n                    </div>\n                "
+      },
+      "witch": {
+        "title": "الساحرة",
+        "content": "\n                    <div class=\"card\">\n                        <h3>النوع: <span class=\"accent\">قافزة</span></h3>\n                        <p>مدى القفز: <span class=\"highlight\">4</span>.</p>\n                    </div>\n                "
+      }
+    }
+  },
+  "ur": {
+    "menu": {
+      "intro": "تعارف",
+      "setup_phase": "تیاری کا مرحلہ",
+      "board": "بورڈ اور ساخت",
+      "turn": "باری کے اصول",
+      "goddess": "دیوی",
+      "heroe": "ہیرو",
+      "mage": "جادوگر",
+      "siren": "سائرن",
+      "ghoul": "غول",
+      "witch": "جادوگرنی",
+      "soldier": "سپاہی",
+      "minotaur": "مینوتور"
+    },
+    "sections": {
+      "intro": {
+        "title": "تعارف",
+        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">مقصد</h2>\n                        <p>بنیادی مقصد <span class=\"accent\">مخالف کی دیوی کو پکڑنا</span> ہے۔ جیسے ہی دیوی بورڈ سے ہٹائی جاتی ہے، کھیل ختم ہو جاتا ہے۔</p>\n                    </div>\n                "
+      },
+      "setup_phase": {
+        "title": "تیاری کا مرحلہ",
+        "content": "\n                    <p>کھیل شروع ہونے سے پہلے، کھلاڑیوں کو اپنی فوج تعینات کرنی ہوگی۔ اس کے 5 مراحل ہیں:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">دیوی</h3><p>اسے اپنے حصے کے <span class=\"highlight\">دور ترین کنارے</span> پر رکھنا چاہیے۔</p></li>\n                        <li><h3 class=\"accent\">ہیرو</h3><p>دیوی سے <span class=\"highlight\">4 سے 6 چھلانگوں</span> کے فاصلے پر۔</p></li>\n                        <li><h3 class=\"accent\">گولم</h3><p>دیوی کے قریب دفاعی ڈھال کے طور پر۔</p></li>\n                        <li><h3 class=\"accent\">رنگوں کا گھیرا</h3><p><span class=\"accent\">جادوگرنیاں</span> 4 مختلف رنگوں پر تقسیم کی جاتی ہیں۔</p></li>\n                        <li><h3 class=\"accent\">پیادہ فوج</h3><p><span class=\"accent\">غول</span> اور <span class=\"accent\">سائرن</span> باقی جگہوں کو بھرتے ہیں۔</p></li>\n                    </ol>\n                "
+      },
+      "board": {
+        "title": "بورڈ اور ساخت",
+        "content": "\n                    <div class=\"card\">\n                        <h3><span class=\"accent\">پھسلنا</span> (Slide)</h3>\n                        <p>ایک کنارے والے خانوں کے درمیان چلنا۔ <span class=\"highlight\">سرخ کنارے پھسلنے کو روکتے ہیں</span>۔</p>\n                    </div>\n                "
+      },
+      "turn": {
+        "title": "باری کے اصول",
+        "content": "\n                    <p>ایسا رنگ منتخب کریں جو کم از کم ایک قانونی چال کی اجازت دے۔</p>\n                "
+      },
+      "goddess": {
+        "title": "دیوی",
+        "content": "\n                    <div class=\"card\">\n                        <h3>قسم: <span class=\"accent\">چھلانگ لگانے والا</span></h3>\n                        <p>حد: <span class=\"highlight\">2</span>۔ سب سے اہم مہرہ۔</p>\n                    </div>\n                "
+      },
+      "heroe": {
+        "title": "ہیرو",
+        "content": "\n                    <div class=\"card\">\n                        <h3>قسم: <span class=\"accent\">چھلانگ لگانے والا</span></h3>\n                        <p>حد: <span class=\"highlight\">3</span>۔ دشمن کو پکڑنے پر یہ <span class=\"highlight\">فوری طور پر دوبارہ چھلانگ</span> لگا سکتا ہے۔</p>\n                    </div>\n                "
+      },
+      "mage": {
+        "title": "جادوگر",
+        "content": "\n                    <div class=\"card\">\n                        <h3>خاص: <span class=\"accent\">رنگ کھلنا</span></h3>\n                        <p>جادوگر شروع میں <span class=\"highlight\">بند</span> ہوتا ہے۔</p>\n                    </div>\n                "
+      },
+      "siren": {
+        "title": "سائرن",
+        "content": "\n                    <div class=\"card\">\n                        <h3>خاص: <span class=\"accent\">جکڑنا</span></h3>\n                        <p>سائرن کے <span class=\"highlight\">قریب</span> دشمن مہرے جکڑے جاتے ہیں۔</p>\n                    </div>\n                "
+      },
+      "ghoul": {
+        "title": "غول",
+        "content": "\n                    <div class=\"card\">\n                        <h3>قسم: <span class=\"accent\">پھسلنے والا</span></h3>\n                        <p>حد: <span class=\"highlight\">3</span>۔</p>\n                    </div>\n                "
+      },
+      "soldier": {
+        "title": "سپاہی",
+        "content": "\n                    <div class=\"card\">\n                        <h3>قسم: <span class=\"accent\">پھسلنے والا</span></h3>\n                        <p>خانوں کے درمیان پھسلتا ہے اور دشمنوں کو پکڑتا ہے۔</p>\n                    </div>\n                "
+      },
+      "minotaur": {
+        "title": "گولم",
+        "content": "\n                    <div class=\"card\">\n                        <h3>قسم: <span class=\"accent\">ناقابل تسخیر</span></h3>\n                        <p>اسے پکڑا نہیں جا سکتا۔</p>\n                    </div>\n                "
+      },
+      "witch": {
+        "title": "جادوگرنی",
+        "content": "\n                    <div class=\"card\">\n                        <h3>قسم: <span class=\"accent\">چھلانگ لگانے والا</span></h3>\n                        <p>حد: <span class=\"highlight\">4</span>۔</p>\n                    </div>\n                "
+      }
+    }
+  },
+  "pt": {
+    "menu": {
+      "intro": "Introdução",
+      "setup_phase": "Fase de Preparação",
+      "board": "Tabuleiro e Topologia",
+      "turn": "Mecânicas de Turno",
+      "goddess": "A Deusa",
+      "heroe": "O Herói",
+      "mage": "O Mago",
+      "siren": "A Sereia",
+      "ghoul": "O Carniçal",
+      "witch": "A Bruxa",
+      "soldier": "O Soldado",
+      "minotaur": "O Minotaur"
+    },
+    "sections": {
+      "intro": {
+        "title": "Introdução",
+        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">O Objetivo</h2>\n                        <p>O objetivo principal é <span class=\"accent\">capturar a Deusa do oponente</span>. O jogo termina imediatamente quando uma Deusa é removida do tabuleiro.</p>\n                    </div>\n                "
+      },
+      "setup_phase": {
+        "title": "Fase de Preparação",
+        "content": "\n                    <p>Antes do início do jogo, os jogadores devem posicionar as suas forças. O posicionamento segue 5 passos:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">A Deusa</h3><p>Deve ser colocada na <span class=\"highlight\">borda distante</span> do seu lado.</p></li>\n                        <li><h3 class=\"accent\">Os Heróis</h3><p>Colocados nas bordas, entre <span class=\"highlight\">4 a 6 saltos</span> de distância da Deusa.</p></li>\n                        <li><h3 class=\"accent\">Os Minotaurs</h3><p>Escudos defensivos perto da Deusa (1-2 saltos).</p></li>\n                        <li><h3 class=\"accent\">O Anel Cromático</h3><p>As <span class=\"accent\">Bruxas</span> são distribuídas por 4 cores diferentes.</p></li>\n                        <li><h3 class=\"accent\">Destacamento de Infantaria</h3><p><span class=\"accent\">Carniçais</span> e <span class=\"accent\">Sereias</span> ocupam as restantes posições.</p></li>\n                    </ol>\n                "
+      },
+      "board": {
+        "title": "Tabuleiro e Topologia",
+        "content": "\n                    <div class=\"card\">\n                        <h3><span class=\"accent\">Deslizar</span> (Slide)</h3>\n                        <p>Movimento entre polígonos adjacentes. <span class=\"highlight\">Bordas Vermelhas bloqueiam o deslizamento</span>.</p>\n                    </div>\n                "
+      },
+      "turn": {
+        "title": "Mecânicas de Turno",
+        "content": "\n                    <p>Escolha uma cor que permita pelo menos um movimento legal. Todas as peças dessa cor podem mover-se.</p>\n                "
+      },
+      "goddess": {
+        "title": "A Deusa",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Tipo: <span class=\"accent\">Saltadora</span></h3>\n                        <p>Alcance de Salto: <span class=\"highlight\">2</span>. A peça mais vital.</p>\n                    </div>\n                "
+      },
+      "heroe": {
+        "title": "O Herói",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Tipo: <span class=\"accent\">Saltador</span></h3>\n                        <p>Alcance de Salto: <span class=\"highlight\">3</span>. Capturar um inimigo permite <span class=\"highlight\">saltar novamente de imediato</span>.</p>\n                    </div>\n                "
+      },
+      "mage": {
+        "title": "O Mago",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Especial: <span class=\"accent\">Desbloqueio Cromático</span></h3>\n                        <p>O Mago está <span class=\"highlight\">Bloqueado</span> no início. Ativa após as 4 cores serem escolhidas.</p>\n                    </div>\n                "
+      },
+      "siren": {
+        "title": "A Sereia",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Especial: <span class=\"accent\">Ancoragem</span></h3>\n                        <p>Inimigos <span class=\"highlight\">adjacentes</span> à Sereia ficam ancorados e não se podem mover.</p>\n                    </div>\n                "
+      },
+      "ghoul": {
+        "title": "O Carniçal",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Tipo: <span class=\"accent\">Deslizador</span></h3>\n                        <p>Alcance: <span class=\"highlight\">3</span>.</p>\n                    </div>\n                "
+      },
+      "soldier": {
+        "title": "O Soldado",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Tipo: <span class=\"accent\">Deslizador</span></h3>\n                        <p>Desliza através de polígonos e pode capturar múltiplos inimigos.</p>\n                    </div>\n                "
+      },
+      "minotaur": {
+        "title": "O Minotaur",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Tipo: <span class=\"accent\">Invulnerável</span></h3>\n                        <p>Não pode ser capturado.</p>\n                    </div>\n                "
+      },
+      "witch": {
+        "title": "A Bruxa",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Tipo: <span class=\"accent\">Saltadora</span></h3>\n                        <p>Alcance de Salto: <span class=\"highlight\">4</span>.</p>\n                    </div>\n                "
+      }
+    }
+  },
+  "ru": {
+    "menu": {
+      "intro": "Введение",
+      "setup_phase": "Фаза расстановки",
+      "board": "Поле и топология",
+      "turn": "Механика хода",
+      "goddess": "Богиня",
+      "heroe": "Герой",
+      "mage": "Маг",
+      "siren": "Сирена",
+      "ghoul": "Гуль",
+      "witch": "Ведьма",
+      "soldier": "Солдат",
+      "minotaur": "Минотавр"
+    },
+    "sections": {
+      "intro": {
+        "title": "Введение",
+        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">Цель игры</h2>\n                        <p>Главная цель — <span class=\"accent\">захватить Богиню противника</span>. Игра заканчивается сразу, как только Богиня удаляется с поля.</p>\n                    </div>\n                "
+      },
+      "setup_phase": {
+        "title": "Фаза расстановки",
+        "content": "\n                    <p>Перед началом игры игроки должны расставить свои силы. Расстановка проходит в 5 этапов:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">Богиня</h3><p>Должна быть размещена на <span class=\"highlight\">дальнем краю</span> вашего поля.</p></li>\n                        <li><h3 class=\"accent\">Герои</h3><p>Размещаются по краям, в <span class=\"highlight\">4-6 прыжках</span> от Богини.</p></li>\n                        <li><h3 class=\"accent\">Големы</h3><p>Защитные щиты рядом с Богиней (1-2 прыжка).</p></li>\n                        <li><h3 class=\"accent\">Хроматическое кольцо</h3><p><span class=\"accent\">Ведьмы</span> распределяются по 4 разным цветам.</p></li>\n                        <li><h3 class=\"accent\">Развертывание пехоты</h3><p><span class=\"accent\">Гули</span> и <span class=\"accent\">Сирены</span> занимают оставшиеся позиции.</p></li>\n                    </ol>\n                "
+      },
+      "board": {
+        "title": "Поле и топология",
+        "content": "\n                    <div class=\"card\">\n                        <h3><span class=\"accent\">Скольжение</span> (Slide)</h3>\n                        <p>Движение между многоугольниками с общим ребром. <span class=\"highlight\">Красные ребра блокируют скольжение</span>.</p>\n                    </div>\n                "
+      },
+      "turn": {
+        "title": "Механика хода",
+        "content": "\n                    <p>Выберите цвет, позволяющий сделать хотя бы один ход. Все фигуры этого цвета могут ходить.</p>\n                "
+      },
+      "goddess": {
+        "title": "Богиня",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Тип: <span class=\"accent\">Прыгун</span></h3>\n                        <p>Дальность прыжка: <span class=\"highlight\">2</span>. Самая важная фигура.</p>\n                    </div>\n                "
+      },
+      "heroe": {
+        "title": "Герой",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Тип: <span class=\"accent\">Прыгун</span></h3>\n                        <p>Дальность прыжка: <span class=\"highlight\">3</span>. Захват врага позволяет <span class=\"highlight\">сразу прыгнуть снова</span>.</p>\n                    </div>\n                "
+      },
+      "mage": {
+        "title": "Маг",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Особенности: <span class=\"accent\">Хроматическая разблокировка</span></h3>\n                        <p>Маг в начале <span class=\"highlight\">Заблокирован</span>. Активируется после выбора всех 4 цветов.</p>\n                    </div>\n                "
+      },
+      "siren": {
+        "title": "Сирена",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Особенности: <span class=\"accent\">Остановка</span></h3>\n                        <p>Враги <span class=\"highlight\">рядом</span> с Сиреной не могут двигаться.</p>\n                    </div>\n                "
+      },
+      "ghoul": {
+        "title": "Гуль",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Тип: <span class=\"accent\">Скользящий</span></h3>\n                        <p>Дальность: <span class=\"highlight\">3</span>.</p>\n                    </div>\n                "
+      },
+      "soldier": {
+        "title": "Солдат",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Тип: <span class=\"accent\">Скользящий</span></h3>\n                        <p>Скользит сквоيل цепочки многоугольников.</p>\n                    </div>\n                "
+      },
+      "minotaur": {
+        "title": "Голем",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Тип: <span class=\"accent\">Неуязвимый</span></h3>\n                        <p>Его нельзя захватить.</p>\n                    </div>\n                "
+      },
+      "witch": {
+        "title": "Ведьма",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Тип: <span class=\"accent\">Прыгун</span></h3>\n                        <p>Дальность прыжка: <span class=\"highlight\">4</span>.</p>\n                    </div>\n                "
+      }
+    }
+  },
+  "bn": {
+    "menu": {
+      "intro": "ভূমিকা",
+      "setup_phase": "প্রস্তুতি পর্ব",
+      "board": "বোর্ড এবং টপোলজি",
+      "turn": "চালানোর নিয়ম",
+      "goddess": "দেবী",
+      "heroe": "বীর",
+      "mage": "জাদুকর",
+      "siren": "সাইরেন",
+      "ghoul": "পিশাচ",
+      "witch": "ডাইনি",
+      "soldier": "সৈনিক",
+      "minotaur": "মিনোটর"
+    },
+    "sections": {
+      "intro": {
+        "title": "ভূমিকা",
+        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">লক্ষ্য</h2>\n                        <p>প্রধান লক্ষ্য হলো <span class=\"accent\">প্রতিপক্ষের দেবীকে বন্দী করা</span>। দেবী বোর্ড থেকে অপসারিত হওয়া মাত্র খেলা শেষ হয়ে যায়।</p>\n                    </div>\n                "
+      },
+      "setup_phase": {
+        "title": "প্রস্তুতি পর্ব",
+        "content": "\n                    <p>খেলা শুরুর আগে খেলোয়াড়দের তাদের বাহিনী মোতায়েন করতে হবে। এটি ৫টি ধাপে করা হয়:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">দেবী</h3><p>আপনার পক্ষের <span class=\"highlight\">সবচেয়ে দূরের প্রান্তে</span> রাখতে হবে।</p></li>\n                        <li><h3 class=\"accent\">বীর</h3><p>দেবী থেকে <span class=\"highlight\">৪ থেকে ৬ লাফ</span> দূরত্বে।</p></li>\n                        <li><h3 class=\"accent\">গোলেম</h3><p>দেবীর কাছে প্রতিরক্ষা ঢাল হিসেবে (১-২ লাফ)।</p></li>\n                        <li><h3 class=\"accent\">রঙের বৃত্ত</h3><p><span class=\"accent\">ডাইনিরা</span> ৪টি ভিন্ন রঙে বিন্যস্ত থাকে।</p></li>\n                        <li><h3 class=\"accent\">পদাতিক বাহিনী</h3><p><span class=\"accent\">পিশাচ</span> এবং <span class=\"accent\">সাইরেন</span> বাকি কৌশলগত স্থানগুলি পূরণ করে।</p></li>\n                    </ol>\n                "
+      },
+      "board": {
+        "title": "বোর্ড এবং টপোলজি",
+        "content": "\n                    <div class=\"card\">\n                        <h3><span class=\"accent\">পিচ্ছিল চাল</span> (Slide)</h3>\n                        <p>একই প্রান্তযুক্ত বহুভুজের মধ্যে চলাচল। <span class=\"highlight\">লাল প্রান্তগুলি পিচ্ছিল চলন বাধা দেয়</span>।</p>\n                    </div>\n                "
+      },
+      "turn": {
+        "title": "চালানোর নিয়ম",
+        "content": "\n                    <p>একটি রঙ চয়ন করুন যা অন্তত একটি বৈধ চালের অনুমতি দেয়। সেই রঙের সকল ঘুঁটি চলতে পারবে।</p>\n                "
+      },
+      "goddess": {
+        "title": "দেবী",
+        "content": "\n                    <div class=\"card\">\n                        <h3>ধরণ: <span class=\"accent\">লাফ প্রদানকারী</span></h3>\n                        <p>লাফানোর সীমা: <span class=\"highlight\">২</span>। সবচেয়ে গুরুত্বপূর্ণ ঘুঁটি।</p>\n                    </div>\n                "
+      },
+      "heroe": {
+        "title": "বীর",
+        "content": "\n                    <div class=\"card\">\n                        <h3>ধরণ: <span class=\"accent\">লাফ প্রদানকারী</span></h3>\n                        <p>লাফানোর সীমা: <span class=\"highlight\">৩</span>। শত্রুকে ধরলে এটি <span class=\"highlight\">অবিলম্বে আবার লাফ দিতে পারে</span>।</p>\n                    </div>\n                "
+      },
+      "mage": {
+        "title": "জাদুকর",
+        "content": "\n                    <div class=\"card\">\n                        <h3>বিশেষ: <span class=\"accent\">রঙ আনলক</span></h3>\n                        <p>জাদুকর শুরুতে <span class=\"highlight\">লক</span> থাকে। ৪টি রঙ চয়ন করা হয়ে গেলে এটি সক্রিয় হয়।</p>\n                    </div>\n                "
+      },
+      "siren": {
+        "title": "সাইরেন",
+        "content": "\n                    <div class=\"card\">\n                        <h3>বিশেষ: <span class=\"accent\">অ্যাঙ্করিং</span></h3>\n                        <p>সাইরেনের <span class=\"highlight\">পার্শ্ববর্তী</span> শত্রু ঘুঁটিগুলি স্থির হয়ে যায় এবং চলতে পারে না।</p>\n                    </div>\n                "
+      },
+      "ghoul": {
+        "title": "পিশাচ",
+        "content": "\n                    <div class=\"card\">\n                        <h3>ধরণ: <span class=\"accent\">পিচ্ছিল চলনশীল</span></h3>\n                        <p>সীমা: <span class=\"highlight\">৩</span>।</p>\n                    </div>\n                "
+      },
+      "soldier": {
+        "title": "সৈনিক",
+        "content": "\n                    <div class=\"card\">\n                        <h3>ধরণ: <span class=\"accent\">পিচ্ছিল চলনশীল</span></h3>\n                        <p>বহুভুজ শৃঙ্খলের মধ্য দিয়ে পিচ্ছিলভাবে চলে এবং একাধিক শত্রুকে ধরতে পারে।</p>\n                    </div>\n                "
+      },
+      "minotaur": {
+        "title": "গোলেম",
+        "content": "\n                    <div class=\"card\">\n                        <h3>ধরণ: <span class=\"accent\">অজেয়</span></h3>\n                        <p>একে ধরা যায় না এবং বিষ্ফোরণে আক্রান্ত হয় না।</p>\n                    </div>\n                "
+      },
+      "witch": {
+        "title": "ডাইনি",
+        "content": "\n                    <div class=\"card\">\n                        <h3>ধরণ: <span class=\"accent\">লাফ প্রদানকারী</span></h3>\n                        <p>লাফানোর সীমা: <span class=\"highlight\">৪</span>।</p>\n                    </div>\n                "
+      }
+    }
+  },
+  "id": {
+    "menu": {
+      "intro": "Pendahuluan",
+      "setup_phase": "Fase Persiapan",
+      "board": "Papan & Topologi",
+      "turn": "Mekanik Giliran",
+      "goddess": "Dewi",
+      "heroe": "Pahlawan",
+      "mage": "Penyihir Agung",
+      "siren": "Siren",
+      "ghoul": "Ghoul",
+      "witch": "Penyihir",
+      "soldier": "Prajurit",
+      "minotaur": "Minotaur"
+    },
+    "sections": {
+      "intro": {
+        "title": "Pendahuluan",
+        "content": "\n                    <div class=\"card\">\n                        <h2 style=\"margin-top: 0\">Tujuan</h2>\n                        <p>Tujuan utama adalah untuk <span class=\"accent\">menangkap Dewi lawan</span>. Permainan berakhir segera setelah Dewi dikeluarkan dari papan.</p>\n                    </div>\n                "
+      },
+      "setup_phase": {
+        "title": "Fase Persiapan",
+        "content": "\n                    <p>Sebelum fase permainan dimulai, pemain harus mengatur kekuatan mereka. Penempatan dilakukan dalam 5 langkah:</p>\n                    <ol class=\"setup-steps\">\n                        <li><h3 class=\"accent\">Dewi</h3><p>Harus ditempatkan di <span class=\"highlight\">tepi jauh</span> sisi Anda.</p></li>\n                        <li><h3 class=\"accent\">Pahlawan</h3><p>Ditempatkan di tepi, berjarak <span class=\"highlight\">4 hingga 6 lompatan</span> dari Dewi.</p></li>\n                        <li><h3 class=\"accent\">Minotaur</h3><p>Sebagai perisai pertahanan di dekat Dewi (1-2 lompatan).</p></li>\n                        <li><h3 class=\"accent\">Lingkaran Kromatik</h3><p><span class=\"accent\">Penyihir</span> didistribusikan pada 4 warna yang berbeda.</p></li>\n                        <li><h3 class=\"accent\">Pengerahan Infanteri</h3><p><span class=\"accent\">Ghoul</span> dan <span class=\"accent\">Siren</span> menempati posisi taktis yang tersisa.</p></li>\n                    </ol>\n                "
+      },
+      "board": {
+        "title": "Papan & Topologi",
+        "content": "\n                    <div class=\"card\">\n                        <h3><span class=\"accent\">Geser</span> (Slide)</h3>\n                        <p>Bergerak di antara poligon yang berbagi tepi. <span class=\"highlight\">Tepi Merah menghalangi pergerakan geser</span>.</p>\n                    </div>\n                "
+      },
+      "turn": {
+        "title": "Mekanik Giliran",
+        "content": "\n                    <p>Pilih warna yang memungkinkan setidaknya satu langkah sah. Semua bidak dengan warna tersebut dapat bergerak.</p>\n                "
+      },
+      "goddess": {
+        "title": "Dewi",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Tipe: <span class=\"accent\">Pelompat</span></h3>\n                        <p>Jangkauan Lompat: <span class=\"highlight\">2</span>. Bidak paling vital.</p>\n                    </div>\n                "
+      },
+      "heroe": {
+        "title": "Pahlawan",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Tipe: <span class=\"accent\">Pelompat</span></h3>\n                        <p>Jangkauan Lompat: <span class=\"highlight\">3</span>. Menangkap musuh memungkinkan <span class=\"highlight\">melompat lagi segera</span>.</p>\n                    </div>\n                "
+      },
+      "mage": {
+        "title": "Penyihir Agung",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Spesial: <span class=\"accent\">Buka Kunci Kromatik</span></h3>\n                        <p>Penyihir Agung <span class=\"highlight\">Terkunci</span> pada awalnya. Aktif setelah 4 warna dipilih.</p>\n                    </div>\n                "
+      },
+      "siren": {
+        "title": "Siren",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Spesial: <span class=\"accent\">Penjangkaran</span></h3>\n                        <p>Musuh yang <span class=\"highlight\">berdekatan</span> dengan Siren akan terjangkar dan tidak bisa bergerak.</p>\n                    </div>\n                "
+      },
+      "ghoul": {
+        "title": "Ghoul",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Tipe: <span class=\"accent\">Penggeser</span></h3>\n                        <p>Jangkauan: <span class=\"highlight\">3</span>.</p>\n                    </div>\n                "
+      },
+      "soldier": {
+        "title": "Prajurit",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Tipe: <span class=\"accent\">Penggeser</span></h3>\n                        <p>Menggeser melalui rantai poligon dan dapat menangkap banyak musuh.</p>\n                    </div>\n                "
+      },
+      "minotaur": {
+        "title": "Minotaur",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Tipe: <span class=\"accent\">Kebal</span></h3>\n                        <p>Tidak bisa ditangkap.</p>\n                    </div>\n                "
+      },
+      "witch": {
+        "title": "Penyihir",
+        "content": "\n                    <div class=\"card\">\n                        <h3>Tipe: <span class=\"accent\">Pelompat</span></h3>\n                        <p>Jangkauan Lompat: <span class=\"highlight\">4</span>.</p>\n                    </div>\n                "
+      }
+    }
+  }
+}

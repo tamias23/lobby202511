@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme.dart';
 import '../../widgets/glass_panel.dart';
+import '../../widgets/lobby_back_button.dart';
 
 // BUILD_TIMESTAMP is injected at compile time via --dart-define=BUILD_TIMESTAMP=...
 // Falls back to 'dev' when running locally without the define.
@@ -22,10 +22,10 @@ class AboutScreen extends StatelessWidget {
         child: Stack(
           children: [
             // Back button — top left
-            Positioned(
+            const Positioned(
               top: 12,
               left: 12,
-              child: _BackButton(onTap: () => context.go('/')),
+              child: LobbyBackButton(),
             ),
             // Centred card
             Center(
@@ -97,49 +97,6 @@ class AboutScreen extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _BackButton extends StatefulWidget {
-  final VoidCallback onTap;
-  const _BackButton({required this.onTap});
-  @override
-  State<_BackButton> createState() => _BackButtonState();
-}
-
-class _BackButtonState extends State<_BackButton> {
-  bool _hovered = false;
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit:  (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: _hovered ? 0.10 : 0.05),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.white.withValues(alpha: _hovered ? 0.20 : 0.08)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.arrow_back_ios_new_rounded,
-                size: 13, color: DTheme.textMutedDark),
-              const SizedBox(width: 6),
-              Text('Lobby',
-                style: GoogleFonts.outfit(
-                  fontSize: 13, fontWeight: FontWeight.w600,
-                  color: DTheme.textMutedDark)),
-            ],
-          ),
         ),
       ),
     );

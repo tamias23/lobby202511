@@ -33,6 +33,9 @@ dependencies:
   google_fonts: ^6.2.0
   flutter_svg: ^2.0.10+1
 
+  # Auto-shrinking text for buttons with long translations
+  auto_size_text: ^3.0.0
+
   # Immutable models + JSON serialization
   freezed_annotation: ^3.0.0
   json_annotation: ^4.9.0
@@ -65,4 +68,5 @@ flutter:
     - assets/sounds/
     - assets/legal/
     - assets/tutorial_translations.json
+    - assets/translations.json
 

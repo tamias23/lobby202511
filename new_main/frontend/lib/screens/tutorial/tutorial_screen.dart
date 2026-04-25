@@ -2,15 +2,20 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
+import '../../providers/auth_provider.dart';
+import '../../providers/locale_provider.dart';
+import '../../providers/translations_provider.dart';
 import '../../core/theme.dart';
 import '../../core/config.dart';
 import '../../models/models.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../game/painters/board_svg.dart';
 import '../game/painters/piece_svg.dart';
+import '../../widgets/lobby_back_button.dart';
 
 // ── Section list ───────────────────────────────────────────────────────────────
 
@@ -447,19 +452,14 @@ Color _parseColor(String raw) {
 
 // ── Tutorial screen ────────────────────────────────────────────────────────────
 
-class TutorialScreen extends StatefulWidget {
+class TutorialScreen extends ConsumerStatefulWidget {
   const TutorialScreen({super.key});
-  @override State<TutorialScreen> createState() => _TutorialScreenState();
+  @override ConsumerState<TutorialScreen> createState() => _TutorialScreenState();
 }
 
-class _TutorialScreenState extends State<TutorialScreen> {
-  String _lang    = 'en';
+class _TutorialScreenState extends ConsumerState<TutorialScreen> {
   String _section = 'intro';
   bool   _sidebarOpen = false; // for mobile drawer
-  bool   _translationsLoading = true;
-
-  // Loaded from asset
-  Map<String, dynamic> _translations = {};
 
   // Board state
   Map<String, BoardPolygon>? _polygons;
@@ -477,21 +477,11 @@ class _TutorialScreenState extends State<TutorialScreen> {
   @override
   void initState() {
     super.initState();
-    _loadTranslations();
     _loadBoard();
   }
 
   // ── Asset loading ──────────────────────────────────────────────────────────
 
-  Future<void> _loadTranslations() async {
-    try {
-      final str = await rootBundle.loadString('assets/tutorial_translations.json');
-      if (mounted) setState(() { _translations = jsonDecode(str) as Map<String, dynamic>; _translationsLoading = false; });
-    } catch (e) {
-      debugPrint('Tutorial: error loading translations: $e');
-      if (mounted) setState(() => _translationsLoading = false);
-    }
-  }
 
   // ── Board loading ──────────────────────────────────────────────────────────
 
@@ -669,36 +659,19 @@ class _TutorialScreenState extends State<TutorialScreen> {
 
   // ── Translation helpers ────────────────────────────────────────────────────
 
-  String _menuLabel(String sec) {
-    try {
-      return ((_translations[_lang]?['menu'] as Map?)?[sec] as String?)
-          ?? ((_translations['en']?['menu'] as Map?)?[sec] as String?)
-          ?? sec;
-    } catch (_) { return sec; }
-  }
+  String _menuLabel(String sec) => ref.tr('menu.$sec');
 
-  String _sectionTitle(String sec) {
-    try {
-      return ((_translations[_lang]?['sections'] as Map?)?[sec] as Map?)?['title'] as String?
-          ?? ((_translations['en']?['sections'] as Map?)?[sec] as Map?)?['title'] as String?
-          ?? sec;
-    } catch (_) { return sec; }
-  }
+  String _sectionTitle(String sec) => ref.tr('sections.$sec.title');
 
-  String _sectionContent(String sec) {
-    try {
-      return ((_translations[_lang]?['sections'] as Map?)?[sec] as Map?)?['content'] as String?
-          ?? ((_translations['en']?['sections'] as Map?)?[sec] as Map?)?['content'] as String?
-          ?? '';
-    } catch (_) { return ''; }
-  }
+  String _sectionContent(String sec) => ref.tr('sections.$sec.content');
 
   // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.of(context).size.width > 900;
-    final isRtl = _rtlLangs.contains(_lang);
+    final lang = ref.watch(localeProvider).languageCode;
+    final isRtl = _rtlLangs.contains(lang);
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SafeArea(
@@ -732,20 +705,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
             border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08)))),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             // ← Lobby above the title
-            GestureDetector(
-              onTap: () => context.go('/'),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.12))),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.arrow_back_ios_new, size: 11, color: Colors.white54),
-                  const SizedBox(width: 5),
-                  Text('Lobby', style: GoogleFonts.outfit(color: Colors.white54, fontSize: 12)),
-                ]),
-              ),
-            ),
+            const LobbyBackButton(),
             const SizedBox(height: 10),
             Text('DEDAL', style: GoogleFonts.outfit(
               fontSize: 18, fontWeight: FontWeight.w900, color: DTheme.primary,
@@ -793,13 +753,13 @@ class _TutorialScreenState extends State<TutorialScreen> {
         color: Colors.white.withValues(alpha: 0.04),
       ),
       child: DropdownButton<String>(
-        value: _lang,
+        value: ref.watch(localeProvider).languageCode,
         isExpanded: true,
         dropdownColor: const Color(0xFF1E293B),
         underline: const SizedBox(),
         style: GoogleFonts.outfit(color: Colors.white, fontSize: 13),
         icon: const Icon(Icons.expand_more, color: Colors.white54, size: 16),
-        onChanged: (v) { if (v != null) setState(() => _lang = v); },
+        onChanged: (v) { if (v != null) ref.read(localeProvider.notifier).setLocale(v); },
         items: _languages.map((l) => DropdownMenuItem(
           value: l.$1,
           child: Text(l.$2, style: GoogleFonts.outfit(fontSize: 13)),
@@ -825,7 +785,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
             Text(title, style: GoogleFonts.outfit(
               fontSize: 22, fontWeight: FontWeight.w800, color: DTheme.textMainDark)),
             const Divider(color: Colors.white12, height: 20),
-            if (_translationsLoading)
+            if (ref.watch(translationsProvider).isLoading)
               const Center(child: Padding(
                 padding: EdgeInsets.all(32),
                 child: CircularProgressIndicator()))
@@ -850,7 +810,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
           child: Row(children: [
-            Text('Interactive Board', style: GoogleFonts.outfit(
+            Text(ref.tr('ui.interactive_board'), style: GoogleFonts.outfit(
               fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white54, letterSpacing: 0.5)),
             const Spacer(),
             // Width slider — allows resizing the board panel
@@ -872,7 +832,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(color: Colors.white.withValues(alpha: 0.15))),
-                child: Text('Reset', style: GoogleFonts.outfit(
+                child: Text(ref.tr('ui.reset'), style: GoogleFonts.outfit(
                   color: Colors.white54, fontSize: 11)),
               ),
             ),

@@ -1,11 +1,14 @@
+import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme.dart';
+import '../../../providers/translations_provider.dart';
 import '../game_board.dart' show ColorTheme, ColorThemeX;
 
 /// Full-width stacked action buttons matching the legacy Games.jsx panel.
 /// Shown in the right-side (or bottom) panel of the game board.
-class ActionButtons extends StatefulWidget {
+class ActionButtons extends ConsumerStatefulWidget {
   final String gameId;
   final String phase;
   final String side;
@@ -57,10 +60,10 @@ class ActionButtons extends StatefulWidget {
   });
 
   @override
-  State<ActionButtons> createState() => _ActionButtonsState();
+  ConsumerState<ActionButtons> createState() => _ActionButtonsState();
 }
 
-class _ActionButtonsState extends State<ActionButtons> {
+class _ActionButtonsState extends ConsumerState<ActionButtons> {
   bool _resignConfirm  = false;
   bool _passConfirm    = false;  // shown only when myPassCount >= 2
   bool _settingsOpen   = false;  // collapsible settings panel
@@ -88,6 +91,37 @@ class _ActionButtonsState extends State<ActionButtons> {
     // For spectators, use the current turn's chosen color directly
     final turnChosenColorGlobal = widget.colorChosen[widget.turn] as String?;
 
+    // ── Localized labels ──────────────────────────────────────────────────────
+    final t = ref;
+    final String turnKey = widget.turn == 'white' ? 'ui.white' : 'ui.black';
+
+    final String endTurnLabel = oppTurn
+        ? t.tr('ui.waiting_opponent')
+        : _passConfirm
+            ? t.tr('ui.confirm_pass')
+            : (isSetup ? t.tr('ui.end_turn') : t.tr('ui.pass_turn'));
+
+    final String colorPickerLabel = widget.spectator
+        ? (turnChosenColorGlobal != null
+            ? '${t.tr(turnKey)} ${t.tr('ui.white_color').split(' ').last}'
+            : '${t.tr(turnKey)} ${t.tr('ui.white_deciding').split(' ').last}')
+        : widget.myTurn
+            ? (myChosenColor != null ? t.tr('ui.your_color') : t.tr('ui.choose_color'))
+            : (oppColor != null ? t.tr('ui.opponent_color') : t.tr('ui.opponent_deciding'));
+
+    // Spectator color label helper
+    String spectatorColorLabel() {
+      if (widget.turn == 'white') {
+        return turnChosenColorGlobal != null
+            ? '${t.tr('ui.white')} Color'
+            : t.tr('ui.white_deciding');
+      } else {
+        return turnChosenColorGlobal != null
+            ? '${t.tr('ui.black')} Color'
+            : t.tr('ui.black_deciding');
+      }
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
       decoration: BoxDecoration(
@@ -103,11 +137,7 @@ class _ActionButtonsState extends State<ActionButtons> {
           // ── End Turn / Pass ──────────────────────────────────────────────
           if (isSetup || isPlaying) ...[
             _WideBtn(
-              label: oppTurn
-                  ? 'Waiting for opponent…'
-                  : _passConfirm
-                      ? 'Confirm Pass'
-                      : (isSetup ? 'End Turn' : 'Pass Turn'),
+              label: endTurnLabel,
               bgColor: oppTurn
                   ? const Color(0xFF7F8C8D)
                   : _passConfirm
@@ -127,7 +157,7 @@ class _ActionButtonsState extends State<ActionButtons> {
                 if (isSetup) {
                   widget.onEndTurnSetup();
                 } else {
-                  // Mirror legacy: only show confirmation if passCount >= 2 (3rd pass triggers penalty)
+                  // Mirror legacy: only show confirmation if passCount >= 2
                   if (widget.myPassCount >= 2) {
                     if (_passConfirm) {
                       setState(() => _passConfirm = false);
@@ -136,7 +166,6 @@ class _ActionButtonsState extends State<ActionButtons> {
                       setState(() => _passConfirm = true);
                     }
                   } else {
-                    // No confirmation needed — just pass
                     widget.onPassTurn();
                   }
                 }
@@ -148,7 +177,7 @@ class _ActionButtonsState extends State<ActionButtons> {
           // ── Random Setup ─────────────────────────────────────────────────
           if (isSetup && !widget.spectator) ...[
             _WideBtn(
-              label: oppTurn ? 'Waiting for opponent…' : 'Random Setup',
+              label: oppTurn ? t.tr('ui.waiting_opponent') : t.tr('ui.random_setup'),
               bgColor: oppTurn ? const Color(0xFF7F8C8D) : const Color(0xFF9B59B6),
               shadowColor: const Color(0xFF9B59B6),
               enabled: !oppTurn,
@@ -159,7 +188,7 @@ class _ActionButtonsState extends State<ActionButtons> {
 
           // ── Flip Board ───────────────────────────────────────────────────
           _WideBtn(
-            label: widget.isFlipped ? 'Unflip Board' : 'Flip Board',
+            label: widget.isFlipped ? t.tr('ui.unflip_board') : t.tr('ui.flip_board'),
             bgColor: const Color(0xFF34495E),
             shadowColor: const Color(0xFF34495E),
             enabled: true,
@@ -173,7 +202,7 @@ class _ActionButtonsState extends State<ActionButtons> {
                 ? Row(children: [
                     Expanded(
                       child: _WideBtn(
-                        label: 'Confirm Resign',
+                        label: t.tr('ui.confirm_resign'),
                         bgColor: const Color(0xFFC0392B),
                         shadowColor: const Color(0xFFC0392B),
                         enabled: true,
@@ -186,7 +215,7 @@ class _ActionButtonsState extends State<ActionButtons> {
                     const SizedBox(width: 6),
                     Expanded(
                       child: _WideBtn(
-                        label: 'Cancel',
+                        label: t.tr('ui.cancel'),
                         bgColor: const Color(0xFF34495E),
                         enabled: true,
                         onTap: () => setState(() => _resignConfirm = false),
@@ -194,7 +223,7 @@ class _ActionButtonsState extends State<ActionButtons> {
                     ),
                   ])
                 : _WideBtn(
-                    label: 'Resign',
+                    label: t.tr('ui.resign'),
                     bgColor: const Color(0xFF7F8C8D),
                     enabled: true,
                     onTap: () => setState(() => _resignConfirm = true),
@@ -207,13 +236,7 @@ class _ActionButtonsState extends State<ActionButtons> {
             const SizedBox(height: 10),
             Center(
               child: Text(
-                widget.spectator
-                    ? (turnChosenColorGlobal != null
-                        ? '${widget.turn == 'white' ? 'White' : 'Black'} Color'
-                        : '${widget.turn == 'white' ? 'White' : 'Black'} Deciding…')
-                    : widget.myTurn
-                        ? (myChosenColor != null ? '◆ Your Color' : 'Choose Color')
-                        : (oppColor != null ? 'Opponent Color' : 'Opponent Deciding…'),
+                widget.spectator ? spectatorColorLabel() : colorPickerLabel,
                 style: const TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
@@ -223,9 +246,6 @@ class _ActionButtonsState extends State<ActionButtons> {
               ),
             ),
             const SizedBox(height: 10),
-            // Legacy: colorChosen[turn] ? [colorChosen[turn]] : allColors
-            // turnChosenColor = my color if myTurn, opponent's if !myTurn
-            // For spectators: always use the current turn's color
             Builder(builder: (_) {
               final turnChosenColor = widget.spectator
                   ? turnChosenColorGlobal
@@ -251,15 +271,12 @@ class _ActionButtonsState extends State<ActionButtons> {
           // ── Mage Locked (Playing + not yet unlocked) ─────────────────────
           if (isPlaying && !widget.mageUnlocked) ...[
             const SizedBox(height: 14),
-            Container(
-              height: 1,
-              color: const Color(0x33FFA500),
-            ),
+            Container(height: 1, color: const Color(0x33FFA500)),
             const SizedBox(height: 10),
-            const Center(
+            Center(
               child: Text(
-                'MAGE LOCKED',
-                style: TextStyle(
+                t.tr('ui.mage_locked'),
+                style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                   color: Color(0xFFF97316),
@@ -268,13 +285,10 @@ class _ActionButtonsState extends State<ActionButtons> {
               ),
             ),
             const SizedBox(height: 4),
-            const Center(
+            Center(
               child: Text(
-                'Choose all 4 colors',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: Color(0x80FFFFFF),
-                ),
+                t.tr('ui.choose_all_4'),
+                style: const TextStyle(fontSize: 10, color: Color(0x80FFFFFF)),
               ),
             ),
             const SizedBox(height: 8),
@@ -309,15 +323,13 @@ class _ActionButtonsState extends State<ActionButtons> {
             const SizedBox(height: 6),
             Center(
               child: Text(
-                '${widget.colorsEverChosen.length} / 4 seen',
-                style: const TextStyle(
-                  fontSize: 10,
-                  color: Color(0x73FFFFFF),
-                ),
+                t.tr('ui.seen_count').replaceAll('{n}', '${widget.colorsEverChosen.length}'),
+                style: const TextStyle(fontSize: 10, color: Color(0x73FFFFFF)),
               ),
             ),
           ],
-          // ── Settings accordion (─ board color theme) ──────────────────────
+
+          // ── Settings accordion (board color theme) ────────────────────────
           const SizedBox(height: 10),
           _divider(),
           const SizedBox(height: 6),
@@ -327,7 +339,7 @@ class _ActionButtonsState extends State<ActionButtons> {
               children: [
                 const Icon(Icons.settings_outlined, size: 13, color: Colors.white38),
                 const SizedBox(width: 6),
-                Text('Settings', style: GoogleFonts.outfit(
+                Text(t.tr('ui.settings'), style: GoogleFonts.outfit(
                   fontSize: 11, color: Colors.white38, letterSpacing: 0.5)),
                 const Spacer(),
                 Icon(_settingsOpen ? Icons.expand_less : Icons.expand_more,
@@ -337,7 +349,7 @@ class _ActionButtonsState extends State<ActionButtons> {
           ),
           if (_settingsOpen) ...[
             const SizedBox(height: 8),
-            Text('Board Colors', style: GoogleFonts.outfit(
+            Text(t.tr('ui.board_colors'), style: GoogleFonts.outfit(
               fontSize: 10, color: Colors.white38)),
             const SizedBox(height: 6),
             Wrap(
@@ -400,44 +412,75 @@ class _WideBtnState extends State<_WideBtn> {
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: widget.enabled ? SystemMouseCursors.click : SystemMouseCursors.forbidden,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit:  (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.enabled ? widget.onTap : null,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 9),
-          decoration: BoxDecoration(
-            color: widget.bgColor,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: widget.shadowColor != null && widget.enabled
-                ? [BoxShadow(
-                    color: widget.shadowColor!.withValues(alpha: 0.35),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  )]
-                : [],
-          ),
-          transform: _hovered && widget.enabled
-              ? (Matrix4.identity()..scale(1.03))
-              : Matrix4.identity(),
-          child: Text(
-            widget.label,
-            textAlign: TextAlign.center,
+    // LayoutBuilder captures the *actual* rendered parent width — the only
+    // reliable source when the ancestor may give loose or unbounded constraints.
+    return LayoutBuilder(
+      builder: (context, bc) {
+        // Horizontal space available inside the button (minus our side padding).
+        final availW = (bc.maxWidth.isFinite ? bc.maxWidth : 220.0) - 12.0;
+
+        // Measure label at the target font size with no width constraint.
+        const baseSize = 13.0;
+        final tp = TextPainter(
+          text: TextSpan(
+            text: widget.label,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: baseSize,
               fontWeight: FontWeight.w600,
-              color: Colors.white.withValues(alpha: widget.enabled ? 1.0 : 0.6),
             ),
           ),
-        ),
-      ),
+          maxLines: 1,
+          textDirection: TextDirection.ltr,
+        )..layout(maxWidth: double.infinity);
+
+        // Scale font down proportionally; never go below 8 pt.
+        final fontSize = tp.width > availW && availW > 0
+            ? (baseSize * availW / tp.width).clamp(8.0, baseSize)
+            : baseSize;
+
+        return MouseRegion(
+          cursor: widget.enabled ? SystemMouseCursors.click : SystemMouseCursors.forbidden,
+          onEnter: (_) => setState(() => _hovered = true),
+          onExit:  (_) => setState(() => _hovered = false),
+          child: GestureDetector(
+            onTap: widget.enabled ? widget.onTap : null,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 9),
+              decoration: BoxDecoration(
+                color: widget.bgColor,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: widget.shadowColor != null && widget.enabled
+                    ? [BoxShadow(
+                        color: widget.shadowColor!.withValues(alpha: 0.35),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      )]
+                    : [],
+              ),
+              transform: _hovered && widget.enabled
+                  ? (Matrix4.identity()..scale(1.03))
+                  : Matrix4.identity(),
+              child: Text(
+                widget.label,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.clip,
+                style: TextStyle(
+                  fontSize: fontSize,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white.withValues(alpha: widget.enabled ? 1.0 : 0.6),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
+
 
 // ── Colour dot for colour picker ─────────────────────────────────────────────
 

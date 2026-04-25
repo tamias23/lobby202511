@@ -121,7 +121,8 @@ function sanitizeBigInt(val) {
 }
 
 // Tournament config
-const TOURNAMENTS_ENABLED = process.env.TOURNAMENTS_ENABLED !== 'false';
+const TOURNAMENTS_ENABLED    = process.env.TOURNAMENTS_ENABLED    !== 'false';
+const SHOW_SUBSCRIBE_BUTTON  = process.env.SHOW_SUBSCRIBE_BUTTON  !== 'false';
 
 /**
  * Build a short, friendly bot display name from its model filename.
@@ -833,6 +834,15 @@ initDb()
 });
 
 // --- API ROUTES ---
+
+// Public client-config endpoint — exposes server-side feature flags to the Flutter app.
+// Keep only safe, non-secret values here.
+app.get('/api/config', (req, res) => {
+    res.json({
+        showSubscribeButton: SHOW_SUBSCRIBE_BUTTON,
+        tournamentsEnabled:  TOURNAMENTS_ENABLED,
+    });
+});
 
 // Replay endpoint: compute game state at any step from board_id + moves
 app.post('/api/replay', (req, res) => {

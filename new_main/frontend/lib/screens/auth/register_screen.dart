@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/api_service.dart';
 import '../../core/theme.dart';
+import '../../providers/translations_provider.dart';
 import '../../widgets/glass_panel.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
@@ -78,17 +79,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text('Create Account', style: DTheme.heading),
+                        Text(ref.tr('ui.create_account'), style: DTheme.heading),
                         const SizedBox(height: 8),
-                        Text('Join the Dedal community', style: DTheme.subtitle),
+                        Text(ref.tr('ui.join_community'), style: DTheme.subtitle),
                         const SizedBox(height: 32),
 
                         TextFormField(
                           controller: _usernameCtrl,
                           style: DTheme.body,
-                          decoration: const InputDecoration(
-                            labelText: 'Username',
-                            prefixIcon: Icon(Icons.person_outline, color: DTheme.primary),
+                          decoration: InputDecoration(
+                            labelText: ref.tr('ui.username'),
+                            prefixIcon: const Icon(Icons.person_outline, color: DTheme.primary),
                           ),
                           validator: (v) => (v == null || v.length < 3) ? 'At least 3 characters' : null,
                         ),
@@ -98,9 +99,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           controller: _emailCtrl,
                           style: DTheme.body,
                           keyboardType: TextInputType.emailAddress,
-                          decoration: const InputDecoration(
-                            labelText: 'Email',
-                            prefixIcon: Icon(Icons.email_outlined, color: DTheme.primary),
+                          decoration: InputDecoration(
+                            labelText: ref.tr('ui.email'),
+                            prefixIcon: const Icon(Icons.email_outlined, color: DTheme.primary),
                           ),
                           validator: (v) => (v == null || !v.contains('@')) ? 'Valid email required' : null,
                         ),
@@ -111,7 +112,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           obscureText: _obscure,
                           style: DTheme.body,
                           decoration: InputDecoration(
-                            labelText: 'Password',
+                            labelText: ref.tr('ui.password'),
                             prefixIcon: const Icon(Icons.lock_outline, color: DTheme.primary),
                             suffixIcon: IconButton(
                               icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility, color: DTheme.textMutedDark),
@@ -128,7 +129,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             onPressed: _loading ? null : _submit,
                             child: _loading
                                 ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                : const Text('Create Account'),
+                                : Text(ref.tr('ui.create_account')),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -136,16 +137,16 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text('Already have an account? ', style: DTheme.bodyMuted),
+                            Text('${ref.tr('ui.already_account')} ', style: DTheme.bodyMuted),
                             TextButton(
                               onPressed: () => context.go('/login'),
-                              child: Text('Sign in', style: TextStyle(color: DTheme.primary, fontWeight: FontWeight.w600)),
+                              child: Text(ref.tr('ui.sign_in'), style: const TextStyle(color: DTheme.primary, fontWeight: FontWeight.w600)),
                             ),
                           ],
                         ),
                         TextButton(
                           onPressed: () => context.go('/'),
-                          child: Text('Continue as guest', style: DTheme.bodyMuted),
+                          child: Text(ref.tr('ui.continue_as_guest'), style: DTheme.bodyMuted),
                         ),
                       ],
                     ),

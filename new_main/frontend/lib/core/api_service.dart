@@ -124,4 +124,17 @@ class ApiService {
   Future<void> deleteAccount() async {
     await _dio.delete('/api/me');
   }
+
+  // ── Server Config ─────────────────────────────────────────────────────────────
+
+  /// Fetches public feature flags from the server.
+  /// Returns an empty map on failure so callers can use safe defaults.
+  Future<Map<String, dynamic>> getConfig() async {
+    try {
+      final response = await _dio.get('/api/config');
+      return response.data as Map<String, dynamic>;
+    } catch (_) {
+      return {};
+    }
+  }
 }

@@ -14,6 +14,8 @@ import '../../widgets/legal_doc_dialog.dart';
 import '../../widgets/legal_notice_dialog.dart';
 import '../../widgets/privacy_dialog.dart';
 import '../../widgets/terms_dialog.dart';
+import '../../widgets/settings_dialog.dart';
+import '../../providers/translations_provider.dart';
 
 // ── Gradient constants (matching legacy) ─────────────────────────────────────
 const _kBlue   = Color(0xFF46B0D4);
@@ -241,16 +243,25 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
           // Auth / nav row
           Row(
             children: [
-              _HeaderButton(label: 'Analysis', onTap: () => context.go('/analysis')),
+              _HeaderButton(label: ref.tr('ui.analysis'), onTap: () => context.go('/analysis')),
               const SizedBox(width: 6),
-              _HeaderButton(label: 'Tutorial', onTap: () => context.go('/tutorial')),
+              _HeaderButton(label: ref.tr('ui.tutorial'), onTap: () => context.go('/tutorial')),
               const SizedBox(width: 6),
-              _HeaderButton(label: 'Leaderboard', onTap: () => context.go('/leaderboard')),
+              _HeaderButton(label: ref.tr('ui.leaderboard'), onTap: () => context.go('/leaderboard')),
               const Spacer(),
               if (auth == null) ...[
-                _HeaderButton(label: 'Login',    onTap: () => context.go('/login')),
-                const SizedBox(width: 6),
-                _HeaderButton(label: 'Register', onTap: () => context.go('/register')),
+              _HeaderButton(label: ref.tr('ui.login'),    onTap: () => context.go('/login')),
+              const SizedBox(width: 6),
+              _HeaderButton(label: ref.tr('ui.register'), onTap: () => context.go('/register')),
+              const SizedBox(width: 6),
+              IconButton(
+                icon: const Icon(Icons.settings_outlined, color: DTheme.textMutedDark, size: 18),
+                onPressed: () => SettingsDialog.show(context),
+                tooltip: ref.tr('ui.settings'),
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
               ] else
                 _UserBadge(auth: auth, onLogout: () => ref.read(authProvider.notifier).logout()),
             ],
@@ -288,7 +299,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
               ),
             ),
             const SizedBox(height: 4),
-            Text('Choose a time control and jump into a game',
+            Text(ref.tr('ui.choose_tc'),
               style: GoogleFonts.outfit(
                 fontSize: 14, color: DTheme.textMutedDark,
               ),
@@ -374,7 +385,8 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                   final cantPlay = !Roles.canUser(role, 'unrated_game_creator');
 
                   return _TCButton(
-                    label: tc.label, description: cantPlay ? 'Locked' : tc.description,
+                    label: tc.label, 
+                    description: cantPlay ? ref.tr('ui.locked') : ref.tr('ui.${tc.description.toLowerCase()}'),
                     color: cantPlay ? Colors.grey : tc.color, isActive: isActive, isWaiting: isActive,
                     fontSize: labelSize,
                     onTap: cantPlay ? () {} : () => _onTimeControl(tc),
@@ -385,7 +397,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                   description: (() {
                     final role = auth?.role ?? 'guest';
                     if (!Roles.canUser(role, 'unrated_game_creator')) return 'Locked';
-                    return _showCustomForm ? '✕ Close' : 'User Choice';
+                    return _showCustomForm ? '✕ ${ref.tr('ui.close')}' : ref.tr('ui.user_choice');
                   })(),
                   color: const Color(0xFFF27813),
                   isActive: _showCustomForm,
@@ -404,7 +416,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                     final role = auth?.role ?? 'guest';
                     if (!Roles.canUser(role, 'unrated_game_player')) {
                       return _TCButton(
-                        label: 'vs Bot', description: 'Locked',
+                        label: ref.tr('ui.vs_bot'), description: ref.tr('ui.locked'),
                         color: Colors.grey, isActive: false,
                         fontSize: labelSize, onTap: () {},
                       );
@@ -412,13 +424,13 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                     final limit = Roles.getLimit(role, 'bot_games_per_24h');
                     if (limit != -1 && (auth?.botGamesPlayedToday ?? 0) >= limit) {
                       return _TCButton(
-                        label: 'vs Bot', description: 'Limit Reached',
+                        label: ref.tr('ui.vs_bot'), description: ref.tr('ui.limit_reached'),
                         color: Colors.grey, isActive: false,
                         fontSize: labelSize, onTap: () {},
                       );
                     }
                     return _TCButton(
-                      label: 'vs Bot', description: 'Play AI',
+                      label: ref.tr('ui.vs_bot'), description: ref.tr('ui.play_ai'),
                       color: const Color(0xFF8B5CF6), isActive: _showBotPanel,
                       fontSize: labelSize,
                       onTap: () => setState(() {
@@ -430,7 +442,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                 if (auth != null && lobby.tournamentsEnabled &&
                     Roles.canUser(auth.role, 'tournament_creator'))
                   _TCButton(
-                    label: 'Tourney', description: 'Create',
+                    label: ref.tr('ui.tourney'), description: ref.tr('ui.create'),
                     color: DTheme.success,
                     fontSize: labelSize,
                     onTap: () => context.go('/tournament/create'),
@@ -499,11 +511,11 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
           children: [
             Row(
               children: [
-                Text('Play vs AI',
+                Text(ref.tr('ui.play_vs_ai'),
                   style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w700, color: DTheme.textMainDark)),
                 if (limitReached) ...[
                   const Spacer(),
-                  Text('Limit reached (${playedToday}/${limit})',
+                  Text('${ref.tr('ui.limit_reached')} (${playedToday}/${limit})',
                     style: GoogleFonts.outfit(fontSize: 12, color: Colors.redAccent)),
                 ],
               ],
@@ -534,7 +546,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
             Row(mainAxisSize: MainAxisSize.min, children: [
               const Icon(Icons.warning_amber_rounded, size: 13, color: DTheme.textMutedDark),
               const SizedBox(width: 4),
-              Text('First move may take a few seconds on cold start.',
+              Text(ref.tr('ui.first_move_note'),
                 style: DTheme.bodyMuted.copyWith(fontSize: 11)),
             ]),
           ],
@@ -563,13 +575,13 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
           children: [
             Row(children: [
               Expanded(child: _LabeledNumberField(
-                label: 'MIN', value: _customMin,
+                label: ref.tr('ui.min_label'), value: _customMin,
                 onChange: (v) => setState(() => _customMin = v),
                 min: 1, max: 120,
               )),
               const SizedBox(width: 12),
               Expanded(child: _LabeledNumberField(
-                label: 'INC (s)', value: _customInc,
+                label: ref.tr('ui.inc_label'), value: _customInc,
                 onChange: (v) => setState(() => _customInc = v),
                 min: 3, max: 120,
               )),
@@ -587,7 +599,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
             ),
             const SizedBox(height: 14),
             Row(children: [
-              Expanded(child: _GradientButton(label: 'Post Request', onTap: _onCustomSubmit)),
+              Expanded(child: _GradientButton(label: ref.tr('ui.post_request'), onTap: _onCustomSubmit)),
             ]),
           ],
         ),
@@ -637,10 +649,10 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
 
   Widget _buildRequestsPanel(LobbyState lobby, AppUser? auth) {
     return _ListPanel(
-      title: 'Open Requests',
+      title: ref.tr('ui.open_requests'),
       count: lobby.gameRequests.length,
-      emptyLine1: 'No open requests yet.',
-      emptyLine2: 'Be the first!',
+      emptyLine1: ref.tr('ui.no_open_requests'),
+      emptyLine2: ref.tr('ui.be_first'),
       children: lobby.gameRequests.map((req) {
         final isMine = req.requestId == lobby.myRequestId;
         return _RequestCard(
@@ -659,10 +671,10 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
     final sorted = [...lobby.activeGames]
       ..sort((a, b) => (b.hasDisconnect ? 1 : 0) - (a.hasDisconnect ? 1 : 0));
     return _ListPanel(
-      title: 'Active Games',
+      title: ref.tr('ui.active_games'),
       count: sorted.length,
-      emptyLine1: 'No games in progress.',
-      emptyLine2: 'Start one above!',
+      emptyLine1: ref.tr('ui.no_games'),
+      emptyLine2: ref.tr('ui.start_one'),
       accentColor: DTheme.success,
       children: sorted.map((game) {
         final isMe = auth != null && (game.white == auth.id || game.black == auth.id);
@@ -686,10 +698,10 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   Widget _buildOpenTournamentsPanel(LobbyState lobby, AppUser? auth) {
     final formatLabel = {'swiss': '🏔️ Swiss', 'arena': '⚔️ Arena', 'knockout': '🥊 KO', 'round_robin': '🔄 RR'};
     return _ListPanel(
-      title: 'Open Tournaments',
+      title: ref.tr('ui.open_tournaments'),
       count: lobby.openTournaments.length,
-      emptyLine1: 'No open tournaments.',
-      emptyLine2: 'Create one!',
+      emptyLine1: ref.tr('ui.no_open_tournaments'),
+      emptyLine2: ref.tr('ui.create_one'),
       children: lobby.openTournaments.map((t) {
         final fmt = formatLabel[t.format] ?? t.format;
         return _TournamentOpenCard(
@@ -707,9 +719,9 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   Widget _buildActiveTournamentsPanel(BuildContext context, LobbyState lobby) {
     final formatLabel = {'swiss': '🏔️ Swiss', 'arena': '⚔️ Arena', 'knockout': '🥊 KO', 'round_robin': '🔄 RR'};
     return _ListPanel(
-      title: 'Active Tournaments',
+      title: ref.tr('ui.active_tournaments'),
       count: lobby.activeTournaments.length,
-      emptyLine1: 'No active tournaments.',
+      emptyLine1: ref.tr('ui.no_active_tournaments'),
       emptyLine2: '',
       accentColor: DTheme.success,
       children: lobby.activeTournaments.map((t) {
@@ -832,19 +844,25 @@ class _TCButtonState extends State<_TCButton> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(widget.label,
-                        style: GoogleFonts.outfit(
-                          fontSize: widget.fontSize,
-                          fontWeight: FontWeight.w900,
-                          color: DTheme.textMainDark, letterSpacing: -0.5,
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(widget.label,
+                          style: GoogleFonts.outfit(
+                            fontSize: widget.fontSize,
+                            fontWeight: FontWeight.w900,
+                            color: DTheme.textMainDark, letterSpacing: -0.5,
+                          ),
                         ),
                       ),
                       SizedBox(height: widget.fontSize * 0.1),
-                      Text(widget.description.toUpperCase(),
-                        style: GoogleFonts.outfit(
-                          fontSize: (widget.fontSize * 0.4).clamp(7, 14),
-                          fontWeight: FontWeight.w600,
-                          color: DTheme.textMutedDark, letterSpacing: 1.5,
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(widget.description.toUpperCase(),
+                          style: GoogleFonts.outfit(
+                            fontSize: (widget.fontSize * 0.4).clamp(7, 14),
+                            fontWeight: FontWeight.w600,
+                            color: DTheme.textMutedDark, letterSpacing: 1.5,
+                          ),
                         ),
                       ),
                       if (widget.isWaiting) ...[
@@ -951,14 +969,14 @@ class _PillToggle extends StatelessWidget {
 
 // ── Rated / Unrated toggle ────────────────────────────────────────────────────
 
-class _RatedToggle extends StatelessWidget {
+class _RatedToggle extends ConsumerWidget {
   final bool rated;
   final bool enabled;
   final ValueChanged<bool>? onChanged;
   const _RatedToggle({required this.rated, required this.enabled, this.onChanged});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     const activeColor = _kBlue;
     const ratedColor  = Color(0xFF22C55E);
     final lockedColor = Colors.white.withValues(alpha: 0.18);
@@ -996,14 +1014,14 @@ class _RatedToggle extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        pill('Unrated', !rated, activeColor, () => onChanged?.call(false)),
+        pill(ref.tr('ui.unrated'), !rated, activeColor, () => onChanged?.call(false)),
         const SizedBox(width: 6),
-        pill('Rated', rated, ratedColor, () => onChanged?.call(true)),
+        pill(ref.tr('ui.rated'), rated, ratedColor, () => onChanged?.call(true)),
         if (!enabled) ...[
           const SizedBox(width: 8),
           Icon(Icons.lock_outline, size: 13, color: Colors.white.withValues(alpha: 0.3)),
           const SizedBox(width: 4),
-          Text('registered+',
+          Text(ref.tr('ui.registered_plus'),
             style: GoogleFonts.outfit(fontSize: 11, color: Colors.white.withValues(alpha: 0.3))),
         ],
       ],
@@ -1013,15 +1031,15 @@ class _RatedToggle extends StatelessWidget {
 
 // ── Bot card ──────────────────────────────────────────────────────────────────
 
-class _BotCard extends StatefulWidget {
+class _BotCard extends ConsumerStatefulWidget {
   final BotInfo bot;
   final VoidCallback? onTap;
   const _BotCard({required this.bot, this.onTap});
   @override
-  State<_BotCard> createState() => _BotCardState();
+  ConsumerState<_BotCard> createState() => _BotCardState();
 }
 
-class _BotCardState extends State<_BotCard> {
+class _BotCardState extends ConsumerState<_BotCard> {
   bool _hovered = false;
   @override
   Widget build(BuildContext context) {
@@ -1056,7 +1074,7 @@ class _BotCardState extends State<_BotCard> {
               Row(mainAxisSize: MainAxisSize.min, children: [
                 Icon(busy ? Icons.hourglass_empty : Icons.star, size: 11, color: DTheme.textMutedDark),
                 const SizedBox(width: 3),
-                Text(busy ? 'In a game…' : (widget.bot.rating?.toStringAsFixed(0) ?? '1500'),
+                Text(busy ? ref.tr('ui.in_game') : (widget.bot.rating?.toStringAsFixed(0) ?? '1500'),
                   style: DTheme.bodyMuted),
               ]),
             ],
@@ -1181,7 +1199,7 @@ class _ListPanel extends StatelessWidget {
 
 // ── Game request card ─────────────────────────────────────────────────────────
 
-class _RequestCard extends StatefulWidget {
+class _RequestCard extends ConsumerStatefulWidget {
   final String  username;
   final String  tc;
   final String  timeAgo;
@@ -1194,10 +1212,10 @@ class _RequestCard extends StatefulWidget {
     required this.isMine, this.onAccept, this.acceptLabel = 'Accept',
   });
   @override
-  State<_RequestCard> createState() => _RequestCardState();
+  ConsumerState<_RequestCard> createState() => _RequestCardState();
 }
 
-class _RequestCardState extends State<_RequestCard> {
+class _RequestCardState extends ConsumerState<_RequestCard> {
   bool _hovered = false;
   @override
   Widget build(BuildContext context) {
@@ -1240,11 +1258,11 @@ class _RequestCardState extends State<_RequestCard> {
                     color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Text('Your request',
+                  child: Text(ref.tr('ui.your_request'),
                     style: TextStyle(color: const Color(0xFFF59E0B), fontSize: 11, fontWeight: FontWeight.w600)),
                 )
               else if (widget.onAccept != null)
-                _MiniGradBtn(label: widget.acceptLabel, onTap: widget.onAccept!),
+                _MiniGradBtn(label: widget.acceptLabel == 'Accept' ? ref.tr('ui.accept') : widget.acceptLabel, onTap: widget.onAccept!),
             ],
           ),
         ),
@@ -1255,7 +1273,7 @@ class _RequestCardState extends State<_RequestCard> {
 
 // ── Active game card ──────────────────────────────────────────────────────────
 
-class _ActiveGameCard extends StatefulWidget {
+class _ActiveGameCard extends ConsumerStatefulWidget {
   final String  whiteName;
   final String  blackName;
   final String  tc;
@@ -1272,14 +1290,14 @@ class _ActiveGameCard extends StatefulWidget {
     required this.onAction, this.label = '',
   });
   @override
-  State<_ActiveGameCard> createState() => _ActiveGameCardState();
+  ConsumerState<_ActiveGameCard> createState() => _ActiveGameCardState();
 }
 
-class _ActiveGameCardState extends State<_ActiveGameCard> {
+class _ActiveGameCardState extends ConsumerState<_ActiveGameCard> {
   bool _hovered = false;
   @override
   Widget build(BuildContext context) {
-    final btnLabel = widget.label.isNotEmpty ? widget.label : (widget.isMe ? '▶ Rejoin' : 'Watch');
+    final btnLabel = widget.label.isNotEmpty ? widget.label : (widget.isMe ? '▶ ${ref.tr('ui.rejoin')}' : ref.tr('ui.watch'));
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: MouseRegion(
@@ -1305,7 +1323,7 @@ class _ActiveGameCardState extends State<_ActiveGameCard> {
                 Row(mainAxisSize: MainAxisSize.min, children: [
                   const Icon(Icons.bolt, size: 11, color: Color(0xFFFBBF24)),
                   const SizedBox(width: 4),
-                  Text('Reconnecting…',
+                  Text(ref.tr('ui.reconnecting'),
                     style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 11, fontWeight: FontWeight.w600)),
                 ]),
               Text(
@@ -1313,7 +1331,7 @@ class _ActiveGameCardState extends State<_ActiveGameCard> {
                 style: DTheme.body.copyWith(fontWeight: FontWeight.w600, fontSize: 13),
               ),
               const SizedBox(height: 2),
-              Text('${widget.tc} · Move ${widget.moveCount}', style: DTheme.bodyMuted.copyWith(fontSize: 11)),
+              Text('${widget.tc} · ${ref.tr('ui.move')} ${widget.moveCount}', style: DTheme.bodyMuted.copyWith(fontSize: 11)),
             ])),
             _MiniGreenBtn(label: btnLabel, isMe: widget.isMe, onTap: widget.onAction),
           ]),
@@ -1521,7 +1539,7 @@ class _BgToggleState extends State<_BgToggle> {
 }
 // ── Open tournament card (View + optional Join) ───────────────────────────────
 
-class _TournamentOpenCard extends StatefulWidget {
+class _TournamentOpenCard extends ConsumerStatefulWidget {
   final String  username;
   final String  tc;
   final String  info;
@@ -1532,10 +1550,10 @@ class _TournamentOpenCard extends StatefulWidget {
     required this.onView, this.onJoin,
   });
   @override
-  State<_TournamentOpenCard> createState() => _TournamentOpenCardState();
+  ConsumerState<_TournamentOpenCard> createState() => _TournamentOpenCardState();
 }
 
-class _TournamentOpenCardState extends State<_TournamentOpenCard> {
+class _TournamentOpenCardState extends ConsumerState<_TournamentOpenCard> {
   bool _hovered = false;
   @override
   Widget build(BuildContext context) {
@@ -1564,11 +1582,11 @@ class _TournamentOpenCardState extends State<_TournamentOpenCard> {
               Text(widget.info, style: DTheme.bodyMuted.copyWith(fontSize: 11)),
             ])),
             // View button — always present
-            _MiniGradBtn(label: 'View', onTap: widget.onView),
+            _MiniGradBtn(label: ref.tr('ui.view'), onTap: widget.onView),
             // Join button — only for logged-in non-participant users
             if (widget.onJoin != null) ...[
               const SizedBox(width: 6),
-              _MiniGreenBtn(label: 'Join', isMe: false, onTap: widget.onJoin!),
+              _MiniGreenBtn(label: ref.tr('ui.join'), isMe: false, onTap: widget.onJoin!),
             ],
           ]),
         ),
@@ -1579,22 +1597,22 @@ class _TournamentOpenCardState extends State<_TournamentOpenCard> {
 
 // ── Legal footer (about · privacy · terms · legal notice) ───────────────────
 
-class _LegalFooter extends StatelessWidget {
-  const _LegalFooter();
+class _LegalFooter extends ConsumerWidget {
+  const _LegalFooter({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Wrap(
       alignment: WrapAlignment.end,
       spacing: 0,
       children: [
-        _FooterLink(label: 'about',        onTap: () => _showAbout(context)),
+        _FooterLink(label: ref.tr('ui.about'),        onTap: () => _showAbout(context)),
         _FooterSep(),
-        _FooterLink(label: 'privacy',      onTap: () => PrivacyDialog.show(context)),
+        _FooterLink(label: ref.tr('ui.privacy'),      onTap: () => PrivacyDialog.show(context)),
         _FooterSep(),
-        _FooterLink(label: 'terms',        onTap: () => TermsDialog.show(context)),
+        _FooterLink(label: ref.tr('ui.terms'),        onTap: () => TermsDialog.show(context)),
         _FooterSep(),
-        _FooterLink(label: 'legal notice', onTap: () => LegalNoticeDialog.show(context)),
+        _FooterLink(label: ref.tr('ui.legal_notice'), onTap: () => LegalNoticeDialog.show(context)),
       ],
     );
   }
@@ -1609,11 +1627,11 @@ class _LegalFooter extends StatelessWidget {
 
 // ── About dialog ──────────────────────────────────────────────────────────────
 
-class _AboutDialog extends StatelessWidget {
+class _AboutDialog extends ConsumerWidget {
   const _AboutDialog();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     const buildTs = String.fromEnvironment('BUILD_TIMESTAMP', defaultValue: 'dev');
     return AlertDialog(
       backgroundColor: DTheme.cardBgDark,
@@ -1622,7 +1640,7 @@ class _AboutDialog extends StatelessWidget {
       contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
       title: Row(children: [
         Expanded(
-          child: Text('About Dedal',
+          child: Text(ref.tr('ui.about_dedal'),
             style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold, color: DTheme.textMainDark)),
         ),
         IconButton(
@@ -1635,17 +1653,17 @@ class _AboutDialog extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('A high-strategy polygonal board game.',
+          Text(ref.tr('ui.tagline'),
             style: GoogleFonts.outfit(fontSize: 13, color: DTheme.textMainDark.withValues(alpha: 0.85), height: 1.6)),
           const SizedBox(height: 16),
-          Text('Contact', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: DTheme.primary)),
+          Text(ref.tr('ui.contact'), style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: DTheme.primary)),
           const SizedBox(height: 4),
           Text('dedalthegame@protonmail.com',
             style: GoogleFonts.outfit(fontSize: 13, color: DTheme.textMainDark.withValues(alpha: 0.85))),
           const SizedBox(height: 16),
           Divider(color: Colors.white12, height: 1),
           const SizedBox(height: 12),
-          Text('Build', style: GoogleFonts.outfit(fontSize: 11, color: DTheme.textMutedDark, letterSpacing: 1.5, fontWeight: FontWeight.w600)),
+          Text(ref.tr('ui.build'), style: GoogleFonts.outfit(fontSize: 11, color: DTheme.textMutedDark, letterSpacing: 1.5, fontWeight: FontWeight.w600)),
           const SizedBox(height: 6),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
@@ -1664,7 +1682,7 @@ class _AboutDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: Text('Close', style: GoogleFonts.outfit(color: DTheme.primary, fontWeight: FontWeight.w600)),
+          child: Text(ref.tr('ui.close'), style: GoogleFonts.outfit(color: DTheme.primary, fontWeight: FontWeight.w600)),
         ),
       ],
     );

@@ -14,6 +14,7 @@ import 'widgets/clock_widget.dart';
 import 'widgets/action_buttons.dart';
 import 'widgets/game_over_overlay.dart';
 import '../../providers/bg_provider.dart';
+import '../../providers/translations_provider.dart';
 
 // ── Color themes — mirrors legacy COLOR_THEMES in GameBoard.jsx ───────────────
 
@@ -438,9 +439,9 @@ class _GameBoardState extends ConsumerState<GameBoard> {
                 border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
               ),
               child: Text(
-                gs.phase == 'GameOver' ? 'END'
-                    : gs.phase == 'Setup' ? 'SETUP'
-                    : 'PLAY',
+                gs.phase == 'GameOver' ? ref.tr('ui.phase_end')
+                    : gs.phase == 'Setup' ? ref.tr('ui.phase_setup')
+                    : ref.tr('ui.phase_play'),
                 style: GoogleFonts.outfit(
                   fontSize: 9, color: Colors.white38,
                   fontWeight: FontWeight.w700, letterSpacing: 1),
@@ -800,7 +801,7 @@ class _GameBoardState extends ConsumerState<GameBoard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('Move History (${moves.length})',
+          Text('${ref.tr('ui.move_history')} (${moves.length})',
             style: GoogleFonts.outfit(
               fontSize: 10, color: Colors.white38, fontWeight: FontWeight.w600,
               letterSpacing: 0.5)),
@@ -874,11 +875,11 @@ class _GameBoardState extends ConsumerState<GameBoard> {
 
 // ── Disconnect banner ──────────────────────────────────────────────────────────
 
-class _DisconnectBanner extends StatelessWidget {
+class _DisconnectBanner extends ConsumerWidget {
   const _DisconnectBanner();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -890,8 +891,8 @@ class _DisconnectBanner extends StatelessWidget {
         children: [
           const Icon(Icons.wifi_off, color: Colors.white, size: 16),
           const SizedBox(width: 8),
-          const Expanded(child: Text('Connection lost — reconnecting…',
-              style: TextStyle(color: Colors.white, fontSize: 12))),
+          Expanded(child: Text(ref.tr('ui.connection_lost'),
+              style: const TextStyle(color: Colors.white, fontSize: 12))),
         ],
       ),
     );
@@ -1044,25 +1045,25 @@ class _GameBgToggleState extends State<_GameBgToggle> {
 
 // ── Spectator Banner ─────────────────────────────────────────────────────────
 
-class _SpectatorBanner extends StatelessWidget {
+class _SpectatorBanner extends ConsumerWidget {
   final String? tournamentId;
   const _SpectatorBanner({this.tournamentId});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         if (tournamentId != null) ...[
           _NavBtn(
-            label: '← Tournament',
+            label: '← ${ref.tr('ui.tournament')}',
             onTap: () => context.go('/tournament/$tournamentId'),
             isPrimary: true,
           ),
           const SizedBox(width: 8),
         ],
         _NavBtn(
-          label: tournamentId != null ? 'Lobby' : '← Lobby',
+          label: '← ${ref.tr('ui.lobby')}',
           onTap: () => context.go('/'),
           isPrimary: false,
         ),

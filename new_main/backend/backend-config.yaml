@@ -56,3 +56,4 @@ PG_PASSWORD: "TY-rre__U@345"
 # Games older than GAME_RETENTION_DAYS are exported to /mnt/db as Parquet files.
 # Scheduling is controlled by the cron runner (parquet_export job, default 20:00 UTC).
 GAME_RETENTION_DAYS: "90"
+SHOW_SUBSCRIBE_BUTTON: "false"

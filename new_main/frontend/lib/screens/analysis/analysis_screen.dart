@@ -18,6 +18,8 @@ import '../game/widgets/board_widget.dart';
 import '../../providers/bg_provider.dart';
 import '../game/widgets/clock_widget.dart';
 import '../../core/file_utils.dart';
+import '../../providers/translations_provider.dart';
+import '../../widgets/lobby_back_button.dart';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -458,21 +460,14 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08)))),
       child: Row(children: [
-        GestureDetector(
+        LobbyBackButton(
           onTap: () {
-            // Works whether we arrived via GoRouter OR plain Navigator.push
-            // (e.g. from the admin panel which has no GoRouter ancestor).
             if (Navigator.of(context).canPop()) {
               Navigator.of(context).pop();
             } else {
               context.go('/');
             }
           },
-          child: Row(children: [
-            const Icon(Icons.arrow_back_ios_new, color: Colors.white70, size: 14),
-            const SizedBox(width: 4),
-            Text('Back', style: GoogleFonts.outfit(color: Colors.white70, fontSize: 13)),
-          ]),
         ),
         const SizedBox(width: 16),
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -490,9 +485,9 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
         if (_record != null)
           _TopBtn('⬇ Download', () => _downloadRecord()),
         const SizedBox(width: 8),
-        _TopBtn('📂 Load File', () => _pickFile()),
+        _TopBtn('📂 ${ref.tr('ui.load_file')}', () => _pickFile()),
         const SizedBox(width: 8),
-        _TopBtn('📋 Paste', () => _showLoadDialog()),
+        _TopBtn('📋 ${ref.tr('ui.paste')}', () => _showLoadDialog()),
       ]),
     );
   }
@@ -537,18 +532,18 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
           controller: ctrl,
           maxLines: null, expands: true,
           style: const TextStyle(color: Colors.white, fontSize: 12),
-          decoration: const InputDecoration(
-            hintText: 'Paste game JSON here or click the folder icon to browse…',
-            hintStyle: TextStyle(color: Colors.white38),
+          decoration: InputDecoration(
+            hintText: ref.tr('ui.paste_json_hint'),
+            hintStyle: const TextStyle(color: Colors.white38),
             border: InputBorder.none),
         )),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text('Cancel', style: GoogleFonts.outfit(color: Colors.white54))),
+          child: Text(ref.tr('ui.cancel'), style: GoogleFonts.outfit(color: Colors.white54))),
         TextButton(
           onPressed: () { Navigator.pop(context); _tryLoadJson(ctrl.text.trim()); },
-          child: Text('Load', style: GoogleFonts.outfit(color: DTheme.primary, fontWeight: FontWeight.w700))),
+          child: Text(ref.tr('ui.load'), style: GoogleFonts.outfit(color: DTheme.primary, fontWeight: FontWeight.w700))),
       ],
     ));
   }
@@ -573,10 +568,10 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             const Text('📂', style: TextStyle(fontSize: 48)),
             const SizedBox(height: 16),
-            Text('Load a Dedal game JSON', style: GoogleFonts.outfit(
+            Text(ref.tr('ui.load_dedal_json'), style: GoogleFonts.outfit(
               fontSize: 18, fontWeight: FontWeight.w600, color: DTheme.textMainDark)),
             const SizedBox(height: 8),
-            Text('Click to browse your files · keyboard: ← → Space',
+            Text(ref.tr('ui.click_to_browse'),
               style: GoogleFonts.outfit(color: Colors.white38, fontSize: 13)),
           ]),
         ),

@@ -1,13 +1,16 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme.dart';
 import '../../../models/models.dart';
+import '../../../providers/translations_provider.dart';
 import '../../../widgets/glass_panel.dart';
+import '../../../widgets/lobby_back_button.dart';
 
-class GameOverOverlay extends StatelessWidget {
+class GameOverOverlay extends ConsumerWidget {
   final String gameId;
   final GameState gameState;
   final GameOverInfo? gameOverInfo;
@@ -33,7 +36,7 @@ class GameOverOverlay extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final winner = gameOverInfo?.winner;
     final reason = gameOverInfo?.reason ?? '';
 
@@ -53,24 +56,31 @@ class GameOverOverlay extends StatelessWidget {
     final Color headlineColor;
     if (isSpectator) {
       icon = isDraw ? Icons.handshake_outlined : Icons.flag_outlined;
-      headline = isDraw ? 'Draw!'
-          : winner != null ? '${winner == "white" ? "White" : "Black"} Wins'
-          : 'Game Over';
+      headline = isDraw
+          ? ref.tr('ui.draw')
+          : winner != null
+              ? (winner == 'white' ? ref.tr('ui.white_wins') : ref.tr('ui.black_wins'))
+              : ref.tr('ui.game_over');
       headlineColor = isDraw ? DTheme.accent : DTheme.primary;
     } else {
       icon = isDraw
           ? Icons.handshake_outlined
           : (isWinner ? Icons.emoji_events : Icons.sentiment_very_dissatisfied);
       headline = isDraw
-          ? 'Draw!'
-          : (isWinner ? 'You Win!' : (winner != null ? '${winner == "white" ? "White" : "Black"} Wins' : 'Game Over'));
+          ? ref.tr('ui.draw')
+          : isWinner
+              ? ref.tr('ui.you_win')
+              : (winner != null
+                  ? (winner == 'white' ? ref.tr('ui.white_wins') : ref.tr('ui.black_wins'))
+                  : ref.tr('ui.game_over'));
       headlineColor = isWinner ? DTheme.success : (isDraw ? DTheme.accent : DTheme.danger);
     }
 
     // Reason subtitle — neutral for spectators (no "you" references)
     final sub = isSpectator
-        ? _reasonLabelNeutral(reason)
-        : _reasonLabel(reason, isWinner);
+        ? _reasonLabelNeutral(reason, ref)
+        : _reasonLabel(reason, isWinner, ref);
+
     // Resolve the winner's display name from GameState
     final winnerName = winner == 'white'
         ? (gameState.whiteName ?? 'White')
@@ -104,41 +114,36 @@ class GameOverOverlay extends StatelessWidget {
                 // Rating deltas
                 if (ratingDelta != null) ...[
                   const SizedBox(height: 16),
-                  _buildRatingRow(ratingDelta!),
+                  _buildRatingRow(ratingDelta!, ref),
                 ],
 
                 const SizedBox(height: 24),
 
                 // Buttons
-                Row(
-                  mainAxisSize: MainAxisSize.min,
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 10,
+                  runSpacing: 8,
                   children: [
-                    ElevatedButton.icon(
-                      onPressed: onLobby,
-                      icon: const Icon(Icons.home_outlined, size: 16),
-                      label: const Text('Lobby'),
-                    ),
+                    LobbyBackButton(onTap: onLobby),
                     if (tournamentId != null) ...[
-                      const SizedBox(width: 10),
                       OutlinedButton(
                         onPressed: () => context.go('/tournament/$tournamentId'),
-                        child: const Text('Tournament'),
+                        child: Text(ref.tr('ui.tournament')),
                       ),
                     ],
-                    const SizedBox(width: 10),
                     OutlinedButton.icon(
                       onPressed: () {
                         final record = _buildRecord();
                         context.go('/analysis', extra: record);
                       },
                       icon: const Icon(Icons.replay, size: 16),
-                      label: const Text('Review'),
+                      label: Text(ref.tr('ui.review_game')),
                     ),
-                    const SizedBox(width: 10),
                     OutlinedButton.icon(
-                      onPressed: () => _showDownload(context),
+                      onPressed: () => _showDownload(context, ref),
                       icon: const Icon(Icons.download, size: 16),
-                      label: const Text('Download'),
+                      label: Text(ref.tr('ui.download')),
                     ),
                   ],
                 ),
@@ -150,17 +155,17 @@ class GameOverOverlay extends StatelessWidget {
     );
   }
 
-  Widget _buildRatingRow(RatingDelta delta) {
+  Widget _buildRatingRow(RatingDelta delta, WidgetRef ref) {
     return Column(
       children: [
-        Text('Rating Changes', style: DTheme.label.copyWith(color: DTheme.textMainDark)),
+        Text(ref.tr('ui.rating_changes'), style: DTheme.label.copyWith(color: DTheme.textMainDark)),
         const SizedBox(height: 6),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _ratingDeltaChip('White', Colors.white, delta.whiteRatingOld, delta.whiteRating),
+            _ratingDeltaChip(ref.tr('ui.white'), Colors.white, delta.whiteRatingOld, delta.whiteRating),
             const SizedBox(width: 12),
-            _ratingDeltaChip('Black', const Color(0xFF444444), delta.blackRatingOld, delta.blackRating),
+            _ratingDeltaChip(ref.tr('ui.black'), const Color(0xFF444444), delta.blackRatingOld, delta.blackRating),
           ],
         ),
       ],
@@ -185,31 +190,31 @@ class GameOverOverlay extends StatelessWidget {
     );
   }
 
-  String _reasonLabel(String reason, bool isWinner) {
+  String _reasonLabel(String reason, bool isWinner, WidgetRef ref) {
     switch (reason) {
       case 'time':
-        return isWinner ? 'Victory on time! Your speed was superior.' : 'Ran out of time. The clock is a cruel master.';
+        return isWinner ? ref.tr('ui.reason_time_win') : ref.tr('ui.reason_time_lose');
       case 'resign':
-        return isWinner ? 'Opponent has surrendered to your might.' : 'You have chosen to withdraw from the field.';
+        return isWinner ? ref.tr('ui.reason_resign_win') : ref.tr('ui.reason_resign_lose');
       case 'goddess_captured':
-        return isWinner ? 'Victory! The enemy Goddess has been captured.' : 'Your Goddess has been captured. Defeat.';
+        return isWinner ? ref.tr('ui.reason_goddess_win') : ref.tr('ui.reason_goddess_lose');
       case 'aborted':
-        return 'Game aborted (tournament ended)';
+        return ref.tr('ui.reason_aborted');
       case 'draw':
-        return 'A hard-fought draw. Peace is restored.';
+        return ref.tr('ui.reason_draw');
       default:
         return reason;
     }
   }
 
-  String _reasonLabelNeutral(String reason) {
+  String _reasonLabelNeutral(String reason, WidgetRef ref) {
     switch (reason) {
-      case 'time':         return 'Victory on time.';
-      case 'resign':       return 'One side has resigned.';
-      case 'goddess_captured': return 'The Goddess has been captured.';
-      case 'aborted':      return 'Game aborted (tournament ended)';
-      case 'draw':         return 'A hard-fought draw.';
-      default:             return reason;
+      case 'time':             return ref.tr('ui.reason_time_neutral');
+      case 'resign':           return ref.tr('ui.reason_resign_neutral');
+      case 'goddess_captured': return ref.tr('ui.reason_goddess_neutral');
+      case 'aborted':          return ref.tr('ui.reason_aborted_neutral');
+      case 'draw':             return ref.tr('ui.reason_draw_neutral');
+      default:                 return reason;
     }
   }
 
@@ -227,11 +232,11 @@ class GameOverOverlay extends StatelessWidget {
     };
   }
 
-  void _showDownload(BuildContext context) {
+  void _showDownload(BuildContext context, WidgetRef ref) {
     final json = jsonEncode(_buildRecord());
     showDialog(context: context, builder: (_) => AlertDialog(
       backgroundColor: const Color(0xFF1E293B),
-      title: Text('Game JSON', style: GoogleFonts.outfit(color: Colors.white)),
+      title: Text(ref.tr('ui.game_json'), style: GoogleFonts.outfit(color: Colors.white)),
       content: SizedBox(
         width: 500, height: 280,
         child: SelectableText(json,
@@ -242,11 +247,11 @@ class GameOverOverlay extends StatelessWidget {
             Clipboard.setData(ClipboardData(text: json));
             Navigator.pop(context);
           },
-          child: Text('Copy to clipboard',
+          child: Text(ref.tr('ui.copy_clipboard'),
             style: GoogleFonts.outfit(color: DTheme.primary))),
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text('Close',
+          child: Text(ref.tr('ui.close'),
             style: GoogleFonts.outfit(color: Colors.white54))),
       ],
     ));

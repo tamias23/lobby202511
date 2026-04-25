@@ -3,10 +3,14 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme.dart';
 import '../../widgets/glass_panel.dart';
+import '../../widgets/ping_indicator.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../providers/translations_provider.dart';
+import '../../providers/locale_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/ping_provider.dart';
+import '../../providers/server_config_provider.dart';
 import '../../core/socket_service.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -31,7 +35,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final auth = authState.value;
 
     if (auth == null) {
-      return const Scaffold(body: Center(child: Text('Not logged in')));
+      return Scaffold(body: Center(child: Text(ref.tr('ui.not_logged_in'))));
     }
 
 
@@ -44,7 +48,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           icon: const Icon(Icons.arrow_back, color: DTheme.textMainDark),
           onPressed: () => context.pop(),
         ),
-        title: Text('User Profile', style: GoogleFonts.outfit(color: DTheme.textMainDark, fontWeight: FontWeight.bold)),
+        title: Text(ref.tr('ui.user_profile'), style: GoogleFonts.outfit(color: DTheme.textMainDark, fontWeight: FontWeight.bold)),
       ),
       body: Center(
         child: SingleChildScrollView(
@@ -70,13 +74,43 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      auth.role.toUpperCase(),
+                      ref.tr('ui.role_${auth.role}').toUpperCase(),
                       style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: auth.role == 'guest' ? Colors.grey : DTheme.success),
                     ),
                   ),
 
                   const SizedBox(height: 12),
-                  _PingIndicator(),
+                  const PingIndicator(),
+                  
+                  const SizedBox(height: 24),
+                  
+                  // Language Selection
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(ref.tr('ui.language') + ':', style: GoogleFonts.outfit(color: DTheme.textMutedDark)),
+                      const SizedBox(width: 12),
+                      Theme(
+                        data: Theme.of(context).copyWith(canvasColor: DTheme.cardBgDark),
+                        child: DropdownButton<String>(
+                          value: ref.watch(localeProvider).languageCode,
+                          underline: const SizedBox(),
+                          icon: const Icon(Icons.language, size: 16, color: DTheme.primary),
+                          style: GoogleFonts.outfit(color: DTheme.textMainDark, fontSize: 14, fontWeight: FontWeight.bold),
+                          items: const [
+                            DropdownMenuItem(value: 'en', child: Text('English')),
+                            DropdownMenuItem(value: 'fr', child: Text('Français')),
+                            DropdownMenuItem(value: 'es', child: Text('Español')),
+                            DropdownMenuItem(value: 'it', child: Text('Italiano')),
+                            DropdownMenuItem(value: 'de', child: Text('Deutsch')),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) ref.read(localeProvider.notifier).setLocale(val);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
                   
                   const SizedBox(height: 32),
                   
@@ -94,16 +128,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
-                            _buildStat('Bullet', auth.ratingBullet?.toStringAsFixed(0) ?? '1500', small: true),
-                            _buildStat('Blitz', auth.ratingBlitz?.toStringAsFixed(0) ?? '1500', small: true),
+                            _buildStat(ref.tr('ui.bullet'), auth.ratingBullet?.toStringAsFixed(0) ?? '1500', small: true),
+                            _buildStat(ref.tr('ui.blitz'), auth.ratingBlitz?.toStringAsFixed(0) ?? '1500', small: true),
                           ],
                         ),
                         const SizedBox(height: 16),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
-                            _buildStat('Rapid', auth.ratingRapid?.toStringAsFixed(0) ?? '1500', small: true),
-                            _buildStat('Classical', auth.ratingClassical?.toStringAsFixed(0) ?? '1500', small: true),
+                            _buildStat(ref.tr('ui.rapid'), auth.ratingRapid?.toStringAsFixed(0) ?? '1500', small: true),
+                            _buildStat(ref.tr('ui.classical'), auth.ratingClassical?.toStringAsFixed(0) ?? '1500', small: true),
                           ],
                         ),
                       ],
@@ -116,15 +150,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      _buildStat('Last Rating', auth.rating?.toStringAsFixed(0) ?? 'N/A'),
-                      _buildStat('Rated Today', auth.ratedGamesPlayedToday.toString()),
-                      _buildStat('Bots Today', auth.botGamesPlayedToday.toString()),
+                      _buildStat(ref.tr('ui.last_rating'), auth.rating?.toStringAsFixed(0) ?? 'N/A'),
+                      _buildStat(ref.tr('ui.rated_today'), auth.ratedGamesPlayedToday.toString()),
+                      _buildStat(ref.tr('ui.bots_today'), auth.botGamesPlayedToday.toString()),
                     ],
                   ),
                                     const SizedBox(height: 32),
                   
                   // Subscription Section
-                  if (auth.role != 'guest' && !auth.isSubscriber)
+                  if (ref.watch(serverConfigProvider).asData?.value.showSubscribeButton ?? true) ...[  
+                    if (auth.role != 'guest' && !auth.isSubscriber)
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(20),
@@ -138,9 +173,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                       child: Column(
                         children: [
-                          Text('Unlock Premium Features', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                          Text(ref.tr('ui.unlock_premium'), style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
                           const SizedBox(height: 8),
-                          Text('Play unlimited rated & bot games.', style: DTheme.bodyMuted, textAlign: TextAlign.center),
+                          Text(ref.tr('ui.play_unlimited'), style: DTheme.bodyMuted, textAlign: TextAlign.center),
                           const SizedBox(height: 16),
                           ElevatedButton(
                             style: ElevatedButton.styleFrom(
@@ -150,15 +185,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                             ),
                             onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Subscription coming soon!')));
+                               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ref.tr('ui.sub_coming_soon'))));
                             },
-                            child: const Text('Subscribe Now', style: TextStyle(fontWeight: FontWeight.bold)),
+                             child: Text(ref.tr('ui.subscribe_now'), style: const TextStyle(fontWeight: FontWeight.bold)),
                           ),
                         ],
                       ),
                     ),
                   
-                  if (auth.isSubscriber)
+                    if (auth.isSubscriber)
                     Container(
                       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
                       decoration: BoxDecoration(
@@ -171,10 +206,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         children: [
                           const Icon(Icons.star, color: Colors.amber, size: 24),
                           const SizedBox(width: 12),
-                          Text('Active Subscriber', style: GoogleFonts.outfit(color: Colors.amber, fontSize: 16, fontWeight: FontWeight.bold)),
+                           Text(ref.tr('ui.active_subscriber'), style: GoogleFonts.outfit(color: Colors.amber, fontSize: 16, fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
+                  ], // end showSubscribeButton
                   
                   const SizedBox(height: 32),
                   
@@ -191,7 +227,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         icon: const Icon(Icons.history),
-                        label: const Text('My Games'),
+                        label: Text(ref.tr('ui.my_games')),
                         onPressed: () => context.push('/profile/games'),
                       ),
                     ),
@@ -208,7 +244,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         icon: const Icon(Icons.admin_panel_settings),
-                        label: const Text('Admin Dashboard'),
+                        label: Text(ref.tr('ui.admin_dashboard') != 'ui.admin_dashboard' ? ref.tr('ui.admin_dashboard') : 'Admin Dashboard'),
                         onPressed: () => context.push('/admin/jobs'),
                       ),
                     ),
@@ -224,7 +260,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         icon: const Icon(Icons.manage_accounts),
-                        label: const Text('User Management'),
+                        label: Text(ref.tr('ui.user_management') != 'ui.user_management' ? ref.tr('ui.user_management') : 'User Management'),
                         onPressed: () => context.push('/admin/users'),
                       ),
                     ),
@@ -241,7 +277,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                       icon: const Icon(Icons.logout),
-                      label: const Text('Logout'),
+                      label: Text(ref.tr('ui.logout') != 'ui.logout' ? ref.tr('ui.logout') : 'Logout'),
                       onPressed: () {
                         ref.read(authProvider.notifier).logout();
                         context.go('/');
@@ -264,7 +300,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                       icon: const Icon(Icons.delete_forever_outlined),
-                      label: const Text('Delete Account'),
+                      label: Text(ref.tr('ui.delete_account')),
                       onPressed: () => _confirmDeleteAccount(context, auth.username),
                     ),
                   ),
@@ -301,21 +337,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         title: Row(children: [
           const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 28),
           const SizedBox(width: 12),
-          Text('Delete Account', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
+          Text(ref.tr('ui.delete_account'), style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
         ]),
         content: Text(
-          'This will permanently delete your account and all your data. This action cannot be undone.',
+          ref.tr('ui.permanently_delete_warning'),
           style: GoogleFonts.outfit(color: Colors.white70, fontSize: 14),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text('Cancel', style: GoogleFonts.outfit(color: Colors.white54)),
+            child: Text(ref.tr('ui.cancel'), style: GoogleFonts.outfit(color: Colors.white54)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('Continue', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+            child: Text(ref.tr('ui.continue_btn'), style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -330,16 +366,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         builder: (ctx, setState) => AlertDialog(
           backgroundColor: const Color(0xFF1E1E2E),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text('Confirm Deletion', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
+          title: Text(ref.tr('ui.confirm_deletion'), style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text.rich(
                 TextSpan(children: [
-                  TextSpan(text: 'Type your username ', style: GoogleFonts.outfit(color: Colors.white70, fontSize: 14)),
+                  TextSpan(text: '${ref.tr('ui.type_username_to_confirm')} ', style: GoogleFonts.outfit(color: Colors.white70, fontSize: 14)),
                   TextSpan(text: username, style: GoogleFonts.outfit(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 14)),
-                  TextSpan(text: ' to confirm:', style: GoogleFonts.outfit(color: Colors.white70, fontSize: 14)),
+                  TextSpan(text: ':', style: GoogleFonts.outfit(color: Colors.white70, fontSize: 14)),
                 ]),
               ),
               const SizedBox(height: 16),
@@ -366,7 +402,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text('Cancel', style: GoogleFonts.outfit(color: Colors.white54)),
+              child: Text(ref.tr('ui.cancel'), style: GoogleFonts.outfit(color: Colors.white54)),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
@@ -374,7 +410,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 foregroundColor: Colors.white,
               ),
               onPressed: confirmCtrl.text == username ? () => Navigator.of(ctx).pop(true) : null,
-              child: Text('Delete Forever', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+              child: Text(ref.tr('ui.delete_forever'), style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -390,87 +426,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Deletion failed: $e'), backgroundColor: Colors.redAccent),
+          SnackBar(content: Text('${ref.tr('ui.no_data')} : $e'), backgroundColor: Colors.redAccent),
         );
       }
     }
-  }
-}
-
-// ── Ping indicator ────────────────────────────────────────────────────────────
-
-class _PingIndicator extends ConsumerWidget {
-  const _PingIndicator();
-
-  Color _pingColor(int ms) {
-    if (ms < 80)  return const Color(0xFF00E676);  // green
-    if (ms < 200) return Colors.amber;
-    return Colors.redAccent;
-  }
-
-  String _pingLabel(int ms) {
-    if (ms < 80)  return 'Excellent';
-    if (ms < 200) return 'Good';
-    return 'Poor';
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final latency = ref.watch(latencyProvider);
-
-    return latency.when(
-      loading: () => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(
-            width: 10, height: 10,
-            child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white38),
-          ),
-          const SizedBox(width: 6),
-          Text('Measuring ping…',
-              style: GoogleFonts.outfit(fontSize: 12, color: Colors.white38)),
-        ],
-      ),
-      error: (_, __) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.wifi_off, size: 14, color: Colors.redAccent),
-          const SizedBox(width: 6),
-          Text('No connection', style: GoogleFonts.outfit(fontSize: 12, color: Colors.redAccent)),
-        ],
-      ),
-      data: (ms) {
-        final color = _pingColor(ms);
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 400),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: color.withValues(alpha: 0.35)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Signal bars icon
-              Icon(Icons.network_ping, size: 14, color: color),
-              const SizedBox(width: 6),
-              Text(
-                '$ms ms',
-                style: GoogleFonts.outfit(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: color),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                '· ${_pingLabel(ms)}',
-                style: GoogleFonts.outfit(fontSize: 12, color: color.withValues(alpha: 0.75)),
-              ),
-            ],
-          ),
-        );
-      },
-    );
   }
 }

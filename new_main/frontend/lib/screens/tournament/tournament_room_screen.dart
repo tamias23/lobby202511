@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../core/file_utils.dart';
 import '../../providers/socket_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/lobby_back_button.dart';
 
 const _formatLabels = {
   'swiss':       '🏔️ Swiss',
@@ -212,14 +213,7 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          GestureDetector(
-            onTap: () => context.go('/'),
-            child: Row(children: [
-              const Icon(Icons.arrow_back_ios_new, color: Colors.white70, size: 14),
-              const SizedBox(width: 4),
-              Text('Lobby', style: GoogleFonts.outfit(color: Colors.white70, fontSize: 13)),
-            ]),
-          ),
+          const LobbyBackButton(),
           const SizedBox(width: 12),
           Expanded(child: Text(
             t['name'] as String? ?? t['id'] as String? ?? 'Tournament',
