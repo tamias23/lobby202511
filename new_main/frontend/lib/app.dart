@@ -25,78 +25,78 @@ final _router = GoRouter(
   routes: [
     GoRoute(
       path: '/',
-      builder: (context, state) => const LobbyScreen(),
+      pageBuilder: (context, state) => const NoTransitionPage(child: LobbyScreen()),
     ),
     GoRoute(
       path: '/login',
-      builder: (context, state) => const LoginScreen(),
+      pageBuilder: (context, state) => const NoTransitionPage(child: LoginScreen()),
     ),
     GoRoute(
       path: '/register',
-      builder: (context, state) => const RegisterScreen(),
+      pageBuilder: (context, state) => const NoTransitionPage(child: RegisterScreen()),
     ),
     GoRoute(
       path: '/games/:hash',
-      builder: (context, state) {
+      pageBuilder: (context, state) {
         final hash = state.pathParameters['hash']!;
         // Deep-convert extra from Map<dynamic,dynamic> (socket) to Map<String,dynamic>
         final rawExtra = state.extra;
         final extra = rawExtra is Map
             ? _deepMapStr(rawExtra)
             : null;
-        return GameScreen(hash: hash, extra: extra);
+        return NoTransitionPage(child: GameScreen(hash: hash, extra: extra));
       },
     ),
     GoRoute(
       path: '/analysis',
-      builder: (context, state) {
+      pageBuilder: (context, state) {
         // state.extra may be Map<dynamic,dynamic> from socket data in dart2js;
         // convert safely instead of hard-casting.
         final raw = state.extra;
         final record = raw is Map
             ? Map<String, dynamic>.from(raw.map((k, v) => MapEntry(k.toString(), v)))
             : null;
-        return AnalysisScreen(initialRecord: record);
+        return NoTransitionPage(child: AnalysisScreen(initialRecord: record));
       },
     ),
     GoRoute(
       path: '/tutorial',
-      builder: (context, state) => const TutorialScreen(),
+      pageBuilder: (context, state) => const NoTransitionPage(child: TutorialScreen()),
     ),
     GoRoute(
       path: '/tournament/create',
-      builder: (context, state) => const TournamentCreateScreen(),
+      pageBuilder: (context, state) => const NoTransitionPage(child: TournamentCreateScreen()),
     ),
     GoRoute(
       path: '/tournament/:id',
-      builder: (context, state) {
+      pageBuilder: (context, state) {
         final id = state.pathParameters['id']!;
-        return TournamentRoomScreen(tournamentId: id);
+        return NoTransitionPage(child: TournamentRoomScreen(tournamentId: id));
       },
     ),
     GoRoute(
       path: '/about',
-      builder: (context, state) => const AboutScreen(),
+      pageBuilder: (context, state) => const NoTransitionPage(child: AboutScreen()),
     ),
     GoRoute(
       path: '/profile',
-      builder: (context, state) => const ProfileScreen(),
+      pageBuilder: (context, state) => const NoTransitionPage(child: ProfileScreen()),
     ),
     GoRoute(
       path: '/profile/games',
-      builder: (context, state) => const GameHistoryScreen(),
+      pageBuilder: (context, state) => const NoTransitionPage(child: GameHistoryScreen()),
     ),
     GoRoute(
       path: '/admin/jobs',
-      builder: (context, state) => const AdminJobsScreen(),
+      pageBuilder: (context, state) => const NoTransitionPage(child: AdminJobsScreen()),
     ),
     GoRoute(
       path: '/admin/users',
-      builder: (context, state) => const AdminUsersScreen(),
+      pageBuilder: (context, state) => const NoTransitionPage(child: AdminUsersScreen()),
     ),
     GoRoute(
       path: '/leaderboard',
-      builder: (context, state) => const LeaderboardScreen(),
+      pageBuilder: (context, state) => const NoTransitionPage(child: LeaderboardScreen()),
     ),
   ],
 );
@@ -133,6 +133,11 @@ class _DedalAppState extends ConsumerState<DedalApp> {
       if (blackId != null && blackRating != null) {
         ref.read(authProvider.notifier).updateRating(blackId, blackRating);
       }
+    });
+
+    // role_updated → silently re-fetch /me so new role takes effect immediately
+    socket.on('role_updated', (_) {
+      ref.read(authProvider.notifier).refreshFromServer();
     });
   }
 

@@ -120,6 +120,11 @@ class LobbyNotifier extends Notifier<LobbyState> {
     );
   }
 
+  void _onRequestCancelled(dynamic data) {
+    // Server confirmed the cancel — clear local id unconditionally.
+    state = state.copyWith(myRequestId: null);
+  }
+
   void _onBotError(dynamic data) {
     final d = Map<String, dynamic>.from(data as Map);
     state = state.copyWith(
@@ -141,11 +146,19 @@ class LobbyNotifier extends Notifier<LobbyState> {
 
     try {
       if (d['gameRequests'] != null) {
-        next = next.copyWith(
-          gameRequests: (d['gameRequests'] as List)
-              .map((e) => GameRequest.fromJson(e as Map<String, dynamic>))
-              .toList(),
-        );
+        final requests = (d['gameRequests'] as List)
+            .map((e) => GameRequest.fromJson(e as Map<String, dynamic>))
+            .toList();
+        next = next.copyWith(gameRequests: requests);
+
+        // Reconcile: if our local myRequestId is no longer in the server list,
+        // the request was removed externally (expiry, server restart, stale socket).
+        if (next.myRequestId != null) {
+          final stillExists = requests.any((r) => r.requestId == next.myRequestId);
+          if (!stillExists) {
+            next = next.copyWith(myRequestId: null);
+          }
+        }
       }
     } catch (e) { if (kDebugMode) print('[Lobby] gameRequests: $e'); }
 
@@ -204,24 +217,26 @@ class LobbyNotifier extends Notifier<LobbyState> {
   }
 
   void _registerListeners() {
-    _socket.on('lobby_state',    _onLobbyState);
-    _socket.on('lobby_update',   _onLobbyUpdate);
-    _socket.on('request_created',_onRequestCreated);
-    _socket.on('request_error',  _onRequestError);
-    _socket.on('bot_error',      _onBotError);
+    _socket.on('lobby_state',        _onLobbyState);
+    _socket.on('lobby_update',       _onLobbyUpdate);
+    _socket.on('request_created',    _onRequestCreated);
+    _socket.on('request_cancelled',  _onRequestCancelled);
+    _socket.on('request_error',      _onRequestError);
+    _socket.on('bot_error',          _onBotError);
     // Clear pending request as soon as a game is started
-    _socket.on('game_started',   _onGameStarted);
-    _socket.on('game_start',     _onGameStarted);
+    _socket.on('game_started',       _onGameStarted);
+    _socket.on('game_start',         _onGameStarted);
   }
 
   void _removeListeners() {
-    _socket.off('lobby_state',    _onLobbyState);
-    _socket.off('lobby_update',   _onLobbyUpdate);
-    _socket.off('request_created',_onRequestCreated);
-    _socket.off('request_error',  _onRequestError);
-    _socket.off('bot_error',      _onBotError);
-    _socket.off('game_started',   _onGameStarted);
-    _socket.off('game_start',     _onGameStarted);
+    _socket.off('lobby_state',       _onLobbyState);
+    _socket.off('lobby_update',      _onLobbyUpdate);
+    _socket.off('request_created',   _onRequestCreated);
+    _socket.off('request_cancelled', _onRequestCancelled);
+    _socket.off('request_error',     _onRequestError);
+    _socket.off('bot_error',         _onBotError);
+    _socket.off('game_started',      _onGameStarted);
+    _socket.off('game_start',        _onGameStarted);
   }
 
   // ── Actions ──────────────────────────────────────────────────────────────────
@@ -233,6 +248,7 @@ class LobbyNotifier extends Notifier<LobbyState> {
     required String? username,
     required String role,
     String? boardId,
+    bool rated = false,
   }) {
     if (state.myRequestId != null) {
       showNotif('You already have an open request. Cancel it first.', 'error');
@@ -244,6 +260,7 @@ class LobbyNotifier extends Notifier<LobbyState> {
       'userId': userId,
       'username': username,
       'role': role,
+      'rated': rated,
     });
   }
 

@@ -74,4 +74,31 @@ class AuthNotifier extends AsyncNotifier<AppUser?> {
     }
   }
 
+  /// Called when the server emits role_updated — silently re-fetches /me
+  /// so the new role (e.g. subscriber) is reflected instantly without logout.
+  Future<void> refreshFromServer() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt_token');
+    if (token == null) return;
+    try {
+      final data = await _api.getMe();
+      final user = AppUser.fromJson({...data, 'token': token});
+      state = AsyncData(user);
+      // Re-announce new role to server so socket.userRole is refreshed
+      _socket.emit('join_lobby', {'userId': user.id, 'role': user.role});
+    } catch (_) {
+      // Silently ignore — user stays logged in with old data
+    }
+  }
+
+  /// Permanently deletes the account via DELETE /api/me, then logs out locally.
+  Future<void> deleteAccount() async {
+    await _api.deleteAccount();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('jwt_token');
+    _socket.setToken(null);
+    _socket.emit('join_lobby', {}); // guest mode
+    state = const AsyncData(null);
+  }
+
 }

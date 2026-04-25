@@ -63,5 +63,6 @@ flutter:
 
   assets:
     - assets/sounds/
+    - assets/legal/
     - assets/tutorial_translations.json
 

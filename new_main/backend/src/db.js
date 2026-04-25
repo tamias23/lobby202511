@@ -143,6 +143,43 @@ async function updateUser(id, fields) {
     } catch (e) { logger.error('DB', `updateUser(${id}) failed:`, e.message); }
 }
 
+/**
+ * Permanently delete a user and all their owned data.
+ * Cascades: profiles, subscriptions, tournament_participants, leaderboards.
+ * Games are anonymised (player name set to "[deleted]") rather than deleted,
+ * so game history remains intact for opponents.
+ */
+async function deleteUser(id) {
+    if (!_isUp()) throw new Error('Database unavailable');
+    const pool = _pool();
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        // Anonymise past games so opponents' history stays coherent
+        await client.query(
+            `UPDATE games SET white_player_id = NULL, white_name = '[deleted]'
+             WHERE white_player_id = $1`, [id]);
+        await client.query(
+            `UPDATE games SET black_player_id = NULL, black_name = '[deleted]'
+             WHERE black_player_id = $1`, [id]);
+        // Remove participation & subscription records
+        await client.query('DELETE FROM tournament_participants WHERE user_id = $1', [id]);
+        await client.query('DELETE FROM subscriptions              WHERE user_id = $1', [id]);
+        await client.query('DELETE FROM leaderboards               WHERE user_id = $1', [id]);
+        await client.query('DELETE FROM profiles                   WHERE user_id = $1', [id]);
+        // Finally remove the user row itself
+        await client.query('DELETE FROM users WHERE id = $1', [id]);
+        await client.query('COMMIT');
+        logger.info('DB', `deleteUser(${id}) succeeded — user data anonymised/removed.`);
+    } catch (e) {
+        await client.query('ROLLBACK');
+        logger.error('DB', `deleteUser(${id}) failed:`, e.message);
+        throw e;
+    } finally {
+        client.release();
+    }
+}
+
 async function updateUserRating(id, rating, ratingDeviation, ratingVolatility, ratingField = 'rating') {
     if (!_isUp()) return;
     try {
@@ -647,7 +684,7 @@ module.exports = {
     initDb,
     isDbUp: _isUp,
     getUser, searchUsers, getUserByEmailOrUsername, getUserByEmailHash, getUserByVerificationToken,
-    createUser, updateUser, updateUserRating, incrementUserField,
+    createUser, updateUser, deleteUser, updateUserRating, incrementUserField,
     getProfile, upsertProfile,
     saveGame, updateGame, getGamesOlderThan, deleteGamesByIds, countGames,
     getGamesForTournament, getGamesByPlayer,

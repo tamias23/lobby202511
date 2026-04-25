@@ -248,6 +248,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       },
                     ),
                   ),
+
+                  // ── Danger zone ───────────────────────────────────────────
+                  const SizedBox(height: 32),
+                  Divider(color: Colors.redAccent.withValues(alpha: 0.3), thickness: 1),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red.shade300,
+                        side: BorderSide(color: Colors.red.withValues(alpha: 0.4)),
+                        backgroundColor: Colors.red.withValues(alpha: 0.05),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: const Icon(Icons.delete_forever_outlined),
+                      label: const Text('Delete Account'),
+                      onPressed: () => _confirmDeleteAccount(context, auth.username),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -269,6 +289,111 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         Text(label, style: GoogleFonts.outfit(fontSize: small ? 12 : 14, color: DTheme.textMutedDark)),
       ],
     );
+  }
+
+  Future<void> _confirmDeleteAccount(BuildContext context, String username) async {
+    // Step 1: Intent confirmation
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E2E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(children: [
+          const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 28),
+          const SizedBox(width: 12),
+          Text('Delete Account', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
+        ]),
+        content: Text(
+          'This will permanently delete your account and all your data. This action cannot be undone.',
+          style: GoogleFonts.outfit(color: Colors.white70, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('Cancel', style: GoogleFonts.outfit(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('Continue', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    // Step 2: Type username to confirm
+    final confirmCtrl = TextEditingController();
+    final finalConfirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          backgroundColor: const Color(0xFF1E1E2E),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text('Confirm Deletion', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text.rich(
+                TextSpan(children: [
+                  TextSpan(text: 'Type your username ', style: GoogleFonts.outfit(color: Colors.white70, fontSize: 14)),
+                  TextSpan(text: username, style: GoogleFonts.outfit(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 14)),
+                  TextSpan(text: ' to confirm:', style: GoogleFonts.outfit(color: Colors.white70, fontSize: 14)),
+                ]),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: confirmCtrl,
+                autofocus: true,
+                style: GoogleFonts.outfit(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: username,
+                  hintStyle: GoogleFonts.outfit(color: Colors.white24),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Colors.white24),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Colors.redAccent),
+                  ),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text('Cancel', style: GoogleFonts.outfit(color: Colors.white54)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: confirmCtrl.text == username ? Colors.redAccent : Colors.grey,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: confirmCtrl.text == username ? () => Navigator.of(ctx).pop(true) : null,
+              child: Text('Delete Forever', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+    confirmCtrl.dispose();
+    if (finalConfirmed != true || !context.mounted) return;
+
+    // Execute deletion
+    try {
+      await ref.read(authProvider.notifier).deleteAccount();
+      if (context.mounted) context.go('/');
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Deletion failed: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
   }
 }
 

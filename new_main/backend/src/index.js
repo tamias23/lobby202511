@@ -1294,6 +1294,39 @@ app.get('/api/me', async (req, res) => {
     }
 });
 
+// DELETE /api/me — self-service account deletion (GDPR right to erasure)
+app.delete('/api/me', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+    try {
+        const decoded = jwt.verify(authHeader.slice(7), JWT_SECRET);
+        const userId = decoded.id;
+        if (!userId) return res.status(401).json({ error: 'Invalid token' });
+
+        const db = require('./db');
+        await db.deleteUser(userId);
+        logger.info('API', `DELETE /api/me: user ${userId} self-deleted.`);
+
+        // Disconnect any live sockets for this user
+        try {
+            const liveSockets = await io.fetchSockets();
+            for (const s of liveSockets) {
+                if (s.data?.userId === userId || s.userId === userId) {
+                    s.emit('session_conflict', { message: 'Your account has been deleted.' });
+                    s.disconnect(true);
+                }
+            }
+        } catch (_) {}
+
+        res.json({ success: true });
+    } catch (err) {
+        logger.error('API', 'DELETE /api/me error:', err);
+        res.status(500).json({ error: 'Deletion failed. Please try again.' });
+    }
+});
+
 // GET /api/me/games — last 50 games for the authenticated user
 app.get('/api/me/games', async (req, res) => {
     const authHeader = req.headers.authorization;
@@ -1409,6 +1442,50 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
         }))});
     } catch (err) {
         logger.error('API', 'GET /api/admin/users error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// PATCH /api/admin/users/:id/role  — update a user's role/subscription and notify live sockets
+app.patch('/api/admin/users/:id/role', requireAdmin, async (req, res) => {
+    try {
+        const db = require('./db');
+        const userId = req.params.id;
+        const { role, is_subscriber, subscriber_until } = req.body;
+
+        const allowed = ['registered', 'subscriber', 'admin'];
+        if (role !== undefined && !allowed.includes(role)) {
+            return res.status(400).json({ error: `Invalid role. Must be one of: ${allowed.join(', ')}` });
+        }
+
+        const fields = {};
+        if (role !== undefined)              fields.role            = role;
+        if (is_subscriber !== undefined)     fields.is_subscriber   = is_subscriber ? 1 : 0;
+        if (subscriber_until !== undefined)  fields.subscriber_until = subscriber_until;
+
+        if (Object.keys(fields).length === 0) {
+            return res.status(400).json({ error: 'No fields to update.' });
+        }
+
+        await db.updateUser(userId, fields);
+        logger.info('Admin', `User ${userId} role/subscription updated:`, fields);
+
+        // Emit role_updated to any live socket(s) for this user
+        try {
+            const liveSockets = await io.fetchSockets();
+            for (const s of liveSockets) {
+                if (s.data?.userId === userId || s.userId === userId) {
+                    s.emit('role_updated', { role: fields.role, is_subscriber: fields.is_subscriber });
+                    logger.debug('Admin', `Emitted role_updated to live socket ${s.id} for user ${userId}`);
+                }
+            }
+        } catch (e) {
+            logger.warn('Admin', 'role_updated emit failed:', e.message);
+        }
+
+        res.json({ success: true, updated: fields });
+    } catch (err) {
+        logger.error('API', 'PATCH /api/admin/users/:id/role error:', err);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -2018,17 +2095,30 @@ io.on('connection', (socket) => {
     });
 
     // --- CREATE GAME REQUEST ---
-    socket.on('create_game_request', ({ timeControl, boardId, userId, username, role }) => {
-        // Validate no duplicate request from same socket
-        const existing = lobby.gameRequests.find(r => r.socketId === socket.id);
+    socket.on('create_game_request', ({ timeControl, boardId, userId, username, role, rated }) => {
+        const effectiveUserId = userId || socket.userId || generateGuestId();
+        // Check for duplicate by socketId OR userId — catches stale requests from
+        // previous socket connections (e.g. after a brief reconnect as a guest).
+        const existing = lobby.gameRequests.find(
+            r => r.socketId === socket.id || (effectiveUserId && !effectiveUserId.startsWith('guest_') && r.userId === effectiveUserId)
+        );
         if (existing) {
-            socket.emit('request_error', { message: 'You already have an open request.' });
-            return;
+            // Stale request from a dead socket — silently remove it before creating a new one.
+            // This avoids permanently blocking users who lost their connection mid-session.
+            if (existing.socketId !== socket.id) {
+                logger.info('Game', `Removing stale request ${existing.requestId} from dead socket ${existing.socketId}`);
+                lobby.gameRequests = lobby.gameRequests.filter(r => r.requestId !== existing.requestId);
+                valkeySync.syncRequestRemoved(existing.requestId);
+                // Fall through and allow the new request to be created
+            } else {
+                socket.emit('request_error', { message: 'You already have an open request.' });
+                return;
+            }
         }
 
         const requestId = uuidv4();
-        const effectiveUserId = userId || socket.userId || generateGuestId();
         const effectiveRole = socket.userRole || role || 'guest';
+        const isRated = rated === true && effectiveRole !== 'guest';
 
         // Registered users can only be in one game at a time
         if (effectiveRole !== 'guest' && isUserInActiveGame(effectiveUserId)) {
@@ -2041,7 +2131,12 @@ io.on('connection', (socket) => {
             return;
         }
 
-        if (effectiveRole !== 'guest') {
+        // Rated-specific checks: quota and permission
+        if (isRated) {
+            if (!permissions.canUser(effectiveRole, 'rated_game_creator')) {
+                socket.emit('request_error', { message: 'You do not have permission to create rated games.' });
+                return;
+            }
             const limit = permissions.getLimit(effectiveRole, 'rated_games_per_24h');
             if (limit !== -1) {
                 getUser(effectiveUserId).then(user => {
@@ -2065,24 +2160,32 @@ io.on('connection', (socket) => {
                 username: username || effectiveUserId,
                 role: effectiveRole,
                 timeControl: timeControl || { minutes: 15, increment: 10 },
-            boardId: boardId || null,
-            createdAt: Date.now(),
-        });
+                boardId: boardId || null,
+                createdAt: Date.now(),
+                rated: isRated,
+            });
 
         socket.emit('request_created', { requestId });
         valkeySync.syncRequestCreated(lobby.gameRequests[lobby.gameRequests.length - 1]);
         broadcastLobbyUpdate(io);
-        logger.debug('Game', `Game request ${requestId} by ${effectiveUserId} (${effectiveRole})${boardId ? ` board=${boardId}` : ''}`);
+        logger.debug('Game', `Game request ${requestId} by ${effectiveUserId} (${effectiveRole}) rated=${isRated}${boardId ? ` board=${boardId}` : ''}`);
         }
     });
 
     // --- CANCEL GAME REQUEST ---
     socket.on('cancel_game_request', ({ requestId }) => {
-        lobby.gameRequests = lobby.gameRequests.filter(
-            r => !(r.requestId === requestId && r.socketId === socket.id)
-        );
-        valkeySync.syncRequestRemoved(requestId);
-        broadcastLobbyUpdate(io);
+        // Remove by requestId only — do NOT restrict to socket.id.
+        // If the socket reconnected (new id), the old request would be un-cancellable
+        // and permanently block the user from creating new requests.
+        const before = lobby.gameRequests.length;
+        lobby.gameRequests = lobby.gameRequests.filter(r => r.requestId !== requestId);
+        const removed = lobby.gameRequests.length < before;
+        if (removed) {
+            valkeySync.syncRequestRemoved(requestId);
+            broadcastLobbyUpdate(io);
+        }
+        // Always confirm cancellation to the client so its local state clears.
+        socket.emit('request_cancelled', { requestId });
     });
 
     // --- ACCEPT GAME REQUEST ---
@@ -2123,7 +2226,8 @@ io.on('connection', (socket) => {
             return;
         }
 
-        if (acceptorRole !== 'guest') {
+        // Rated-specific quota check on the acceptor side
+        if (req.rated && acceptorRole !== 'guest') {
             const limit = permissions.getLimit(acceptorRole, 'rated_games_per_24h');
             if (limit !== -1) {
                 getUser(effectiveAcceptorId).then(user => {
@@ -2190,13 +2294,16 @@ io.on('connection', (socket) => {
         broadcastLobbyUpdate(io);
         logger.info('Game', `Created: ${hash} — ${whitePlayer.userId} (W) vs ${blackPlayer.userId} (B)`);
 
-        if (acceptorRole !== 'guest') {
-            const db = require('./db');
-            await db.incrementUserField(effectiveAcceptorId, 'rated_games_played_today', 1);
-        }
-        if (req.role !== 'guest') {
-            const db = require('./db');
-            await db.incrementUserField(req.userId, 'rated_games_played_today', 1);
+        // Only increment rated game counter when the game was explicitly rated
+        if (req.rated) {
+            if (acceptorRole !== 'guest') {
+                const db = require('./db');
+                await db.incrementUserField(effectiveAcceptorId, 'rated_games_played_today', 1);
+            }
+            if (req.role !== 'guest') {
+                const db = require('./db');
+                await db.incrementUserField(req.userId, 'rated_games_played_today', 1);
+            }
         }
     }
     });
@@ -2219,6 +2326,21 @@ io.on('connection', (socket) => {
             return;
         }
 
+        // Per-socket bot game counter for guests (no DB record available)
+        // Reads the limit from roles.json, same source of truth as registered users.
+        if (effectiveRole === 'guest') {
+            const guestLimit = permissions.getLimit('guest', 'bot_games_per_24h');
+            if (guestLimit !== -1) {
+                socket.guestBotGameCount = (socket.guestBotGameCount || 0);
+                if (socket.guestBotGameCount >= guestLimit) {
+                    socket.emit('bot_error', { message: `Guests are limited to ${guestLimit} bot game(s) per session. Register for more!` });
+                    return;
+                }
+                // Increment now; the game is about to be created
+                socket.guestBotGameCount++;
+            }
+        }
+
         if (effectiveRole !== 'guest') {
             const limit = permissions.getLimit(effectiveRole, 'bot_games_per_24h');
             if (limit !== -1) {
@@ -2228,6 +2350,15 @@ io.on('connection', (socket) => {
                     return;
                 }
             }
+        }
+
+        // IP-based rate limit (applies to all roles, including guests)
+        // Fail-open: if Valkey is unavailable, the check is skipped.
+        const ip = socket.handshake?.address || 'unknown';
+        const ipCheck = await valkeySync.checkAndIncrementBotIpLimit(ip);
+        if (!ipCheck.allowed) {
+            socket.emit('bot_error', { message: `Too many bot games from your network today (${ipCheck.count}/${ipCheck.limit}). Try again tomorrow.` });
+            return;
         }
 
         const agentType = botConfig?.type || 'greedy_jack';

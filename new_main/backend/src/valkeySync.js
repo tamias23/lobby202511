@@ -30,6 +30,9 @@ const FULL_STATE_INTERVAL_MS = 30000; // Write full state to Valkey every 30s
 const HEARTBEAT_PREFIX = 'nd6:heartbeat:';       // nd6:heartbeat:<instanceId>
 const HEARTBEAT_TTL_S = 30;                      // key expires if instance goes silent
 const HEARTBEAT_INTERVAL_MS = 15000;             // write heartbeat every 15s
+const BOT_IP_PREFIX = 'nd6:bot_ip:';             // nd6:bot_ip:<ip> — rolling 24h counter
+const BOT_IP_TTL_S  = 86400;                     // 24h rolling window
+const BOT_IP_LIMIT  = parseInt(process.env.BOT_IP_LIMIT || '30'); // default 30/24h per IP
 // Local cache for isInstanceAlive() — avoids Valkey query every sweep tick
 const _aliveCache = new Map(); // instanceId → { alive: bool, checkedAt: number }
 const ALIVE_CACHE_TTL_MS = 10000;
@@ -594,6 +597,65 @@ async function isInstanceAlive(instanceId) {
     }
 }
 
+/**
+ * IP-based bot game rate limiter.
+ *
+ * Atomically increments the counter for the given IP and sets a 24h TTL on
+ * the first hit (rolling window — NOT a midnight reset).
+ *
+ * @param {string} ip  — raw IP address (e.g. from socket.handshake.address)
+ * @returns {Promise<{ allowed: boolean, count: number, limit: number }>}
+ *   allowed=true  → game may proceed
+ *   allowed=false → over the daily limit for this IP
+ *   If Valkey is unavailable, always returns { allowed: true } (fail-open).
+ */
+async function checkAndIncrementBotIpLimit(ip) {
+    const client = valkey.getClient();
+    if (!client) return { allowed: true, count: 0, limit: BOT_IP_LIMIT };
+
+    // Normalize IPv6-mapped IPv4 addresses (e.g. ::ffff:1.2.3.4 → 1.2.3.4)
+    const normalizedIp = ip.replace(/^::ffff:/, '');
+    const key = `${BOT_IP_PREFIX}${normalizedIp}`;
+
+    try {
+        const count = await client.incr(key);
+        // Set TTL only on the first increment (so the window rolls from the first game)
+        if (count === 1) {
+            await client.expire(key, BOT_IP_TTL_S);
+        }
+        const allowed = count <= BOT_IP_LIMIT;
+        if (!allowed) {
+            logger.warn('BotIP', `IP ${normalizedIp} hit bot limit (${count}/${BOT_IP_LIMIT} in 24h).`);
+        }
+        return { allowed, count, limit: BOT_IP_LIMIT };
+    } catch (e) {
+        logger.warn('BotIP', `Rate-limit check failed for ${normalizedIp}:`, e.message);
+        return { allowed: true, count: 0, limit: BOT_IP_LIMIT }; // fail-open
+    }
+}
+
+/**
+ * Enumerate all nd6:bot_ip:* keys with their current counts and TTLs.
+ * Used by the extract_from_valkey.py script.
+ *
+ * @returns {Promise<Array<{ip: string, count: number, ttl_s: number}>>}
+ */
+async function getBotIpLimitData() {
+    const client = valkey.getClient();
+    if (!client) return [];
+    const results = [];
+    try {
+        for await (const key of client.scanIterator({ MATCH: `${BOT_IP_PREFIX}*` })) {
+            const [countRaw, ttl] = await Promise.all([client.get(key), client.ttl(key)]);
+            const ip = key.slice(BOT_IP_PREFIX.length);
+            results.push({ ip, count: parseInt(countRaw || '0', 10), ttl_s: ttl });
+        }
+    } catch (e) {
+        logger.warn('BotIP', 'getBotIpLimitData scan failed:', e.message);
+    }
+    return results;
+}
+
 module.exports = {
     init,
     getInstanceId,
@@ -609,4 +671,6 @@ module.exports = {
     tryLockJob,
     syncTournamentList,
     getTournamentListFromValkey,
+    checkAndIncrementBotIpLimit,
+    getBotIpLimitData,
 };

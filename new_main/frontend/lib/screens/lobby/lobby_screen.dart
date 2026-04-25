@@ -10,6 +10,10 @@ import '../../providers/lobby_provider.dart';
 import '../../providers/bg_provider.dart';
 import '../../utils/roles.dart';
 import '../../widgets/glass_panel.dart';
+import '../../widgets/legal_doc_dialog.dart';
+import '../../widgets/legal_notice_dialog.dart';
+import '../../widgets/privacy_dialog.dart';
+import '../../widgets/terms_dialog.dart';
 
 // ── Gradient constants (matching legacy) ─────────────────────────────────────
 const _kBlue   = Color(0xFF46B0D4);
@@ -54,6 +58,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   bool _showCustomForm = false;
   int  _customMin = 15;
   int  _customInc = 10;
+  bool _customRated = false;   // only enabled for rated_game_creator users
   int  _botMin    = 15;
   int  _botInc    = 10;
 
@@ -88,17 +93,24 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
 
   void _onTimeControl(_TC tc) {
     final user = ref.read(authProvider).value;
+    final role = user?.role ?? 'guest';
+    // TC buttons always create unrated games (rated toggle only in Custom)
+    final canRated = Roles.canUser(role, 'rated_game_creator');
     ref.read(lobbyProvider.notifier).createGameRequest(
       minutes: tc.minutes, increment: tc.increment,
-      userId: user?.id, username: user?.username, role: user?.role ?? 'guest',
+      userId: user?.id, username: user?.username, role: role,
+      rated: canRated, // rated only if the role allows it; guests get false
     );
   }
 
   void _onCustomSubmit() {
     final user = ref.read(authProvider).value;
+    final role = user?.role ?? 'guest';
+    final canRated = Roles.canUser(role, 'rated_game_creator');
     ref.read(lobbyProvider.notifier).createGameRequest(
       minutes: _customMin, increment: _customInc,
-      userId: user?.id, username: user?.username, role: user?.role ?? 'guest',
+      userId: user?.id, username: user?.username, role: role,
+      rated: canRated && _customRated,
     );
     setState(() => _showCustomForm = false);
   }
@@ -206,10 +218,10 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
               top: 0, left: 0, right: 0,
               child: _buildTopBar(context, auth),
             ),
-            // ── About link — bottom right ─────────────────────────────────────
+            // ── Legal footer — bottom right ───────────────────────────────────
             Positioned(
               bottom: 12, right: 16,
-              child: _AboutLink(onTap: () => context.go('/about')),
+              child: _LegalFooter(),
             ),
           ]),
         ),
@@ -358,13 +370,11 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                           r.timeControl['increment'] == tc.increment);
                   
                   final role = auth?.role ?? 'guest';
-                  final limit = Roles.getLimit(role, 'rated_games_per_24h');
-                  final played = auth?.ratedGamesPlayedToday ?? 0;
-                  final limitReached = limit != -1 && played >= limit;
-                  final cantPlay = limitReached || !Roles.canUser(role, 'unrated_game_creator');
+                  // TC buttons create unrated games — only gate on unrated permission
+                  final cantPlay = !Roles.canUser(role, 'unrated_game_creator');
 
                   return _TCButton(
-                    label: tc.label, description: cantPlay ? 'Limit/Role' : tc.description,
+                    label: tc.label, description: cantPlay ? 'Locked' : tc.description,
                     color: cantPlay ? Colors.grey : tc.color, isActive: isActive, isWaiting: isActive,
                     fontSize: labelSize,
                     onTap: cantPlay ? () {} : () => _onTimeControl(tc),
@@ -375,8 +385,6 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                   description: (() {
                     final role = auth?.role ?? 'guest';
                     if (!Roles.canUser(role, 'unrated_game_creator')) return 'Locked';
-                    final limit = Roles.getLimit(role, 'rated_games_per_24h');
-                    if (limit != -1 && (auth?.ratedGamesPlayedToday ?? 0) >= limit) return 'Limit Reached';
                     return _showCustomForm ? '✕ Close' : 'User Choice';
                   })(),
                   color: const Color(0xFFF27813),
@@ -385,9 +393,6 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                   onTap: () {
                     final role = auth?.role ?? 'guest';
                     if (!Roles.canUser(role, 'unrated_game_creator')) return;
-                    final limit = Roles.getLimit(role, 'rated_games_per_24h');
-                    if (limit != -1 && (auth?.ratedGamesPlayedToday ?? 0) >= limit) return;
-
                     setState(() {
                       _showCustomForm = !_showCustomForm;
                       if (_showCustomForm) _showBotPanel = false;
@@ -471,9 +476,12 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
 
   Widget _buildBotPanel(LobbyState lobby, AppUser? auth) {
     final presets = [
-      (label: '10+5', min: 10, inc: 5),
+      (label: '10+5',  min: 10, inc: 5),
+      (label: '10+10', min: 10, inc: 10),
       (label: '15+10', min: 15, inc: 10),
+      (label: '15+30', min: 15, inc: 30),
       (label: '30+30', min: 30, inc: 30),
+      (label: '60+30', min: 60, inc: 30),
     ];
     
     final role = auth?.role ?? 'guest';
@@ -502,17 +510,18 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
             ),
             const SizedBox(height: 12),
             // Time control presets
-            Row(children: presets.map((p) {
-              final active = _botMin == p.min && _botInc == p.inc;
-              return Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: _PillToggle(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: presets.map((p) {
+                final active = _botMin == p.min && _botInc == p.inc;
+                return _PillToggle(
                   label: p.label, active: active,
                   onTap: () => setState(() { _botMin = p.min; _botInc = p.inc; }),
                   activeColor: _kBlue,
-                ),
-              );
-            }).toList()),
+                );
+              }).toList(),
+            ),
             const SizedBox(height: 14),
             Wrap(
               spacing: 10, runSpacing: 10,
@@ -535,12 +544,22 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   }
 
   Widget _buildCustomForm() {
+    final auth = ref.read(authProvider).value;
+    final role = auth?.role ?? 'guest';
+    final canRated = Roles.canUser(role, 'rated_game_creator');
+    // Force unrated if user cannot create rated games
+    if (!canRated && _customRated) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _customRated = false);
+      });
+    }
     return Padding(
       padding: const EdgeInsets.only(top: 14),
       child: GlassPanel(
         padding: const EdgeInsets.all(18),
         borderRadius: 18,
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
               Expanded(child: _LabeledNumberField(
@@ -555,7 +574,18 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                 min: 3, max: 120,
               )),
             ]),
-            const SizedBox(height: 18),
+            const SizedBox(height: 14),
+            // Rated / Unrated toggle — visible to all, enabled only for rated_game_creator
+            Row(
+              children: [
+                _RatedToggle(
+                  rated: _customRated,
+                  enabled: canRated,
+                  onChanged: canRated ? (v) => setState(() => _customRated = v) : null,
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
             Row(children: [
               Expanded(child: _GradientButton(label: 'Post Request', onTap: _onCustomSubmit)),
             ]),
@@ -915,6 +945,68 @@ class _PillToggle extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ── Rated / Unrated toggle ────────────────────────────────────────────────────
+
+class _RatedToggle extends StatelessWidget {
+  final bool rated;
+  final bool enabled;
+  final ValueChanged<bool>? onChanged;
+  const _RatedToggle({required this.rated, required this.enabled, this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    const activeColor = _kBlue;
+    const ratedColor  = Color(0xFF22C55E);
+    final lockedColor = Colors.white.withValues(alpha: 0.18);
+
+    Widget pill(String label, bool isSelected, Color selColor, VoidCallback? onTap) {
+      return GestureDetector(
+        onTap: enabled ? onTap : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? selColor.withValues(alpha: enabled ? 0.22 : 0.10)
+                : Colors.white.withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isSelected
+                  ? (enabled ? selColor : lockedColor)
+                  : Colors.white.withValues(alpha: 0.10),
+              width: 1.5,
+            ),
+          ),
+          child: Text(label,
+            style: GoogleFonts.outfit(
+              fontSize: 12, fontWeight: FontWeight.w600,
+              color: isSelected
+                  ? (enabled ? selColor : lockedColor)
+                  : DTheme.textMutedDark,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        pill('Unrated', !rated, activeColor, () => onChanged?.call(false)),
+        const SizedBox(width: 6),
+        pill('Rated', rated, ratedColor, () => onChanged?.call(true)),
+        if (!enabled) ...[
+          const SizedBox(width: 8),
+          Icon(Icons.lock_outline, size: 13, color: Colors.white.withValues(alpha: 0.3)),
+          const SizedBox(width: 4),
+          Text('registered+',
+            style: GoogleFonts.outfit(fontSize: 11, color: Colors.white.withValues(alpha: 0.3))),
+        ],
+      ],
     );
   }
 }
@@ -1485,16 +1577,116 @@ class _TournamentOpenCardState extends State<_TournamentOpenCard> {
   }
 }
 
-// ── About link ────────────────────────────────────────────────────────────────
+// ── Legal footer (about · privacy · terms · legal notice) ───────────────────
 
-class _AboutLink extends StatefulWidget {
-  final VoidCallback onTap;
-  const _AboutLink({required this.onTap});
+class _LegalFooter extends StatelessWidget {
+  const _LegalFooter();
+
   @override
-  State<_AboutLink> createState() => _AboutLinkState();
+  Widget build(BuildContext context) {
+    return Wrap(
+      alignment: WrapAlignment.end,
+      spacing: 0,
+      children: [
+        _FooterLink(label: 'about',        onTap: () => _showAbout(context)),
+        _FooterSep(),
+        _FooterLink(label: 'privacy',      onTap: () => PrivacyDialog.show(context)),
+        _FooterSep(),
+        _FooterLink(label: 'terms',        onTap: () => TermsDialog.show(context)),
+        _FooterSep(),
+        _FooterLink(label: 'legal notice', onTap: () => LegalNoticeDialog.show(context)),
+      ],
+    );
+  }
+
+  void _showAbout(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => const _AboutDialog(),
+    );
+  }
 }
 
-class _AboutLinkState extends State<_AboutLink> {
+// ── About dialog ──────────────────────────────────────────────────────────────
+
+class _AboutDialog extends StatelessWidget {
+  const _AboutDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    const buildTs = String.fromEnvironment('BUILD_TIMESTAMP', defaultValue: 'dev');
+    return AlertDialog(
+      backgroundColor: DTheme.cardBgDark,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      titlePadding: const EdgeInsets.fromLTRB(24, 24, 16, 8),
+      contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+      title: Row(children: [
+        Expanded(
+          child: Text('About Dedal',
+            style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold, color: DTheme.textMainDark)),
+        ),
+        IconButton(
+          icon: const Icon(Icons.close, color: DTheme.textMutedDark, size: 20),
+          onPressed: () => Navigator.of(context).pop(),
+          visualDensity: VisualDensity.compact,
+        ),
+      ]),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('A high-strategy polygonal board game.',
+            style: GoogleFonts.outfit(fontSize: 13, color: DTheme.textMainDark.withValues(alpha: 0.85), height: 1.6)),
+          const SizedBox(height: 16),
+          Text('Contact', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: DTheme.primary)),
+          const SizedBox(height: 4),
+          Text('dedalthegame@protonmail.com',
+            style: GoogleFonts.outfit(fontSize: 13, color: DTheme.textMainDark.withValues(alpha: 0.85))),
+          const SizedBox(height: 16),
+          Divider(color: Colors.white12, height: 1),
+          const SizedBox(height: 12),
+          Text('Build', style: GoogleFonts.outfit(fontSize: 11, color: DTheme.textMutedDark, letterSpacing: 1.5, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+            ),
+            child: Text(buildTs,
+              style: GoogleFonts.sourceCodePro(fontSize: 13, color: DTheme.primary, letterSpacing: 0.5)),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text('Close', style: GoogleFonts.outfit(color: DTheme.primary, fontWeight: FontWeight.w600)),
+        ),
+      ],
+    );
+  }
+}
+
+class _FooterSep extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) =>
+    Text('  ·  ', style: GoogleFonts.outfit(
+      fontSize: 11, color: DTheme.textMutedDark.withValues(alpha: 0.45)));
+}
+
+class _FooterLink extends StatefulWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _FooterLink({required this.label, required this.onTap});
+  @override
+  State<_FooterLink> createState() => _FooterLinkState();
+}
+
+class _FooterLinkState extends State<_FooterLink> {
   bool _hovered = false;
   @override
   Widget build(BuildContext context) {
@@ -1508,7 +1700,7 @@ class _AboutLinkState extends State<_AboutLink> {
           duration: const Duration(milliseconds: 150),
           opacity: _hovered ? 1.0 : 0.45,
           child: Text(
-            'about',
+            widget.label,
             style: GoogleFonts.outfit(
               fontSize: 11,
               fontWeight: FontWeight.w500,

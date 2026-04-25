@@ -7,17 +7,17 @@
     "rated_game_creator": ["registered", "subscriber", "admin"],
     "tournament_creator": ["subscriber", "admin"],
     "unrated_tournament_participant": ["registered", "subscriber", "admin"],
-    "rated_tournament_participant": ["subscriber", "admin"],
+    "rated_tournament_participant": ["registered", "subscriber", "admin"],
     "tournament_game_watcher": ["guest", "registered", "subscriber", "admin"],
     "analysis_room_user": ["registered", "subscriber", "admin"],
     "history_viewer_self": ["registered", "subscriber", "admin"],
     "history_viewer_all": ["subscriber", "admin"],
-    "chat_user": ["registered", "subscriber", "admin"],
+    "chat_user": ["subscriber", "admin"],
     "board_chooser": ["subscriber", "admin"],
     "manage_jobs": ["admin"]
   },
   "limits": {
     "rated_games_per_24h": { "guest": 0, "registered": 3, "subscriber": -1, "admin": -1 },
-    "bot_games_per_24h": { "guest": 3, "registered": 10, "subscriber": -1, "admin": -1 }
+    "bot_games_per_24h": { "guest": 3, "registered": 7, "subscriber": -1, "admin": -1 }
   }
 }

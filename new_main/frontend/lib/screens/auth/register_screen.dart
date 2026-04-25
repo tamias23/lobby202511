@@ -143,6 +143,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             ),
                           ],
                         ),
+                        TextButton(
+                          onPressed: () => context.go('/'),
+                          child: Text('Continue as guest', style: DTheme.bodyMuted),
+                        ),
                       ],
                     ),
                   ),

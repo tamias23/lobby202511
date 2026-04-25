@@ -118,4 +118,10 @@ class ApiService {
     final data = response.data as Map<String, dynamic>;
     return data['games'] as List<dynamic>? ?? [];
   }
+
+  // ── Account deletion ─────────────────────────────────────────────────────────
+
+  Future<void> deleteAccount() async {
+    await _dio.delete('/api/me');
+  }
 }
