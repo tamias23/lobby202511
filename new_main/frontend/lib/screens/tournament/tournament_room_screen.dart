@@ -201,7 +201,7 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
     final maxRounds = (t['maxRounds']      as num?)?.toInt() ?? 0;
     final curCount  = (t['currentCount']   as num?)?.toInt() ?? 0;
     final maxP      = (t['maxParticipants'] as num?)?.toInt() ?? 0;
-    final tc        = t['timeControl'] as Map<String,dynamic>?;
+    final tc        = t['timeControl'] != null ? Map<String,dynamic>.from(t['timeControl'] as Map) : null;
     final isActive  = status == 'active';
     final isArena   = format == 'arena';
 
@@ -254,7 +254,7 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
   }
 
   Widget _buildDetails(Map<String,dynamic> t) {
-    final tc        = t['timeControl'] as Map<String,dynamic>?;
+    final tc        = t['timeControl'] != null ? Map<String,dynamic>.from(t['timeControl'] as Map) : null;
     final launchMode = t['launchMode'] as String? ?? 'when_complete';
     String launchStr;
     if (launchMode == 'at_time' && t['launchAt'] != null) {
