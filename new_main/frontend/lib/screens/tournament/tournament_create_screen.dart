@@ -140,15 +140,30 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
   void _listenSocket() {
     final socket = ref.read(socketServiceProvider);
     socket.on('tournament_created', (data) {
-      final d = Map<String, dynamic>.from(data as Map);
       if (!mounted) return;
-      setState(() => _creating = false);
-      context.go('/tournament/${d['id']}');
+      try {
+        var mapData = <String, dynamic>{};
+        if (data is Map) mapData = Map<String, dynamic>.from(data);
+        else if (data is List && data.isNotEmpty && data[0] is Map) mapData = Map<String, dynamic>.from(data[0]);
+        
+        setState(() => _creating = false);
+        context.go('/tournament/${mapData['id']}');
+      } catch (e) {
+        debugPrint('Error parsing tournament_created data: $e');
+      }
     });
     socket.on('tournament_error', (data) {
-      final d = Map<String, dynamic>.from(data as Map);
       if (!mounted) return;
-      setState(() { _creating = false; _error = d['message'] as String? ?? 'Failed to create.'; });
+      try {
+        var mapData = <String, dynamic>{};
+        if (data is Map) mapData = Map<String, dynamic>.from(data);
+        else if (data is List && data.isNotEmpty && data[0] is Map) mapData = Map<String, dynamic>.from(data[0]);
+        else if (data is String) mapData = {'message': data};
+        
+        setState(() { _creating = false; _error = mapData['message'] as String? ?? 'Failed to create.'; });
+      } catch (e) {
+        debugPrint('Error parsing tournament_error data: $e');
+      }
     });
   }
 
@@ -194,23 +209,26 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
     if (_creating || _format == null) return;
     final socket = ref.read(socketServiceProvider);
     setState(() { _creating = true; _error = ''; });
-    socket.emit('create_tournament', {
+
+    final payload = <String, dynamic>{
       'format':               _format!.key,
       'maxParticipants':      _maxP,
       'timeControlMinutes':   _tcMinutes,
       'timeControlIncrement': _tcIncrement,
-      'password':             _usePassword ? _password : null,
-      'boardId':              _boardMode == 'fixed' ? _selectedBoardId : null,
       'ratingMin':            _ratingMin,
       'ratingMax':            _ratingMax,
       'durationValue':        _durationValue,
       'invitedBots':          _invitedBots,
       'creatorPlays':         _creatorPlays,
       'launchMode':           _launchMode,
-      'launchAt':             (_launchMode == 'at_time' || _launchMode == 'both')
-          ? DateTime.now().millisecondsSinceEpoch + _launchDelay * 60 * 1000
-          : null,
-    });
+    };
+    if (_usePassword) payload['password'] = _password;
+    if (_boardMode == 'fixed') payload['boardId'] = _selectedBoardId;
+    if (_launchMode == 'at_time' || _launchMode == 'both') {
+      payload['launchAt'] = DateTime.now().millisecondsSinceEpoch + _launchDelay * 60 * 1000;
+    }
+
+    socket.emit('create_tournament', payload);
     // Safety timeout: if no response in 10s, reset creating state
     Future.delayed(const Duration(seconds: 10), () {
       if (mounted && _creating) {
