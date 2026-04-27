@@ -366,7 +366,7 @@ class _AdminUserProfileViewState extends State<AdminUserProfileView> {
 
                 const SizedBox(height: 12),
 
-                if (u['created_at_utc'] != null)
+                if (u['created_at_utc'] is String && (u['created_at_utc'] as String).length >= 10)
                   Text('Member since: ${(u['created_at_utc'] as String).substring(0, 10)}',
                       style: GoogleFonts.outfit(
                           fontSize: 12, color: Colors.white38)),
@@ -539,7 +539,14 @@ class _GameCard extends StatelessWidget {
   };
 
   String _fmt(dynamic ts, dynamic tsUtc) {
-    if (tsUtc is String && tsUtc.isNotEmpty) return tsUtc.substring(0, 16);
+    if (tsUtc is String && tsUtc.isNotEmpty) return tsUtc.substring(0, 16).replaceFirst('T', ' ');
+    if (ts is String && ts.isNotEmpty) {
+      final dt = DateTime.tryParse(ts)?.toUtc();
+      if (dt != null) {
+        return '${dt.year}-${dt.month.toString().padLeft(2,'0')}-${dt.day.toString().padLeft(2,'0')} '
+               '${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
+      }
+    }
     if (ts is num) {
       final dt = DateTime.fromMillisecondsSinceEpoch(ts.toInt(), isUtc: true);
       return '${dt.year}-${dt.month.toString().padLeft(2,'0')}-${dt.day.toString().padLeft(2,'0')} '

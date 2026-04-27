@@ -70,11 +70,13 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   void initState() {
     super.initState();
     _socket.on('game_created', _onGameCreated);
+    _socket.on('tournament_error', _onTournamentError);
   }
 
   @override
   void dispose() {
     _socket.off('game_created', _onGameCreated);
+    _socket.off('tournament_error', _onTournamentError);
     super.dispose();
   }
 
@@ -91,7 +93,50 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
     });
   }
 
+  void _onTournamentError(dynamic data) {
+    if (!mounted) return;
+    final msg = data is Map ? (data['message'] ?? 'Tournament error.') : data.toString();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: Colors.red.withValues(alpha: 0.8),
+    ));
+  }
+
   // ── Actions ────────────────────────────────────────────────────────────────
+
+  void _showPasswordDialog(BuildContext context, String tournamentId) {
+    String password = '';
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1B1B),
+        title: Text(ref.tr('ui.password_protection'), style: GoogleFonts.outfit(color: Colors.white)),
+        content: TextField(
+          obscureText: true,
+          style: GoogleFonts.outfit(color: Colors.white),
+          decoration: InputDecoration(
+            hintText: ref.tr('ui.enter_password'),
+            hintStyle: GoogleFonts.outfit(color: Colors.white54),
+          ),
+          onChanged: (v) => password = v,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(ref.tr('ui.cancel'), style: GoogleFonts.outfit(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              ref.read(lobbyProvider.notifier).joinTournament(tournamentId, password: password);
+              context.go('/tournament/$tournamentId');
+            },
+            child: Text(ref.tr('ui.join'), style: GoogleFonts.outfit(color: DTheme.primary)),
+          ),
+        ],
+      ),
+    );
+  }
 
   void _onTimeControl(_TC tc) {
     final user = ref.read(authProvider).value;
@@ -709,7 +754,14 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
           tc: 'by ${t.creatorUsername ?? 'System'} · ${t.timeControl['category'] ?? ''} ${t.timeControl['minutes']}+${t.timeControl['increment']} · $fmt',
           info: '${t.currentCount ?? 0}/${t.maxParticipants ?? '?'}${t.hasPassword ? ' 🔒' : ''}',
           onView: () => context.go('/tournament/${t.id}'),
-          onJoin: auth == null ? null : () => ref.read(lobbyProvider.notifier).joinTournament(t.id),
+          onJoin: auth == null ? null : () {
+            if (t.hasPassword) {
+              _showPasswordDialog(context, t.id);
+            } else {
+              ref.read(lobbyProvider.notifier).joinTournament(t.id);
+              context.go('/tournament/${t.id}');
+            }
+          },
         );
       }).toList(),
     );

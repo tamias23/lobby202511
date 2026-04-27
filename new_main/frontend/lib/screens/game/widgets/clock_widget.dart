@@ -85,14 +85,19 @@ class _ClockWidgetState extends State<ClockWidget> {
             ? DTheme.accent
             : DTheme.textMainDark;
 
-    return Text(
-      _format(_currentMs),
-      style: TextStyle(
-        fontFamily: 'monospace',
-        fontSize: widget.fontSize,
-        fontWeight: FontWeight.w700,
-        color: color,
-        letterSpacing: 1,
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.center,
+      child: Text(
+        _format(_currentMs),
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontFamily: 'monospace',
+          fontSize: widget.fontSize,
+          fontWeight: FontWeight.w700,
+          color: color,
+          letterSpacing: 1,
+        ),
       ),
     );
   }

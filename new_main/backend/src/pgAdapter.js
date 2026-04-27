@@ -127,7 +127,7 @@ CREATE TABLE IF NOT EXISTS users (
     role                     TEXT DEFAULT 'registered',
     is_verified              INTEGER DEFAULT 0,
     verification_token       TEXT,
-    token_expires_at         BIGINT,
+    token_expires_at         TIMESTAMPTZ,
     rating                   DOUBLE PRECISION DEFAULT 1500,
     rating_deviation         DOUBLE PRECISION DEFAULT 350,
     rating_volatility        DOUBLE PRECISION DEFAULT 0.06,
@@ -140,13 +140,13 @@ CREATE TABLE IF NOT EXISTS users (
     nb_tournaments_finished  INTEGER DEFAULT 0,
     is_subscriber            INTEGER DEFAULT 0,
     subscription_source      TEXT,
-    subscriber_until         BIGINT,
+    subscriber_until         TIMESTAMPTZ,
     subscription_id          TEXT,
     is_admin                 INTEGER DEFAULT 0,
     rated_games_played_today INTEGER DEFAULT 0,
     bot_games_played_today   INTEGER DEFAULT 0,
     timezone                 TEXT DEFAULT 'UTC',
-    created_at               BIGINT
+    created_at               TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 -- Ensure email_hash column exists before indexing it (idempotent for existing tables)
@@ -168,7 +168,7 @@ CREATE TABLE IF NOT EXISTS profiles (
 -- games
 CREATE TABLE IF NOT EXISTS games (
     game_id                TEXT PRIMARY KEY,
-    "timestamp"            BIGINT,
+    "timestamp"            TIMESTAMPTZ,
     white_name             TEXT,
     black_name             TEXT,
     white_player_id        TEXT,
@@ -180,8 +180,8 @@ CREATE TABLE IF NOT EXISTS games (
     tournament_round_info  TEXT,
     white_score            DOUBLE PRECISION DEFAULT 0,
     black_score            DOUBLE PRECISION DEFAULT 0,
-    started_at             BIGINT,
-    completed_at           BIGINT,
+    started_at             TIMESTAMPTZ,
+    completed_at           TIMESTAMPTZ,
     time_control_minutes   INTEGER,
     time_control_increment INTEGER
 );
@@ -211,11 +211,11 @@ CREATE TABLE IF NOT EXISTS tournaments (
     invited_bots           INTEGER DEFAULT 0,
     creator_plays          INTEGER DEFAULT 0,
     launch_mode            TEXT DEFAULT 'both',
-    launch_at              BIGINT,
-    created_at             BIGINT,
-    started_at             BIGINT,
-    completed_at           BIGINT,
-    remove_at              BIGINT,
+    launch_at              TIMESTAMPTZ,
+    created_at             TIMESTAMPTZ,
+    started_at             TIMESTAMPTZ,
+    completed_at           TIMESTAMPTZ,
+    remove_at              TIMESTAMPTZ,
     current_round          INTEGER DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_tournaments_status ON tournaments(status);
@@ -233,7 +233,7 @@ CREATE TABLE IF NOT EXISTS tournament_participants (
     losses          INTEGER DEFAULT 0,
     draws           INTEGER DEFAULT 0,
     tiebreaker      DOUBLE PRECISION DEFAULT 0,
-    joined_at       BIGINT
+    joined_at       TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS idx_tp_tournament ON tournament_participants(tournament_id);
 
@@ -245,8 +245,8 @@ CREATE TABLE IF NOT EXISTS cron_jobs (
     hour            TEXT,
     weekday         TEXT,
     enabled         BOOLEAN DEFAULT TRUE,
-    created_at      BIGINT,
-    last_run_at     BIGINT,
+    created_at      TIMESTAMPTZ,
+    last_run_at     TIMESTAMPTZ,
     last_run_status TEXT,
     last_run_id     TEXT,
     last_error      TEXT
@@ -257,10 +257,10 @@ CREATE TABLE IF NOT EXISTS jobs (
     id              TEXT PRIMARY KEY,
     type            TEXT,
     status          TEXT,
-    scheduled_at    BIGINT,
-    started_at      BIGINT,
-    completed_at    BIGINT,
-    created_at      BIGINT,
+    scheduled_at    TIMESTAMPTZ,
+    started_at      TIMESTAMPTZ,
+    completed_at    TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ,
     worker_id       TEXT,
     payload         JSONB DEFAULT '{}',
     error           TEXT
@@ -274,8 +274,8 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     user_id         TEXT,
     type            TEXT,
     status          TEXT,
-    created_at      BIGINT,
-    expires_at      BIGINT,
+    created_at      TIMESTAMPTZ,
+    expires_at      TIMESTAMPTZ,
     platform        TEXT,
     receipt_data    TEXT
 );
@@ -285,7 +285,7 @@ CREATE INDEX IF NOT EXISTS idx_subscriptions_user ON subscriptions(user_id);
 CREATE TABLE IF NOT EXISTS leaderboards (
     id              TEXT PRIMARY KEY,
     data            JSONB,
-    updated_at      BIGINT
+    updated_at      TIMESTAMPTZ
 );
 
 -- tournament_schedule (daily tournament template rows — edited via admin UI)
@@ -301,7 +301,7 @@ CREATE TABLE IF NOT EXISTS tournament_schedule (
     max_participants INTEGER NOT NULL DEFAULT 100,
     invited_bots     INTEGER NOT NULL DEFAULT 0,
     enabled          BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at       BIGINT
+    created_at       TIMESTAMPTZ
 );
 -- Idempotent migrations (safe on re-deploy)
 ALTER TABLE tournament_schedule ADD COLUMN IF NOT EXISTS launch_mode TEXT NOT NULL DEFAULT 'any';

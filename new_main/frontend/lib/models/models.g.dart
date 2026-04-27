@@ -177,7 +177,7 @@ _GameRequest _$GameRequestFromJson(Map<String, dynamic> json) => _GameRequest(
   role: json['role'] as String,
   timeControl: json['timeControl'] as Map<String, dynamic>,
   boardId: json['boardId'] as String?,
-  createdAt: (json['createdAt'] as num).toInt(),
+  createdAt: _parseIntReq(json['createdAt']),
 );
 
 Map<String, dynamic> _$GameRequestToJson(_GameRequest instance) =>
@@ -237,8 +237,12 @@ Map<String, dynamic> _$BotInfoToJson(_BotInfo instance) => <String, dynamic>{
 };
 
 _LiveStats _$LiveStatsFromJson(Map<String, dynamic> json) => _LiveStats(
-  onlineUsers: (json['onlineUsers'] as num?)?.toInt() ?? 0,
-  activeGames: (json['activeGames'] as num?)?.toInt() ?? 0,
+  onlineUsers: json['onlineUsers'] == null
+      ? 0
+      : _parseIntReq(json['onlineUsers']),
+  activeGames: json['activeGames'] == null
+      ? 0
+      : _parseIntReq(json['activeGames']),
 );
 
 Map<String, dynamic> _$LiveStatsToJson(_LiveStats instance) =>
@@ -255,11 +259,11 @@ _TournamentSummary _$TournamentSummaryFromJson(Map<String, dynamic> json) =>
       timeControl: json['timeControl'] as Map<String, dynamic>,
       name: json['name'] as String?,
       creatorUsername: json['creatorUsername'] as String?,
-      currentCount: (json['currentCount'] as num?)?.toInt(),
-      maxParticipants: (json['maxParticipants'] as num?)?.toInt(),
+      currentCount: _parseInt(json['currentCount']),
+      maxParticipants: _parseInt(json['maxParticipants']),
       hasPassword: json['hasPassword'] as bool? ?? false,
-      currentRound: (json['currentRound'] as num?)?.toInt(),
-      maxRounds: (json['maxRounds'] as num?)?.toInt(),
+      currentRound: _parseInt(json['currentRound']),
+      maxRounds: _parseInt(json['maxRounds']),
     );
 
 Map<String, dynamic> _$TournamentSummaryToJson(_TournamentSummary instance) =>

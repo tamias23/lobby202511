@@ -20,6 +20,9 @@ function _getValkeySync() {
     return _valkeySync;
 }
 
+const getIso = (v) => v ? new Date(v).toISOString() : null;
+const ms = (v) => v ? new Date(v).getTime() : 0;
+
 // ─── Config (injected at init time from process.env) ────────────────────────
 let CONFIG = {
     MAX_CONCURRENT_TOURNAMENTS: 20,
@@ -89,7 +92,11 @@ function setDependencies(createGameFn, io, abortGameFn, broadcastLobbyUpdateFn) 
 function _syncToValkey() {
     try {
         const vs = _getValkeySync();
-        vs.syncTournamentList(getOpenTournaments(), getActiveTournamentsList());
+        const open = getOpenTournaments();
+        const active = getActiveTournamentsList();
+        vs.syncTournamentList(open, active);
+        // valkeySync ignores our own pub/sub messages, so we MUST update the local cache too
+        applyRemoteTournamentList(open, active);
     } catch (_) { /* valkeySync may not be init yet on startup */ }
 }
 
@@ -116,10 +123,15 @@ async function loadFromDb() {
                 result:       g.winner || null,            // renamed from winner
                 white_score:  g.white_score  || 0,
                 black_score:  g.black_score  || 0,
-                started_at:   g.started_at   || null,
-                completed_at: g.completed_at || null,
+                started_at:   getIso(g.started_at),
+                completed_at: getIso(g.completed_at),
             }));
 
+            t.launch_at = getIso(t.launch_at);
+            t.created_at = getIso(t.created_at);
+            t.started_at = getIso(t.started_at);
+            t.completed_at = getIso(t.completed_at);
+            t.remove_at = getIso(t.remove_at);
             activeTournaments.set(t.id, { ...t, participants, games });
         }
 
@@ -169,7 +181,7 @@ async function createTournament(opts) {
         throw new Error(`Bot limit exceeded. Currently ${currentBotCount} bots in tournaments, max ${CONFIG.MAX_BOTS_IN_TOURNAMENTS}.`);
     }
 
-    const now = Date.now();
+    const nowMs = Date.now();
     const id = uuidv4().slice(0, 12);
     const passwordHash = opts.password ? await bcrypt.hash(opts.password, 10) : null;
 
@@ -179,9 +191,10 @@ async function createTournament(opts) {
     // Launch mode
     let launchAt = null;
     if (opts.launchMode === 'at_time' || opts.launchMode === 'both') {
-        launchAt = opts.launchAt || (now + 2 * 60 * 60 * 1000);
+        let launchAtMs = ms(opts.launchAt) || (nowMs + 2 * 60 * 60 * 1000);
         // Cap at 24 hours from now to prevent extreme scheduling
-        if (launchAt > now + 24 * 60 * 60 * 1000) launchAt = now + 24 * 60 * 60 * 1000;
+        if (launchAtMs > nowMs + 24 * 60 * 60 * 1000) launchAtMs = nowMs + 24 * 60 * 60 * 1000;
+        launchAt = getIso(launchAtMs);
     }
 
     const tournament = {
@@ -202,11 +215,11 @@ async function createTournament(opts) {
         invited_bots: invitedBots,
         creator_plays: opts.creatorPlays !== false ? 1 : 0,
         launch_mode: opts.launchMode || 'when_complete',
-        launch_at: launchAt,
-        created_at: now,
+        launch_at: getIso(launchAt),
+        created_at: getIso(nowMs),
         started_at: null,
         completed_at: null,
-        remove_at: now + CONFIG.MAX_AGE_HOURS * 60 * 60 * 1000,
+        remove_at: getIso(nowMs + CONFIG.MAX_AGE_HOURS * 60 * 60 * 1000),
         current_round: 0,
         name: opts.name || generateFunnyTournamentName(),
         creator_username: opts.creatorUsername || opts.creatorId,
@@ -289,7 +302,7 @@ async function joinTournament(tournamentId, userId, username, password, skipPass
         is_bot: userId.startsWith('bot_') ? 1 : 0,
         rating: participantRating,
         score: 0, wins: 0, draws: 0, losses: 0, tiebreak: 0,
-        joined_at: Date.now(),
+        joined_at: getIso(Date.now()),
     };
 
     t.participants.push(participant);
@@ -360,13 +373,13 @@ async function tryStartTournament(tournamentId) {
         shouldStart = true;
     }
     // "at_time": start when time reached AND min participants met
-    if (t.launch_mode === 'at_time' && t.launch_at && now >= t.launch_at && t.current_count >= limits.min) {
+    if (t.launch_mode === 'at_time' && t.launch_at && now >= new Date(t.launch_at).getTime() && t.current_count >= limits.min) {
         shouldStart = true;
     }
     // "both": either condition
     if (t.launch_mode === 'both') {
         if (t.current_count >= t.max_participants) shouldStart = true;
-        if (t.launch_at && now >= t.launch_at && t.current_count >= limits.min) shouldStart = true;
+        if (t.launch_at && now >= new Date(t.launch_at).getTime() && t.current_count >= limits.min) shouldStart = true;
     }
 
     if (!shouldStart) return false;
@@ -381,7 +394,7 @@ async function startTournament(tournamentId) {
     if (!t || t.status !== 'open') return false;
 
     t.status = 'active';
-    t.started_at = Date.now();
+    t.started_at = getIso(Date.now());
     t.current_round = 1;
 
     await db.updateTournament(tournamentId, { status: 'active', started_at: t.started_at, current_round: 1 });
@@ -453,7 +466,7 @@ async function startArenaRound(tournamentId) {
     if (!t || t.status !== 'active') return;
 
     // Set arena end time
-    t.arenaEndAt = t.started_at + t.duration_value * 60 * 1000;
+    t.arenaEndAt = new Date(new Date(t.started_at).getTime() + t.duration_value * 60 * 1000).toISOString();
 
     // Pair all idle players now
     await pairIdleArenaPlayers(tournamentId);
@@ -464,7 +477,7 @@ async function pairIdleArenaPlayers(tournamentId) {
     if (!t || t.status !== 'active' || t.format !== 'arena') return;
 
     const now = Date.now();
-    if (t.arenaEndAt && now >= t.arenaEndAt) {
+    if (t.arenaEndAt && now >= new Date(t.arenaEndAt).getTime()) {
         // Arena time expired — complete once all running games finish
         const pendingGames = t.games.filter(g => !g.result);
         if (pendingGames.length === 0) {
@@ -489,7 +502,7 @@ async function pairIdleArenaPlayers(tournamentId) {
         const lastGame = [...t.games].reverse().find(
             g => g.result && (g.white_id === p.user_id || g.black_id === p.user_id)
         );
-        if (lastGame && lastGame.completed_at && (now - lastGame.completed_at) < 10000) return false;
+        if (lastGame && lastGame.completed_at && (now - new Date(lastGame.completed_at).getTime()) < 10000) return false;
         return true;
     });
 
@@ -554,7 +567,7 @@ async function createTournamentGame(tournament, whiteId, blackId, timeControl) {
             result: null,
             white_score: 0,
             black_score: 0,
-            started_at: Date.now(),
+            started_at: getIso(Date.now()),
             completed_at: null,
         };
 
@@ -611,7 +624,7 @@ async function onGameComplete(gameHash, winnerSide, moves = []) {
         // Determine result
         // 'white' | 'black' | 'draw' | 'abandoned' (double disconnection — double loss)
         game.result = winnerSide || 'draw';
-        game.completed_at = Date.now();
+        game.completed_at = getIso(Date.now());
 
         // Award points
         const whitePart = t.participants.find(p => p.user_id === game.white_id);
@@ -735,8 +748,8 @@ async function completeTournament(tournamentId) {
     if (!t) return;
 
     t.status       = 'completed';
-    t.completed_at = Date.now();
-    t.remove_at    = t.completed_at + 5 * 60 * 60 * 1000; // remove 5 hours after completion
+    t.completed_at = getIso(Date.now());
+    t.remove_at    = getIso(new Date(t.completed_at).getTime() + 5 * 60 * 60 * 1000); // remove 5 hours after completion
 
     await db.updateTournament(tournamentId, {
         status: 'completed', completed_at: t.completed_at, remove_at: t.remove_at,
@@ -807,10 +820,10 @@ async function abortArenaExpiredGames(tournamentId) {
 
     for (const game of pendingGames) {
         game.result    = 'aborted';
-        game.completed_at = now;
+        game.completed_at = getIso(now);
 
         // Persist 'aborted' result so pairIdleArenaPlayers won't re-pair these players
-        await db.updateGame(game.id, { winner: 'aborted', completed_at: now });
+        await db.updateGame(game.id, { winner: 'aborted', completed_at: game.completed_at });
 
         // Notify the game room (GameBoard.jsx listens for this)
         if (_ioRef) {
@@ -845,14 +858,15 @@ async function abortArenaExpiredGames(tournamentId) {
  * Called from index.js every 5 seconds.
  */
 async function checkArenaExpiry() {
-    const now = Date.now();
+    const nowMs = Date.now();
     for (const [tid, t] of activeTournaments) {
-        if (t.format !== 'arena' || t.status !== 'active') continue;
-        if (t.arenaEndAt && now >= t.arenaEndAt) {
-            // Fire-and-forget; errors are logged inside
-            abortArenaExpiredGames(tid).catch(e =>
-                logger.error('Tournament', `checkArenaExpiry error for ${tid}:`, e.message)
-            );
+        if (t.format === 'arena' && t.status === 'active') {
+            if (t.arenaEndAt && nowMs >= new Date(t.arenaEndAt).getTime()) {
+                // Fire-and-forget; errors are logged inside
+                abortArenaExpiredGames(tid).catch(e =>
+                    logger.error('Tournament', `checkArenaExpiry error for ${tid}:`, e.message)
+                );
+            }
         }
     }
 }
@@ -860,17 +874,17 @@ async function checkArenaExpiry() {
 
 // ─── Cleanup Expired ────────────────────────────────────────────────────────
 async function cleanupExpired() {
-    const now = Date.now();
+    const nowMs = Date.now();
     for (const [tid, t] of activeTournaments) {
         // Remove if past remove_at
-        if (t.remove_at && now > t.remove_at) {
+        if (t.remove_at && nowMs > ms(t.remove_at)) {
             logger.info('Tournament', `${tid} expired (past remove_at). Cancelling.`);
             await cancelTournament(tid);
             continue;
         }
         // Open tournaments: expire after OPEN_EXPIRY_HOURS without enough players
         if (t.status === 'open') {
-            const openAge = now - t.created_at;
+            const openAge = nowMs - ms(t.created_at);
             const maxOpen = CONFIG.OPEN_EXPIRY_HOURS * 60 * 60 * 1000;
             if (openAge > maxOpen) {
                 logger.warn('Tournament', `${tid} open too long (${Math.round(openAge / 60000)}min). Cancelling.`);
@@ -878,7 +892,7 @@ async function cleanupExpired() {
                 continue;
             }
             // Also check if scheduled launch time has passed
-            if (t.launch_at && now > t.launch_at) {
+            if (t.launch_at && nowMs > ms(t.launch_at)) {
                 const limits = FORMAT_LIMITS[t.format];
                 if (t.current_count < limits.min) {
                     logger.info('Tournament', `${tid} (${t.format}) failed to start at scheduled time (insufficient players: ${t.current_count}/${limits.min}). Cancelling.`);
@@ -996,10 +1010,13 @@ function getOpenTournaments() {
     return result;
 }
 
+const COMPLETED_LOBBY_VISIBILITY_MS = 30 * 60 * 1000; // 30 minutes
+
 function getActiveTournamentsList() {
     const result = [];
+    const nowMs = Date.now();
     for (const [, t] of activeTournaments) {
-        if (t.status === 'active' || t.status === 'completed') {
+        if (t.status === 'active') {
             result.push({
                 id: t.id,
                 name: t.name || 'Tournament',
@@ -1016,6 +1033,27 @@ function getActiveTournamentsList() {
                 },
                 arenaEndAt: t.arenaEndAt || null,
             });
+        } else if (t.status === 'completed') {
+            // Only show completed tournaments for 30 minutes after they finished
+            const completedAt = ms(t.completed_at || t.updated_at || t.created_at);
+            if (completedAt && (nowMs - completedAt) < COMPLETED_LOBBY_VISIBILITY_MS) {
+                result.push({
+                    id: t.id,
+                    name: t.name || 'Tournament',
+                    format: t.format,
+                    status: t.status,
+                    currentRound: t.current_round,
+                    maxRounds: getMaxRounds(t),
+                    currentCount: t.current_count,
+                    maxParticipants: t.max_participants,
+                    timeControl: { 
+                        minutes: t.time_control_minutes, 
+                        increment: t.time_control_increment,
+                        category: getCategoryLabel(getCategoryKey({ minutes: t.time_control_minutes, increment: t.time_control_increment }))
+                    },
+                    arenaEndAt: t.arenaEndAt || null,
+                });
+            }
         }
     }
     return result;

@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../core/file_utils.dart';
 import '../../providers/socket_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/translations_provider.dart';
 import '../../widgets/lobby_back_button.dart';
 
 const _formatLabels = {
@@ -58,6 +59,20 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
       }
     });
 
+    socket.on('tournament_error', (data) {
+      if (!mounted) return;
+      final msg = data is Map ? (data['message'] ?? 'Tournament error.') : data.toString();
+      // If tournament not found (evicted from memory), go back to lobby silently
+      final isNotFound = msg.toLowerCase().contains('not found');
+      if (!isNotFound) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(msg),
+          backgroundColor: Colors.red.withValues(alpha: 0.8),
+        ));
+      }
+      context.go('/');
+    });
+
     socket.on('tournament_game_start', (data) {
       final d = Map<String,dynamic>.from(data as Map);
       if (!mounted) return;
@@ -83,6 +98,7 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
     final socket = ref.read(socketServiceProvider);
     socket.emit('leave_tournament_room', {'tournamentId': widget.tournamentId});
     socket.off('tournament_update');
+    socket.off('tournament_error');
     socket.off('tournament_game_start');
     socket.off('tournament_game_aborted');
     socket.off('tournament_games_download_data');
@@ -138,9 +154,35 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
     downloadFile(jsonStr, 'tournament_${tName}_$timestamp.json');
   }
 
+  int? _parseInt(dynamic val) {
+    if (val == null) return null;
+    if (val is num) return val.toInt();
+    if (val is String) return int.tryParse(val);
+    return null;
+  }
+
+  double? _parseDouble(dynamic val) {
+    if (val == null) return null;
+    if (val is num) return val.toDouble();
+    if (val is String) return double.tryParse(val);
+    return null;
+  }
+
+  DateTime? _parseDate(dynamic val) {
+    if (val == null) return null;
+    if (val is int) return DateTime.fromMillisecondsSinceEpoch(val);
+    if (val is num) return DateTime.fromMillisecondsSinceEpoch(val.toInt());
+    if (val is String) {
+      final parsedInt = int.tryParse(val);
+      if (parsedInt != null) return DateTime.fromMillisecondsSinceEpoch(parsedInt);
+      return DateTime.tryParse(val);
+    }
+    return null;
+  }
+
   String _formatTimeLeft(dynamic endAt) {
-    if (endAt == null) return '';
-    final end  = DateTime.fromMillisecondsSinceEpoch((endAt as num).toInt());
+    final end = _parseDate(endAt);
+    if (end == null) return '';
     final diff = end.difference(DateTime.now());
     if (diff.isNegative) return '0:00';
     final m = diff.inMinutes;
@@ -149,8 +191,8 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
   }
 
   String _formatCountdown(dynamic timeAt) {
-    if (timeAt == null) return '';
-    final end = DateTime.fromMillisecondsSinceEpoch((timeAt as num).toInt());
+    final end = _parseDate(timeAt);
+    if (end == null) return '';
     final diff = end.difference(DateTime.now());
     if (diff.isNegative) return 'Starting...';
     final dDays = diff.inDays;
@@ -175,7 +217,15 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
       body: SafeArea(
         child: t == null
             ? const Center(child: CircularProgressIndicator())
-            : Column(children: [
+            : t['timeControl'] == null
+                // Tournament was evicted from server memory — redirect to lobby
+                ? Builder(builder: (ctx) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) context.go('/');
+                    });
+                    return const Center(child: CircularProgressIndicator());
+                  })
+                : Column(children: [
                 _buildHeader(t),
                 Expanded(child: wide
                     ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -197,10 +247,10 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
   Widget _buildHeader(Map<String,dynamic> t) {
     final format    = t['format'] as String? ?? '';
     final status    = t['status'] as String? ?? 'open';
-    final curRound  = (t['currentRound']  as num?)?.toInt() ?? 0;
-    final maxRounds = (t['maxRounds']      as num?)?.toInt() ?? 0;
-    final curCount  = (t['currentCount']   as num?)?.toInt() ?? 0;
-    final maxP      = (t['maxParticipants'] as num?)?.toInt() ?? 0;
+    final curRound  = _parseInt(t['currentRound']) ?? 0;
+    final maxRounds = _parseInt(t['maxRounds']) ?? 0;
+    final curCount  = _parseInt(t['currentCount']) ?? 0;
+    final maxP      = _parseInt(t['maxParticipants']) ?? 0;
     final tc        = t['timeControl'] != null ? Map<String,dynamic>.from(t['timeControl'] as Map) : null;
     final isActive  = status == 'active';
     final isArena   = format == 'arena';
@@ -254,35 +304,37 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
   }
 
   Widget _buildDetails(Map<String,dynamic> t) {
-    final tc        = t['timeControl'] != null ? Map<String,dynamic>.from(t['timeControl'] as Map) : null;
+    final tc        = t['timeControl'] != null ? Map<String,dynamic>.from(t['timeControl'] as Map) : <String,dynamic>{};
     final launchMode = t['launchMode'] as String? ?? 'when_complete';
     String launchStr;
     if (launchMode == 'at_time' && t['launchAt'] != null) {
-      final d = DateTime.fromMillisecondsSinceEpoch((t['launchAt'] as num).toInt());
-      launchStr = 'Scheduled at ${d.hour.toString().padLeft(2,'0')}:${d.minute.toString().padLeft(2,'0')}';
-      if (t['status'] == 'open') {
-        final cd = _formatCountdown(t['launchAt']);
-        launchStr += cd == 'Starting...' ? ' (Starting...)' : ' (in $cd)';
+      final d = _parseDate(t['launchAt'])?.toUtc();
+      if (d != null) {
+        launchStr = '${ref.tr('ui.scheduled_at')} ${d.hour.toString().padLeft(2,'0')}:${d.minute.toString().padLeft(2,'0')} UTC';
+        if (t['status'] == 'open') {
+          final cd = _formatCountdown(t['launchAt']);
+          launchStr += cd == 'Starting...' ? ' (${ref.tr('ui.starting_dots')})' : ' (in $cd)';
+        }
+      } else {
+        launchStr = ref.tr('ui.unknown_time');
       }
     } else if (launchMode == 'when_complete') {
-      launchStr = 'Starts when full';
+      launchStr = ref.tr('ui.starts_when_full');
     } else {
-      launchStr = 'Either time or full';
+      launchStr = ref.tr('ui.either_time_or_full');
     }
-    final createdAt = t['createdAt'] != null
-        ? DateTime.fromMillisecondsSinceEpoch((t['createdAt'] as num).toInt())
-        : null;
+    final createdAt = _parseDate(t['createdAt'])?.toUtc();
 
     return _PanelCard(
-      title: 'Tournament Details',
+      title: ref.tr('ui.tournament_details'),
       child: Wrap(spacing: 0, runSpacing: 0, children: [
-        _DetailItem('Organizer',  t['creatorName'] as String? ?? t['creatorId'] as String? ?? 'System'),
-        _DetailItem('Type',       (t['format'] as String? ?? 'standard').replaceAll('_', ' ')),
-        if (createdAt != null) _DetailItem('Created', '${createdAt.day.toString().padLeft(2, '0')}/${createdAt.month.toString().padLeft(2, '0')}/${createdAt.year} ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}'),
-        _DetailItem('Start Plan', launchStr),
-        _DetailItem('Board',      t['boardId'] as String? ?? 'Random'),
-        _DetailItem('Rating',     '${t['ratingMin'] ?? 0} – ${t['ratingMax'] ?? 5000}'),
-        if (tc != null) _DetailItem('Time Control', '${tc['category'] ?? ''} ${tc['minutes']}+${tc['increment']}'),
+        _DetailItem(ref.tr('ui.organizer'),  t['creatorName'] as String? ?? t['creatorId'] as String? ?? 'System'),
+        _DetailItem(ref.tr('ui.type'),       (t['format'] as String? ?? 'standard').replaceAll('_', ' ')),
+        if (createdAt != null) _DetailItem(ref.tr('ui.created'), '${createdAt.day.toString().padLeft(2, '0')}/${createdAt.month.toString().padLeft(2, '0')}/${createdAt.year} ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')} UTC'),
+        _DetailItem(ref.tr('ui.start_plan'), launchStr),
+        _DetailItem(ref.tr('ui.board'),      t['boardId'] as String? ?? 'Random'),
+        _DetailItem(ref.tr('ui.rating'),     '${t['ratingMin'] ?? 0} – ${t['ratingMax'] ?? 5000}'),
+        if (tc.isNotEmpty) _DetailItem(ref.tr('ui.time_control'), '${tc['category'] ?? ''} ${tc['minutes']}+${tc['increment']}'),
       ]),
     );
   }
@@ -293,11 +345,11 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
     final isSwiss     = t['format'] == 'swiss';
 
     return _PanelCard(
-      title: 'Standings',
+      title: ref.tr('ui.standings'),
       child: standings.isEmpty
           ? Padding(
               padding: const EdgeInsets.all(16),
-              child: Text('No standings yet.',
+              child: Text(ref.tr('ui.no_standings_yet'),
                 style: GoogleFonts.outfit(color: Colors.white38, fontSize: 13),
                 textAlign: TextAlign.center))
           : Table(
@@ -348,7 +400,7 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
                                   fontWeight: isMe ? FontWeight.w700 : FontWeight.w400),
                               ),
                               TextSpan(
-                                text: ' (${((s['rating'] as num?) ?? 1500).toInt()})',
+                                text: ' (${_parseInt(s['rating']) ?? 1500})',
                                 style: GoogleFonts.outfit(
                                   fontSize: 11,
                                   color: isMe
@@ -364,7 +416,7 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
                       _TD('${s['wins']   ?? 0}'),
                       _TD('${s['draws']  ?? 0}'),
                       _TD('${s['losses'] ?? 0}'),
-                      if (isSwiss) _TD('${((s['tiebreak'] as num?) ?? 0.0).toStringAsFixed(1)}'),
+                      if (isSwiss) _TD('${(_parseDouble(s['tiebreak']) ?? 0.0).toStringAsFixed(1)}'),
                     ].take(isSwiss ? 7 : 6).toList(),
                   );
                 }),
@@ -381,7 +433,7 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: _PanelCard(
-        title: isKnockout ? 'Bracket' : 'Games',
+        title: isKnockout ? ref.tr('ui.bracket') : ref.tr('ui.games'),
         child: isKnockout
             ? _buildBracket(t, auth)
             : _buildGameList(t, auth),
@@ -393,7 +445,7 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
     final bracket = t['bracket'] as List<dynamic>? ?? [];
     if (bracket.isEmpty) return Padding(
       padding: const EdgeInsets.all(16),
-      child: Text('No bracket yet.', style: GoogleFonts.outfit(color: Colors.white38)));
+      child: Text(ref.tr('ui.no_bracket_yet'), style: GoogleFonts.outfit(color: Colors.white38)));
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(crossAxisAlignment: CrossAxisAlignment.start,

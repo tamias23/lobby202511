@@ -1312,7 +1312,7 @@ as String,
 mixin _$GameRequest {
 
  String get requestId; String? get userId;// optional — not always sent
- String get username; String get role; Map<String, dynamic> get timeControl; String? get boardId; int get createdAt;
+ String get username; String get role; Map<String, dynamic> get timeControl; String? get boardId;@JsonKey(fromJson: _parseIntReq) int get createdAt;
 /// Create a copy of GameRequest
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -1345,7 +1345,7 @@ abstract mixin class $GameRequestCopyWith<$Res>  {
   factory $GameRequestCopyWith(GameRequest value, $Res Function(GameRequest) _then) = _$GameRequestCopyWithImpl;
 @useResult
 $Res call({
- String requestId, String? userId, String username, String role, Map<String, dynamic> timeControl, String? boardId, int createdAt
+ String requestId, String? userId, String username, String role, Map<String, dynamic> timeControl, String? boardId,@JsonKey(fromJson: _parseIntReq) int createdAt
 });
 
 
@@ -1456,7 +1456,7 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String requestId,  String? userId,  String username,  String role,  Map<String, dynamic> timeControl,  String? boardId,  int createdAt)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String requestId,  String? userId,  String username,  String role,  Map<String, dynamic> timeControl,  String? boardId, @JsonKey(fromJson: _parseIntReq)  int createdAt)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _GameRequest() when $default != null:
 return $default(_that.requestId,_that.userId,_that.username,_that.role,_that.timeControl,_that.boardId,_that.createdAt);case _:
@@ -1477,7 +1477,7 @@ return $default(_that.requestId,_that.userId,_that.username,_that.role,_that.tim
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String requestId,  String? userId,  String username,  String role,  Map<String, dynamic> timeControl,  String? boardId,  int createdAt)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String requestId,  String? userId,  String username,  String role,  Map<String, dynamic> timeControl,  String? boardId, @JsonKey(fromJson: _parseIntReq)  int createdAt)  $default,) {final _that = this;
 switch (_that) {
 case _GameRequest():
 return $default(_that.requestId,_that.userId,_that.username,_that.role,_that.timeControl,_that.boardId,_that.createdAt);case _:
@@ -1497,7 +1497,7 @@ return $default(_that.requestId,_that.userId,_that.username,_that.role,_that.tim
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String requestId,  String? userId,  String username,  String role,  Map<String, dynamic> timeControl,  String? boardId,  int createdAt)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String requestId,  String? userId,  String username,  String role,  Map<String, dynamic> timeControl,  String? boardId, @JsonKey(fromJson: _parseIntReq)  int createdAt)?  $default,) {final _that = this;
 switch (_that) {
 case _GameRequest() when $default != null:
 return $default(_that.requestId,_that.userId,_that.username,_that.role,_that.timeControl,_that.boardId,_that.createdAt);case _:
@@ -1512,7 +1512,7 @@ return $default(_that.requestId,_that.userId,_that.username,_that.role,_that.tim
 @JsonSerializable()
 
 class _GameRequest implements GameRequest {
-  const _GameRequest({required this.requestId, this.userId, required this.username, required this.role, required final  Map<String, dynamic> timeControl, this.boardId, required this.createdAt}): _timeControl = timeControl;
+  const _GameRequest({required this.requestId, this.userId, required this.username, required this.role, required final  Map<String, dynamic> timeControl, this.boardId, @JsonKey(fromJson: _parseIntReq) required this.createdAt}): _timeControl = timeControl;
   factory _GameRequest.fromJson(Map<String, dynamic> json) => _$GameRequestFromJson(json);
 
 @override final  String requestId;
@@ -1528,7 +1528,7 @@ class _GameRequest implements GameRequest {
 }
 
 @override final  String? boardId;
-@override final  int createdAt;
+@override@JsonKey(fromJson: _parseIntReq) final  int createdAt;
 
 /// Create a copy of GameRequest
 /// with the given fields replaced by the non-null parameter values.
@@ -1563,7 +1563,7 @@ abstract mixin class _$GameRequestCopyWith<$Res> implements $GameRequestCopyWith
   factory _$GameRequestCopyWith(_GameRequest value, $Res Function(_GameRequest) _then) = __$GameRequestCopyWithImpl;
 @override @useResult
 $Res call({
- String requestId, String? userId, String username, String role, Map<String, dynamic> timeControl, String? boardId, int createdAt
+ String requestId, String? userId, String username, String role, Map<String, dynamic> timeControl, String? boardId,@JsonKey(fromJson: _parseIntReq) int createdAt
 });
 
 
@@ -2178,7 +2178,7 @@ as bool,
 /// @nodoc
 mixin _$LiveStats {
 
- int get onlineUsers; int get activeGames;
+@JsonKey(fromJson: _parseIntReq) int get onlineUsers;@JsonKey(fromJson: _parseIntReq) int get activeGames;
 /// Create a copy of LiveStats
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -2211,7 +2211,7 @@ abstract mixin class $LiveStatsCopyWith<$Res>  {
   factory $LiveStatsCopyWith(LiveStats value, $Res Function(LiveStats) _then) = _$LiveStatsCopyWithImpl;
 @useResult
 $Res call({
- int onlineUsers, int activeGames
+@JsonKey(fromJson: _parseIntReq) int onlineUsers,@JsonKey(fromJson: _parseIntReq) int activeGames
 });
 
 
@@ -2317,7 +2317,7 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int onlineUsers,  int activeGames)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@JsonKey(fromJson: _parseIntReq)  int onlineUsers, @JsonKey(fromJson: _parseIntReq)  int activeGames)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _LiveStats() when $default != null:
 return $default(_that.onlineUsers,_that.activeGames);case _:
@@ -2338,7 +2338,7 @@ return $default(_that.onlineUsers,_that.activeGames);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int onlineUsers,  int activeGames)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@JsonKey(fromJson: _parseIntReq)  int onlineUsers, @JsonKey(fromJson: _parseIntReq)  int activeGames)  $default,) {final _that = this;
 switch (_that) {
 case _LiveStats():
 return $default(_that.onlineUsers,_that.activeGames);case _:
@@ -2358,7 +2358,7 @@ return $default(_that.onlineUsers,_that.activeGames);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int onlineUsers,  int activeGames)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@JsonKey(fromJson: _parseIntReq)  int onlineUsers, @JsonKey(fromJson: _parseIntReq)  int activeGames)?  $default,) {final _that = this;
 switch (_that) {
 case _LiveStats() when $default != null:
 return $default(_that.onlineUsers,_that.activeGames);case _:
@@ -2373,11 +2373,11 @@ return $default(_that.onlineUsers,_that.activeGames);case _:
 @JsonSerializable()
 
 class _LiveStats implements LiveStats {
-  const _LiveStats({this.onlineUsers = 0, this.activeGames = 0});
+  const _LiveStats({@JsonKey(fromJson: _parseIntReq) this.onlineUsers = 0, @JsonKey(fromJson: _parseIntReq) this.activeGames = 0});
   factory _LiveStats.fromJson(Map<String, dynamic> json) => _$LiveStatsFromJson(json);
 
-@override@JsonKey() final  int onlineUsers;
-@override@JsonKey() final  int activeGames;
+@override@JsonKey(fromJson: _parseIntReq) final  int onlineUsers;
+@override@JsonKey(fromJson: _parseIntReq) final  int activeGames;
 
 /// Create a copy of LiveStats
 /// with the given fields replaced by the non-null parameter values.
@@ -2412,7 +2412,7 @@ abstract mixin class _$LiveStatsCopyWith<$Res> implements $LiveStatsCopyWith<$Re
   factory _$LiveStatsCopyWith(_LiveStats value, $Res Function(_LiveStats) _then) = __$LiveStatsCopyWithImpl;
 @override @useResult
 $Res call({
- int onlineUsers, int activeGames
+@JsonKey(fromJson: _parseIntReq) int onlineUsers,@JsonKey(fromJson: _parseIntReq) int activeGames
 });
 
 
@@ -2446,7 +2446,7 @@ mixin _$TournamentSummary {
 
  String get id; String get format;// swiss | knockout | round_robin | arena
  String get status;// open | active | completed
- Map<String, dynamic> get timeControl; String? get name; String? get creatorUsername; int? get currentCount; int? get maxParticipants; bool get hasPassword; int? get currentRound; int? get maxRounds;
+ Map<String, dynamic> get timeControl; String? get name; String? get creatorUsername;@JsonKey(fromJson: _parseInt) int? get currentCount;@JsonKey(fromJson: _parseInt) int? get maxParticipants; bool get hasPassword;@JsonKey(fromJson: _parseInt) int? get currentRound;@JsonKey(fromJson: _parseInt) int? get maxRounds;
 /// Create a copy of TournamentSummary
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -2479,7 +2479,7 @@ abstract mixin class $TournamentSummaryCopyWith<$Res>  {
   factory $TournamentSummaryCopyWith(TournamentSummary value, $Res Function(TournamentSummary) _then) = _$TournamentSummaryCopyWithImpl;
 @useResult
 $Res call({
- String id, String format, String status, Map<String, dynamic> timeControl, String? name, String? creatorUsername, int? currentCount, int? maxParticipants, bool hasPassword, int? currentRound, int? maxRounds
+ String id, String format, String status, Map<String, dynamic> timeControl, String? name, String? creatorUsername,@JsonKey(fromJson: _parseInt) int? currentCount,@JsonKey(fromJson: _parseInt) int? maxParticipants, bool hasPassword,@JsonKey(fromJson: _parseInt) int? currentRound,@JsonKey(fromJson: _parseInt) int? maxRounds
 });
 
 
@@ -2594,7 +2594,7 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String format,  String status,  Map<String, dynamic> timeControl,  String? name,  String? creatorUsername,  int? currentCount,  int? maxParticipants,  bool hasPassword,  int? currentRound,  int? maxRounds)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String format,  String status,  Map<String, dynamic> timeControl,  String? name,  String? creatorUsername, @JsonKey(fromJson: _parseInt)  int? currentCount, @JsonKey(fromJson: _parseInt)  int? maxParticipants,  bool hasPassword, @JsonKey(fromJson: _parseInt)  int? currentRound, @JsonKey(fromJson: _parseInt)  int? maxRounds)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _TournamentSummary() when $default != null:
 return $default(_that.id,_that.format,_that.status,_that.timeControl,_that.name,_that.creatorUsername,_that.currentCount,_that.maxParticipants,_that.hasPassword,_that.currentRound,_that.maxRounds);case _:
@@ -2615,7 +2615,7 @@ return $default(_that.id,_that.format,_that.status,_that.timeControl,_that.name,
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String format,  String status,  Map<String, dynamic> timeControl,  String? name,  String? creatorUsername,  int? currentCount,  int? maxParticipants,  bool hasPassword,  int? currentRound,  int? maxRounds)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String format,  String status,  Map<String, dynamic> timeControl,  String? name,  String? creatorUsername, @JsonKey(fromJson: _parseInt)  int? currentCount, @JsonKey(fromJson: _parseInt)  int? maxParticipants,  bool hasPassword, @JsonKey(fromJson: _parseInt)  int? currentRound, @JsonKey(fromJson: _parseInt)  int? maxRounds)  $default,) {final _that = this;
 switch (_that) {
 case _TournamentSummary():
 return $default(_that.id,_that.format,_that.status,_that.timeControl,_that.name,_that.creatorUsername,_that.currentCount,_that.maxParticipants,_that.hasPassword,_that.currentRound,_that.maxRounds);case _:
@@ -2635,7 +2635,7 @@ return $default(_that.id,_that.format,_that.status,_that.timeControl,_that.name,
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String format,  String status,  Map<String, dynamic> timeControl,  String? name,  String? creatorUsername,  int? currentCount,  int? maxParticipants,  bool hasPassword,  int? currentRound,  int? maxRounds)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String format,  String status,  Map<String, dynamic> timeControl,  String? name,  String? creatorUsername, @JsonKey(fromJson: _parseInt)  int? currentCount, @JsonKey(fromJson: _parseInt)  int? maxParticipants,  bool hasPassword, @JsonKey(fromJson: _parseInt)  int? currentRound, @JsonKey(fromJson: _parseInt)  int? maxRounds)?  $default,) {final _that = this;
 switch (_that) {
 case _TournamentSummary() when $default != null:
 return $default(_that.id,_that.format,_that.status,_that.timeControl,_that.name,_that.creatorUsername,_that.currentCount,_that.maxParticipants,_that.hasPassword,_that.currentRound,_that.maxRounds);case _:
@@ -2650,7 +2650,7 @@ return $default(_that.id,_that.format,_that.status,_that.timeControl,_that.name,
 @JsonSerializable()
 
 class _TournamentSummary implements TournamentSummary {
-  const _TournamentSummary({required this.id, required this.format, required this.status, required final  Map<String, dynamic> timeControl, this.name, this.creatorUsername, this.currentCount, this.maxParticipants, this.hasPassword = false, this.currentRound, this.maxRounds}): _timeControl = timeControl;
+  const _TournamentSummary({required this.id, required this.format, required this.status, required final  Map<String, dynamic> timeControl, this.name, this.creatorUsername, @JsonKey(fromJson: _parseInt) this.currentCount, @JsonKey(fromJson: _parseInt) this.maxParticipants, this.hasPassword = false, @JsonKey(fromJson: _parseInt) this.currentRound, @JsonKey(fromJson: _parseInt) this.maxRounds}): _timeControl = timeControl;
   factory _TournamentSummary.fromJson(Map<String, dynamic> json) => _$TournamentSummaryFromJson(json);
 
 @override final  String id;
@@ -2668,11 +2668,11 @@ class _TournamentSummary implements TournamentSummary {
 
 @override final  String? name;
 @override final  String? creatorUsername;
-@override final  int? currentCount;
-@override final  int? maxParticipants;
+@override@JsonKey(fromJson: _parseInt) final  int? currentCount;
+@override@JsonKey(fromJson: _parseInt) final  int? maxParticipants;
 @override@JsonKey() final  bool hasPassword;
-@override final  int? currentRound;
-@override final  int? maxRounds;
+@override@JsonKey(fromJson: _parseInt) final  int? currentRound;
+@override@JsonKey(fromJson: _parseInt) final  int? maxRounds;
 
 /// Create a copy of TournamentSummary
 /// with the given fields replaced by the non-null parameter values.
@@ -2707,7 +2707,7 @@ abstract mixin class _$TournamentSummaryCopyWith<$Res> implements $TournamentSum
   factory _$TournamentSummaryCopyWith(_TournamentSummary value, $Res Function(_TournamentSummary) _then) = __$TournamentSummaryCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String format, String status, Map<String, dynamic> timeControl, String? name, String? creatorUsername, int? currentCount, int? maxParticipants, bool hasPassword, int? currentRound, int? maxRounds
+ String id, String format, String status, Map<String, dynamic> timeControl, String? name, String? creatorUsername,@JsonKey(fromJson: _parseInt) int? currentCount,@JsonKey(fromJson: _parseInt) int? maxParticipants, bool hasPassword,@JsonKey(fromJson: _parseInt) int? currentRound,@JsonKey(fromJson: _parseInt) int? maxRounds
 });
 
 

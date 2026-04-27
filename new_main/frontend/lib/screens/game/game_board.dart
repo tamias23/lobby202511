@@ -90,6 +90,7 @@ class GameBoard extends ConsumerStatefulWidget {
 
 class _GameBoardState extends ConsumerState<GameBoard> {
   bool _isFlipped = false;
+  bool _historyExpanded = false;
   ColorTheme _colorTheme = ColorTheme.default_theme;
 
   // ── Geometry cached during build — safe to read in gesture handlers ─────────
@@ -330,6 +331,11 @@ class _GameBoardState extends ConsumerState<GameBoard> {
 
     final bg = ref.watch(bgProvider);
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isDesktop = screenWidth > 600;
+    final leftPanelWidth = isDesktop ? (screenWidth * 0.22).clamp(220.0, 320.0) : 193.0;
+    final rightPanelWidth = isDesktop ? (screenWidth * 0.22).clamp(220.0, 320.0) : 180.0;
+
     return Scaffold(
       backgroundColor: Colors.transparent,  // let global AppBackground show through
       body: SafeArea(
@@ -340,7 +346,7 @@ class _GameBoardState extends ConsumerState<GameBoard> {
               children: [
                 // ── Left player panel ──────────────────────────────────────
                 SizedBox(
-                  width: 193,
+                  width: leftPanelWidth,
                   child: _buildPlayerPanel(gs),
                 ),
 
@@ -356,17 +362,16 @@ class _GameBoardState extends ConsumerState<GameBoard> {
                               flex: 3,
                               child: _buildBoardStack(context, gs, polygons, gameState),
                             ),
-                            if (MediaQuery.of(context).size.width > 600)
+                            if (isDesktop)
                               SizedBox(
-                                width: 180,
-                                child: SingleChildScrollView(
-                                  child: _buildActionPanel(context, gs, gameState)),
+                                width: rightPanelWidth,
+                                child: _buildActionPanel(context, gs, gameState, isDesktop: true),
                               ),
                           ],
                         ),
                       ),
-                      if (MediaQuery.of(context).size.width <= 600)
-                        _buildActionPanel(context, gs, gameState),
+                      if (!isDesktop)
+                        _buildActionPanel(context, gs, gameState, isDesktop: false),
                     ],
                   ),
                 ),
@@ -384,7 +389,7 @@ class _GameBoardState extends ConsumerState<GameBoard> {
             // ── Spectator banner — top left ────────────────────────────────
             if (widget.side == 'spectator')
               Positioned(
-                top: 8, left: 200, // offset from the left panel
+                top: 8, left: 8,
                 child: _SpectatorBanner(tournamentId: widget.tournamentId),
               ),
           ],
@@ -747,13 +752,14 @@ class _GameBoardState extends ConsumerState<GameBoard> {
 
   // ── Action panel ────────────────────────────────────────────────────────────
 
-  Widget _buildActionPanel(BuildContext context, GameState gs, GameBoardState gameState) {
+  Widget _buildActionPanel(BuildContext context, GameState gs, GameBoardState gameState, {bool isDesktop = false}) {
     final notifier = ref.read(gameProvider(widget.gameId).notifier);
     final myTurn = (gs.turn == 'white' && widget.side == 'white') ||
         (gs.turn == 'black' && widget.side == 'black');
     final myPassCount = (gs.passCount[widget.side] ?? 0);
 
     return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -781,17 +787,17 @@ class _GameBoardState extends ConsumerState<GameBoard> {
         ),
         // ── Move history ────────────────────────────────────────────────────
         if (gs.moves.isNotEmpty)
-          _buildMoveHistory(gs.moves),
+          isDesktop ? Flexible(child: _buildMoveHistory(gs.moves, expand: true)) : _buildMoveHistory(gs.moves, expand: false),
       ],
     );
   }
 
   /// Compact scrollable move list — shown in the action panel below the buttons.
-  Widget _buildMoveHistory(List<Map<String, dynamic>> moves) {
+  Widget _buildMoveHistory(List<Map<String, dynamic>> moves, {bool expand = false}) {
     return Container(
       margin: const EdgeInsets.fromLTRB(6, 0, 6, 4),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      constraints: const BoxConstraints(maxHeight: 180),
+      constraints: expand ? null : const BoxConstraints(maxHeight: 180),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(10),
@@ -801,13 +807,32 @@ class _GameBoardState extends ConsumerState<GameBoard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('${ref.tr('ui.move_history')} (${moves.length})',
-            style: GoogleFonts.outfit(
-              fontSize: 10, color: Colors.white38, fontWeight: FontWeight.w600,
-              letterSpacing: 0.5)),
-          const SizedBox(height: 6),
-          Flexible(
-            child: ListView.builder(
+          InkWell(
+            onTap: () => setState(() => _historyExpanded = !_historyExpanded),
+            borderRadius: BorderRadius.circular(6),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text('${ref.tr('ui.move_history')} (${moves.length})',
+                      style: GoogleFonts.outfit(
+                        fontSize: 10, color: Colors.white38, fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5)),
+                  ),
+                  Icon(
+                    _historyExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                    color: Colors.white38,
+                    size: 16,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_historyExpanded) ...[
+            const SizedBox(height: 6),
+            Flexible(
+              child: ListView.builder(
               shrinkWrap: true,
               itemCount: moves.length,
               reverse: true, // newest first
@@ -846,6 +871,7 @@ class _GameBoardState extends ConsumerState<GameBoard> {
               },
             ),
           ),
+        ],
         ],
       ),
     );
@@ -975,7 +1001,7 @@ class _PlayerCard extends StatelessWidget {
       initialMs: clockMs,
       isRunning: isRunning,
       lastTurnTs: lastTurnTs ?? 0,
-      fontSize: 43,
+      fontSize: 64,
     );
 
     return AnimatedContainer(

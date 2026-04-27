@@ -137,32 +137,52 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
     _listenSocket();
   }
 
+  /// Recursively converts a socket Map<dynamic,dynamic> to Map<String,dynamic>.
+  /// Required in dart2js where socket.io delivers untyped maps.
+  Map<String, dynamic> _deepMap(Map raw) {
+    return raw.map((k, v) {
+      final value = v is Map ? _deepMap(v) : (v is List ? _deepList(v) : v);
+      return MapEntry(k.toString(), value);
+    });
+  }
+
+  List<dynamic> _deepList(List raw) =>
+      raw.map((v) => v is Map ? _deepMap(v) : (v is List ? _deepList(v) : v)).toList();
+
   void _listenSocket() {
     final socket = ref.read(socketServiceProvider);
     socket.on('tournament_created', (data) {
       if (!mounted) return;
       try {
-        var mapData = <String, dynamic>{};
-        if (data is Map) mapData = Map<String, dynamic>.from(data);
-        else if (data is List && data.isNotEmpty && data[0] is Map) mapData = Map<String, dynamic>.from(data[0]);
-        
+        Map<String, dynamic> mapData = {};
+        if (data is Map) mapData = _deepMap(data);
+        else if (data is List && data.isNotEmpty && data[0] is Map) mapData = _deepMap(data[0] as Map);
+
+        final id = mapData['id'] as String?;
         setState(() => _creating = false);
-        context.go('/tournament/${mapData['id']}');
+        if (id != null && id.isNotEmpty) {
+          context.go('/tournament/$id');
+        } else {
+          debugPrint('tournament_created: missing id in payload: $mapData');
+          setState(() => _error = 'Tournament created but ID was missing. Please refresh.');
+        }
       } catch (e) {
         debugPrint('Error parsing tournament_created data: $e');
+        setState(() { _creating = false; _error = 'Unexpected error after creation.'; });
       }
     });
     socket.on('tournament_error', (data) {
       if (!mounted) return;
       try {
-        var mapData = <String, dynamic>{};
-        if (data is Map) mapData = Map<String, dynamic>.from(data);
-        else if (data is List && data.isNotEmpty && data[0] is Map) mapData = Map<String, dynamic>.from(data[0]);
+        Map<String, dynamic> mapData = {};
+        if (data is Map) mapData = _deepMap(data);
+        else if (data is List && data.isNotEmpty && data[0] is Map) mapData = _deepMap(data[0] as Map);
         else if (data is String) mapData = {'message': data};
-        
+
         setState(() { _creating = false; _error = mapData['message'] as String? ?? 'Failed to create.'; });
       } catch (e) {
         debugPrint('Error parsing tournament_error data: $e');
+        setState(() { _creating = false; _error = 'Unknown server error.'; });
       }
     });
   }

@@ -18,6 +18,18 @@ Map<String, dynamic> _deepMap(Map raw) {
 List<dynamic> _deepList(List raw) =>
     raw.map((v) => v is Map ? _deepMap(v) : (v is List ? _deepList(v) : v)).toList();
 
+int? _parseTimestamp(dynamic ts) {
+  if (ts == null) return null;
+  if (ts is num) return ts.toInt();
+  if (ts is String) {
+    final parsed = DateTime.tryParse(ts);
+    if (parsed != null) return parsed.millisecondsSinceEpoch;
+    final parsedInt = int.tryParse(ts);
+    if (parsedInt != null) return parsedInt;
+  }
+  return null;
+}
+
 // ── Per-game state ─────────────────────────────────────────────────────────────
 
 class GameBoardState {
@@ -121,7 +133,7 @@ class GameNotifier extends Notifier<GameBoardState> {
     if (d['clocks'] != null) updated = updated.copyWith(
       clocks: (d['clocks'] as Map<String, dynamic>).map((k, v) => MapEntry(k, (v as num).toInt())),
     );
-    if (d['lastTurnTimestamp'] != null) updated = updated.copyWith(lastTurnTimestamp: (d['lastTurnTimestamp'] as num).toInt());
+    if (d['lastTurnTimestamp'] != null) updated = updated.copyWith(lastTurnTimestamp: _parseTimestamp(d['lastTurnTimestamp']));
     if (d['colorChosen'] != null) updated = updated.copyWith(colorChosen: d['colorChosen'] as Map<String, dynamic>);
     if (d['colorsEverChosen'] != null) updated = updated.copyWith(colorsEverChosen: List<String>.from(d['colorsEverChosen'] as List));
     if (d['mageUnlocked'] != null) updated = updated.copyWith(mageUnlocked: d['mageUnlocked'] as bool);
@@ -306,7 +318,7 @@ class GameNotifier extends Notifier<GameBoardState> {
       clocks: r['clocks'] != null
           ? (r['clocks'] as Map<String, dynamic>).map((k, v) => MapEntry(k, (v as num).toInt()))
           : {'white': 900000, 'black': 900000},
-      lastTurnTimestamp: (r['lastTurnTimestamp'] as num?)?.toInt(),
+      lastTurnTimestamp: _parseTimestamp(r['lastTurnTimestamp']),
       colorChosen: r['colorChosen'] as Map<String, dynamic>? ?? {},
       colorsEverChosen: r['colorsEverChosen'] != null ? List<String>.from(r['colorsEverChosen'] as List) : [],
       mageUnlocked: r['mageUnlocked'] as bool? ?? false,

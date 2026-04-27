@@ -26,6 +26,12 @@ const initDb = async () => {
 
 function _pool() { return pgAdapter.getPool(); }
 function _isUp() { return pgAdapter.isConnected(); }
+const toDate = (v) => {
+    if (!v) return null;
+    if (v instanceof Date) return v;
+    if (typeof v === 'string' && /^\d+$/.test(v)) return new Date(Number(v));
+    return new Date(v);
+};
 
 const VALID_RATING_FIELDS = new Set([
     'rating', 'rating_bullet', 'rating_blitz', 'rating_rapid', 'rating_classical',
@@ -37,7 +43,10 @@ function _buildUpdate(table, idCol, id, fields) {
     if (keys.length === 0) return null;
     const sets = keys.map((k, i) => `"${k}" = $${i + 1}`);
     const vals = keys.map(k => {
-        const v = fields[k];
+        let v = fields[k];
+        if (v != null && (k.endsWith('_at') || k.endsWith('_until') || k === 'timestamp' || k === 'token_expires_at')) {
+            v = toDate(v);
+        }
         if (v !== null && typeof v === 'object' && !(v instanceof Date)) return JSON.stringify(v);
         return v;
     });
@@ -96,7 +105,7 @@ async function getUserByVerificationToken(token) {
     try {
         const r = await _pool().query(
             'SELECT * FROM users WHERE verification_token = $1 AND (token_expires_at IS NULL OR token_expires_at > $2) LIMIT 1',
-            [token, Date.now()]
+            [token, new Date()]
         );
         return r.rows[0] || null;
     } catch (e) { logger.error('DB', `getUserByVerificationToken failed:`, e.message); return null; }
@@ -117,16 +126,16 @@ async function createUser(data) {
                 data.id, data.username, data.email, data.email_hash || null,
                 data.password_hash,
                 data.role || 'registered', data.is_verified || 0,
-                data.verification_token || null, data.token_expires_at || null,
+                data.verification_token || null, toDate(data.token_expires_at) || null,
                 data.rating || 1500, data.rating_deviation || 350, data.rating_volatility || 0.06,
                 data.rating_bullet || 1500, data.rating_blitz || 1500,
                 data.rating_rapid || 1500, data.rating_classical || 1500,
                 data.nb_tournaments_entered || 0, data.nb_tournaments_finished || 0,
                 data.is_subscriber || 0, data.subscription_source || null,
-                data.subscriber_until || null, data.subscription_id || null,
+                toDate(data.subscriber_until), data.subscription_id || null,
                 data.is_admin || 0, data.rated_games_played_today || 0,
                 data.bot_games_played_today || 0, data.timezone || 'UTC',
-                data.created_at || Date.now(),
+                toDate(data.created_at) || new Date(),
             ]
         );
     } catch (e) {
@@ -234,12 +243,12 @@ async function saveGame(data) {
                 white_score, black_score, started_at, completed_at, time_control_minutes, time_control_increment)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
             [
-                data.game_id, data.timestamp, data.white_name, data.black_name,
+                data.game_id, toDate(data.timestamp), data.white_name, data.black_name,
                 data.white_player_id, data.black_player_id, data.board_id, data.winner,
                 typeof data.moves === 'string' ? data.moves : JSON.stringify(data.moves || []),
                 data.tournament_id || null, data.tournament_round_info || null,
                 data.white_score || 0, data.black_score || 0,
-                data.started_at || data.timestamp, data.completed_at || null,
+                toDate(data.started_at || data.timestamp), toDate(data.completed_at),
                 data.time_control_minutes || null, data.time_control_increment || null,
             ]
         );
@@ -258,7 +267,7 @@ async function updateGame(gameId, fields) {
 async function getGamesOlderThan(cutoffMs) {
     if (!_isUp()) return [];
     try {
-        const r = await _pool().query('SELECT * FROM games WHERE "timestamp" < $1', [cutoffMs]);
+        const r = await _pool().query('SELECT * FROM games WHERE "timestamp" < $1', [toDate(cutoffMs)]);
         return r.rows;
     } catch (e) { logger.error('DB', `getGamesOlderThan failed:`, e.message); return []; }
 }
@@ -325,9 +334,9 @@ async function saveTournament(data) {
                 data.time_control_minutes, data.time_control_increment,
                 data.board_id || null, data.rating_min || 0, data.rating_max || 5000,
                 data.duration_value, data.invited_bots || 0, data.creator_plays || 0,
-                data.launch_mode || 'both', data.launch_at || null,
-                data.created_at, data.started_at || null, data.completed_at || null,
-                data.remove_at || null, data.current_round || 0,
+                data.launch_mode || 'both', toDate(data.launch_at) || null,
+                toDate(data.created_at), toDate(data.started_at) || null, toDate(data.completed_at) || null,
+                toDate(data.remove_at) || null, data.current_round || 0,
             ]
         );
     } catch (e) { logger.error('DB', `saveTournament(${data.id}) failed:`, e.message); }
@@ -437,7 +446,7 @@ async function upsertCronJob(data) {
                 data.type, data.description || null,
                 String(data.minute ?? '*'), String(data.hour ?? '*'), String(data.weekday ?? '*'),
                 data.enabled !== false,
-                data.created_at || Date.now(), data.last_run_at || null,
+                toDate(data.created_at || Date.now()), data.last_run_at ? toDate(data.last_run_at) : null,
                 data.last_run_status || null, data.last_run_id || null, data.last_error || null,
             ]
         );
@@ -462,8 +471,10 @@ async function saveJob(data) {
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
             [
                 data.id, data.type, data.status,
-                data.scheduled_at || null, data.started_at || null,
-                data.completed_at || null, data.created_at || Date.now(),
+                data.scheduled_at ? toDate(data.scheduled_at) : null, 
+                data.started_at ? toDate(data.started_at) : null,
+                data.completed_at ? toDate(data.completed_at) : null, 
+                toDate(data.created_at || Date.now()),
                 data.worker_id || null,
                 JSON.stringify(data.payload || {}), data.error || null,
             ]
@@ -491,7 +502,7 @@ async function getDueJobs(timestamp) {
     if (!_isUp()) return [];
     try {
         const r = await _pool().query(
-            "SELECT * FROM jobs WHERE status = 'SCHEDULED' AND scheduled_at <= $1", [timestamp]
+            "SELECT * FROM jobs WHERE status = 'SCHEDULED' AND scheduled_at <= $1", [toDate(timestamp)]
         );
         return r.rows;
     } catch (e) { logger.error('DB', `getDueJobs failed:`, e.message); return []; }
@@ -500,7 +511,7 @@ async function getDueJobs(timestamp) {
 async function getJobsOlderThan(timestamp) {
     if (!_isUp()) return [];
     try {
-        const r = await _pool().query('SELECT * FROM jobs WHERE completed_at <= $1', [timestamp]);
+        const r = await _pool().query('SELECT * FROM jobs WHERE completed_at <= $1', [toDate(timestamp)]);
         return r.rows;
     } catch (e) { logger.error('DB', `getJobsOlderThan failed:`, e.message); return []; }
 }
@@ -534,7 +545,7 @@ async function saveSubscription(data) {
                 expires_at=EXCLUDED.expires_at, platform=EXCLUDED.platform, receipt_data=EXCLUDED.receipt_data`,
             [
                 data.id, data.user_id, data.type, data.status,
-                data.created_at || Date.now(), data.expires_at || null,
+                toDate(data.created_at || Date.now()), toDate(data.expires_at) || null,
                 data.platform || null, data.receipt_data || null,
             ]
         );
@@ -584,7 +595,7 @@ async function getTopPlayers(ratingField, limit = 50) {
 async function saveLeaderboard(id, data) {
     if (!_isUp()) return;
     try {
-        const now = Date.now();
+        const now = new Date();
         await _pool().query(
             `INSERT INTO leaderboards (id, data, updated_at) VALUES ($1, $2::jsonb, $3)
              ON CONFLICT (id) DO UPDATE SET data = $2::jsonb, updated_at = $3`,
@@ -639,7 +650,7 @@ async function _seedDefaultSchedule() {
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (id) DO NOTHING`,
             [id, item.format, item.minutes, item.increment, item.duration, item.launch_hour,
              item.launch_mode || 'any', item.start_in_minutes || 0,
-             item.max_participants, item.invited_bots, true, Date.now()]
+             item.max_participants, item.invited_bots, true, new Date()]
         );
     }
     logger.info('DB', 'Seeded default tournament schedule.');
@@ -664,7 +675,7 @@ async function upsertTournamentScheduleItem(data) {
                 data.duration ?? 7, data.launch_hour ?? 20,
                 data.launch_mode || 'any', data.start_in_minutes ?? 0,
                 data.max_participants ?? 100, data.invited_bots ?? 0,
-                data.enabled !== false, data.created_at || Date.now(),
+                data.enabled !== false, toDate(data.created_at) || new Date(),
             ]
         );
         return id;

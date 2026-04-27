@@ -58,7 +58,14 @@ class _GameHistoryScreenState extends State<GameHistoryScreen> {
   };
 
   String _fmt(dynamic ts, dynamic tsUtc) {
-    if (tsUtc is String && tsUtc.isNotEmpty) return tsUtc.substring(0, 16);
+    if (tsUtc is String && tsUtc.isNotEmpty) return tsUtc.substring(0, 16).replaceFirst('T', ' ');
+    if (ts is String && ts.isNotEmpty) {
+      final dt = DateTime.tryParse(ts)?.toUtc();
+      if (dt != null) {
+        return '${dt.year}-${dt.month.toString().padLeft(2,'0')}-${dt.day.toString().padLeft(2,'0')} '
+               '${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
+      }
+    }
     if (ts is num) {
       final dt = DateTime.fromMillisecondsSinceEpoch(ts.toInt(), isUtc: true);
       return '${dt.year}-${dt.month.toString().padLeft(2,'0')}-${dt.day.toString().padLeft(2,'0')} '

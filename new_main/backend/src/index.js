@@ -1366,7 +1366,7 @@ app.get('/api/me/games', async (req, res) => {
                 merged.push(g);
             }
         }
-        merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        merged.sort((a, b) => (b.timestamp ? new Date(b.timestamp).getTime() : 0) - (a.timestamp ? new Date(a.timestamp).getTime() : 0));
         const games = merged.slice(0, 50);
 
         const result = games.map(g => {
@@ -1517,7 +1517,7 @@ app.get('/api/admin/users/:id/games', requireAdmin, async (req, res) => {
         for (const g of [...asWhite, ...asBlack]) {
             if (!seen.has(g.game_id)) { seen.add(g.game_id); merged.push(g); }
         }
-        merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        merged.sort((a, b) => (b.timestamp ? new Date(b.timestamp).getTime() : 0) - (a.timestamp ? new Date(a.timestamp).getTime() : 0));
 
         const result = merged.slice(0, 50).map(g => {
             const isWhite    = g.white_player_id === userId;

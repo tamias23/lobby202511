@@ -3,6 +3,21 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'models.freezed.dart';
 part 'models.g.dart';
 
+int? _parseInt(dynamic v) {
+  if (v == null) return null;
+  if (v is num) return v.toInt();
+  if (v is String) {
+    final dt = DateTime.tryParse(v);
+    if (dt != null) return dt.millisecondsSinceEpoch;
+    return int.tryParse(v);
+  }
+  return null;
+}
+
+int _parseIntReq(dynamic v) {
+  return _parseInt(v) ?? 0;
+}
+
 // ── User ──────────────────────────────────────────────────────────────────────
 
 @freezed
@@ -110,7 +125,7 @@ abstract class GameRequest with _$GameRequest {
     required String role,
     required Map<String, dynamic> timeControl,
     String? boardId,
-    required int createdAt,
+    @JsonKey(fromJson: _parseIntReq) required int createdAt,
   }) = _GameRequest;
 
   factory GameRequest.fromJson(Map<String, dynamic> json) => _$GameRequestFromJson(json);
@@ -157,8 +172,8 @@ abstract class BotInfo with _$BotInfo {
 @freezed
 abstract class LiveStats with _$LiveStats {
   const factory LiveStats({
-    @Default(0) int onlineUsers,
-    @Default(0) int activeGames,
+    @JsonKey(fromJson: _parseIntReq) @Default(0) int onlineUsers,
+    @JsonKey(fromJson: _parseIntReq) @Default(0) int activeGames,
   }) = _LiveStats;
 
   factory LiveStats.fromJson(Map<String, dynamic> json) => _$LiveStatsFromJson(json);
@@ -175,11 +190,11 @@ abstract class TournamentSummary with _$TournamentSummary {
     required Map<String, dynamic> timeControl,
     String? name,
     String? creatorUsername,
-    int? currentCount,
-    int? maxParticipants,
+    @JsonKey(fromJson: _parseInt) int? currentCount,
+    @JsonKey(fromJson: _parseInt) int? maxParticipants,
     @Default(false) bool hasPassword,
-    int? currentRound,
-    int? maxRounds,
+    @JsonKey(fromJson: _parseInt) int? currentRound,
+    @JsonKey(fromJson: _parseInt) int? maxRounds,
   }) = _TournamentSummary;
 
   factory TournamentSummary.fromJson(Map<String, dynamic> json) => _$TournamentSummaryFromJson(json);
