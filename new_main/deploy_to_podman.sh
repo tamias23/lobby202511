@@ -124,8 +124,8 @@ if ! $SKIP_BUILD; then
         if [[ "$PLATFORM" == *"arm64"* || "$PLATFORM" == *"aarch64"* ]] && [[ "$(uname -m)" != "aarch64" ]]; then
             if ! ls /proc/sys/fs/binfmt_misc/qemu-aarch64 &>/dev/null; then
                 echo "⚠️  QEMU aarch64 emulation not detected."
-                echo "   Install it with:  sudo apt-get install qemu-user-static"
-                echo "   Then restart:     sudo systemctl restart binfmt-support"
+                echo "   Install it with:  sudo apt-get install -y qemu-user-static"
+                echo "   It should register automatically. If not:  sudo systemctl restart systemd-binfmt"
                 exit 1
             fi
         fi
