@@ -380,21 +380,40 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
         fontSize: 22, fontWeight: FontWeight.w700, color: DTheme.textMainDark)),
       const SizedBox(height: 20),
 
-      // Max participants — power-of-2 buttons for knockout, continuous slider otherwise
+      // Max participants — fixed-size chip buttons for knockout (power-of-2 only),
+      // continuous slider for other formats.
       if (f.key == 'knockout')
         _SettingsSection(
           label: '${ref.tr('ui.participants')} (powers of 2 only)',
           child: Wrap(
             spacing: 8, runSpacing: 8,
-            children: _knockoutSizes.map((n) => _ToggleBtn(
-              label: '$n',
-              active: _maxP == n,
-              onTap: () => setState(() {
-                _maxP = n;
-                _invitedBots = _invitedBots.clamp(0, _maxBots);
-                _durationValue = _knockoutRounds(_maxP);
-              }),
-            )).toList(),
+            children: _knockoutSizes.map((n) {
+              final active = _maxP == n;
+              return GestureDetector(
+                onTap: () => setState(() {
+                  _maxP = n;
+                  _invitedBots = _invitedBots.clamp(0, _maxBots);
+                  _durationValue = _knockoutRounds(_maxP);
+                }),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  width: 48, height: 36,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    color: active
+                        ? DTheme.primary.withValues(alpha: 0.25)
+                        : Colors.white.withValues(alpha: 0.07),
+                    border: Border.all(
+                      color: active ? DTheme.primary : Colors.white.withValues(alpha: 0.15),
+                      width: active ? 2 : 1),
+                  ),
+                  child: Text('$n', style: GoogleFonts.outfit(
+                    fontSize: 14, fontWeight: FontWeight.w700,
+                    color: active ? DTheme.primary : Colors.white70)),
+                ),
+              );
+            }).toList(),
           ),
         )
       else
