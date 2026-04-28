@@ -219,20 +219,10 @@ else
     echo "==> Deploying to remote host: ${REMOTE}..."
 
     echo "==> [R1] Transferring nd6-app image..."
-    # podman save localhost/node-docker06:${TAG} | pv | ssh -v "$REMOTE" "podman load"
-    skopeo copy \
-        containers-storage:localhost/node-docker06:${TAG} \
-        docker-daemon:localhost/node-docker06:${TAG} \
-        --dest-ssh-user mat \
-        --dest-ssh-host $REMOTE
+    podman save localhost/node-docker06:${TAG} | ssh "$REMOTE" "podman load"
 
     echo "==> [R2] Transferring bot-server image..."
-    # podman save localhost/bot-server:${TAG}| pv | ssh -v "$REMOTE" "podman load"
-    skopeo copy \
-        containers-storage:localhost/bot-server:${TAG} \
-        docker-daemon:localhost/bot-server:${TAG} \
-        --dest-ssh-user mat \
-        --dest-ssh-host $REMOTE
+    podman save localhost/bot-server:${TAG} | ssh "$REMOTE" "podman load"
 
     # Tag as latest on remote
     ssh "$REMOTE" "podman tag localhost/node-docker06:${TAG} localhost/node-docker06:latest"
