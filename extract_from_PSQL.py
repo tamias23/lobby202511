@@ -50,7 +50,10 @@ def export_psql_to_parquet():
             continue
 
         df = pd.DataFrame(rows, columns=columns)
-
+        
+        for col in df.select_dtypes(include=['datetimetz', 'datetime']).columns:
+            df[col] = df[col].dt.tz_localize(None)
+        
         # Serialize dicts/lists to JSON strings for Parquet/Excel compatibility
         for col in df.columns:
             if df[col].apply(lambda x: isinstance(x, (dict, list))).any():
