@@ -24,10 +24,13 @@ class _FormatInfo {
   });
 }
 
+// Valid player counts for knockout tournaments (must be powers of 2)
+const _knockoutSizes = [2, 4, 8, 16, 32, 64, 128];
+
 const _formats = [
   _FormatInfo(key:'swiss',       label:'Swiss',       emoji:'🏔️', desc:'Paired by score each round. Everyone plays every round.',         minP:6,  maxP:200, durationType:'rounds',  defaultDur:6),
   _FormatInfo(key:'arena',       label:'Arena',       emoji:'⚔️', desc:'Continuous re-pairing immediately after finishing. Fastest format.',minP:6,  maxP:200, durationType:'minutes', defaultDur:30),
-  _FormatInfo(key:'knockout',    label:'Knockout',    emoji:'🥊', desc:'Single-elimination. Lose and you\'re out!',                        minP:2,  maxP:64,  durationType:'rounds',  defaultDur:null),
+  _FormatInfo(key:'knockout',    label:'Knockout',    emoji:'🥊', desc:'Single-elimination. Lose and you\'re out!',                        minP:2,  maxP:128, durationType:'rounds',  defaultDur:null),
   _FormatInfo(key:'round_robin', label:'Round Robin', emoji:'🔄', desc:'Everyone plays everyone. The true test of strength.',              minP:2,  maxP:10,  durationType:'rounds',  defaultDur:null),
 ];
 
@@ -198,7 +201,15 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
   void _selectFormat(_FormatInfo f) {
     setState(() {
       _format = f;
-      _maxP = _maxP.clamp(f.minP, f.maxP);
+      if (f.key == 'knockout') {
+        // Snap to nearest valid power-of-2 size
+        if (!_knockoutSizes.contains(_maxP)) {
+          _maxP = _knockoutSizes.firstWhere((s) => s >= _maxP, orElse: () => _knockoutSizes.last);
+        }
+        _maxP = _maxP.clamp(_knockoutSizes.first, _knockoutSizes.last);
+      } else {
+        _maxP = _maxP.clamp(f.minP, f.maxP);
+      }
       if (f.durationType == 'rounds' && f.defaultDur == null) {
         if (f.key == 'knockout')    _durationValue = _knockoutRounds(_maxP);
         if (f.key == 'round_robin') _durationValue = (_maxP - 1).clamp(1, 99);
@@ -369,28 +380,44 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
         fontSize: 22, fontWeight: FontWeight.w700, color: DTheme.textMainDark)),
       const SizedBox(height: 20),
 
-      // Max participants slider
-      _SettingsSection(
-        label: '${ref.tr('ui.participants')} (${f.minP}–${f.maxP})',
-        child: Row(children: [
-          Expanded(child: Slider(
-            value: _maxP.toDouble(),
-            min: f.minP.toDouble(), max: f.maxP.toDouble(), divisions: f.maxP - f.minP,
-            activeColor: DTheme.primary,
-            onChanged: (v) {
-              setState(() {
-                _maxP = v.round();
+      // Max participants — power-of-2 buttons for knockout, continuous slider otherwise
+      if (f.key == 'knockout')
+        _SettingsSection(
+          label: '${ref.tr('ui.participants')} (powers of 2 only)',
+          child: Wrap(
+            spacing: 8, runSpacing: 8,
+            children: _knockoutSizes.map((n) => _ToggleBtn(
+              label: '$n',
+              active: _maxP == n,
+              onTap: () => setState(() {
+                _maxP = n;
                 _invitedBots = _invitedBots.clamp(0, _maxBots);
-                if (f.key == 'knockout')    _durationValue = _knockoutRounds(_maxP);
-                if (f.key == 'round_robin') _durationValue = (_maxP - 1).clamp(1, 99);
-              });
-            },
-          )),
-          SizedBox(width: 40, child: Text('$_maxP',
-            style: GoogleFonts.outfit(color: DTheme.primary, fontWeight: FontWeight.w700, fontSize: 16),
-            textAlign: TextAlign.right)),
-        ]),
-      ),
+                _durationValue = _knockoutRounds(_maxP);
+              }),
+            )).toList(),
+          ),
+        )
+      else
+        _SettingsSection(
+          label: '${ref.tr('ui.participants')} (${f.minP}–${f.maxP})',
+          child: Row(children: [
+            Expanded(child: Slider(
+              value: _maxP.toDouble(),
+              min: f.minP.toDouble(), max: f.maxP.toDouble(), divisions: f.maxP - f.minP,
+              activeColor: DTheme.primary,
+              onChanged: (v) {
+                setState(() {
+                  _maxP = v.round();
+                  _invitedBots = _invitedBots.clamp(0, _maxBots);
+                  if (f.key == 'round_robin') _durationValue = (_maxP - 1).clamp(1, 99);
+                });
+              },
+            )),
+            SizedBox(width: 40, child: Text('$_maxP',
+              style: GoogleFonts.outfit(color: DTheme.primary, fontWeight: FontWeight.w700, fontSize: 16),
+              textAlign: TextAlign.right)),
+          ]),
+        ),
 
       // Duration
       if (f.durationType == 'minutes' || (f.durationType == 'rounds' && f.defaultDur != null))

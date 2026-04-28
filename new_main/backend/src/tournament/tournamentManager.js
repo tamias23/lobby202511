@@ -48,7 +48,7 @@ function initConfig(env) {
 const FORMAT_LIMITS = {
     swiss: { min: 4, max: 100 },
     arena: { min: 4, max: 200 },
-    knockout: { min: 4, max: 128 },
+    knockout: { min: 2, max: 128 },
     round_robin: { min: 2, max: 20 }
 };
 
@@ -166,6 +166,14 @@ async function createTournament(opts) {
 
     const limits = FORMAT_LIMITS[format];
     const maxP = Math.max(limits.min, Math.min(limits.max, opts.maxParticipants || limits.min));
+
+    // Knockout requires a power-of-2 player count for a valid single-elimination bracket
+    if (format === 'knockout') {
+        const isPowerOf2 = (n) => n >= 2 && (n & (n - 1)) === 0;
+        if (!isPowerOf2(maxP)) {
+            throw new Error(`Knockout tournaments require a power-of-2 player count (2, 4, 8, 16, 32, 64, 128). Got: ${maxP}.`);
+        }
+    }
 
     if (opts.timeControlMinutes > 15) throw new Error('Max time control is 15 minutes.');
     if (opts.timeControlIncrement > 30) throw new Error('Max increment is 30 seconds.');
