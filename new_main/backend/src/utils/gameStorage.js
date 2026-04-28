@@ -203,6 +203,7 @@ const saveMatchResult = async (
         // ── 1. Persist game record (registered players only) ──
         // Guest games are not stored — no history, no rating change.
         if (bothRegistered) {
+            logger.info('Storage', `Saving game ${gameId} with board_id='${boardId}' (type=${typeof boardId})`);
             await db.saveGame({
                 game_id: gameId,
                 timestamp,

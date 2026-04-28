@@ -573,14 +573,16 @@ async function createTournamentGame(tournament, whiteId, blackId, timeControl) {
 
         tournament.games.push(gameEntry);
 
-        // Persist tournament game to Firestore (unified games collection)
+        // Persist tournament game to the games table.
+        // Use gameData.boardName (resolved by createGame) — tournament.board_id
+        // is null when no specific board was requested (random board).
         await db.saveGame({
             game_id: gameEntry.id,
             tournament_id: gameEntry.tournament_id,
             tournament_round_info: gameEntry.round_info,
             white_player_id: gameEntry.white_id,
             black_player_id: gameEntry.black_id,
-            board_id: tournament.board_id,
+            board_id: gameData.boardName || tournament.board_id,
             winner: null,
             moves: null,
             white_score: 0,

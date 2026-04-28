@@ -237,6 +237,7 @@ async function upsertProfile(userId, data) {
 async function saveGame(data) {
     if (!_isUp()) return;
     try {
+        logger.debug('DB', `saveGame board_id='${data.board_id}' for game=${data.game_id}`);
         await _pool().query(
             `INSERT INTO games (game_id, "timestamp", white_name, black_name, white_player_id,
                 black_player_id, board_id, winner, moves, tournament_id, tournament_round_info,

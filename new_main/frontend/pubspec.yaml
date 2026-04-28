@@ -12,10 +12,10 @@ dependencies:
 
   # State management — Riverpod 3
   flutter_riverpod: ^3.0.0
-  riverpod_annotation: ^3.0.0
+  riverpod_annotation: ^4.0.2
 
   # Routing
-  go_router: ^14.0.0
+  go_router: ^17.2.2
 
   # Real-time comms (Socket.io)
   socket_io_client: ^3.0.2
@@ -30,7 +30,7 @@ dependencies:
   http: ^1.2.0
 
   # Google Fonts (Inter + Outfit)
-  google_fonts: ^6.2.0
+  google_fonts: ^8.1.0
   flutter_svg: ^2.0.10+1
 
   # Auto-shrinking text for buttons with long translations
@@ -38,7 +38,7 @@ dependencies:
 
   # Immutable models + JSON serialization
   freezed_annotation: ^3.0.0
-  json_annotation: ^4.9.0
+  json_annotation: ^4.11.0
 
   # Rust engine bridge — FFI on Android, WASM on Web
   flutter_rust_bridge: ^2.9.0
@@ -59,7 +59,7 @@ dev_dependencies:
   build_runner: ^2.4.0
   freezed: ^3.0.0
   json_serializable: ^6.8.0
-  riverpod_generator: ^3.0.0
+  riverpod_generator: ^4.0.3
 
 flutter:
   uses-material-design: true

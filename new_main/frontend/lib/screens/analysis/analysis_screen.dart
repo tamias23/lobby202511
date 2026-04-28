@@ -695,17 +695,13 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
     );
   }
 
-  // ── Captured pieces column (left panel, wide screens) ─────────────────────
+  // ── Off-board pieces column (left panel, wide screens) ────────────────────
   // In Dedal the engine sets captured pieces to position='returned' (they go
-  // back to the player's reserve). 'graveyard' is never actually assigned.
-  // We only show these during Playing/GameOver to avoid confusing them with
-  // un-placed setup pieces (which also start as 'returned').
+  // back to the player's reserve). During Setup, un-placed pieces also have
+  // position='returned'. We show them in all phases so setup placements and
+  // captured pieces are both visible during analysis replay.
 
   Widget _buildCapturedPieces({required String capturedBy}) {
-    // During setup all pieces are 'returned' — skip to avoid noise
-    if (_currentPhase != 'Playing' && _currentPhase != 'GameOver') {
-      return const SizedBox(height: 6);
-    }
     final opponentSide = capturedBy == 'white' ? 'black' : 'white';
     final captured = _pieces.where((p) {
       final pos  = p['position'] as String? ?? '';
@@ -741,15 +737,12 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
       ]),
     );
   }
-  // ── Sidebar captured pieces (two-row, always visible) ────────────────────
+  // ── Sidebar off-board pieces (two-row, always visible) ───────────────────
   // Engine uses 'returned' for off-board pieces (both un-placed and captured).
-  // Only show during Playing/GameOver to avoid listing setup-phase pieces.
+  // Shown in all phases: during Setup these are pieces waiting to be placed;
+  // during Playing/GameOver these are captured pieces.
 
   Widget _buildSidebarCapturedPieces() {
-    // During setup all pieces are 'returned' — nothing meaningful to show
-    if (_currentPhase != 'Playing' && _currentPhase != 'GameOver') {
-      return const SizedBox.shrink();
-    }
 
     final whiteOffBoard = _pieces.where((p) {
       final pos = p['position'] as String? ?? '';
@@ -803,7 +796,7 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
         border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Off Board', style: GoogleFonts.outfit(
+        Text(_currentPhase == 'Setup' ? 'Reserve' : 'Captured', style: GoogleFonts.outfit(
           fontSize: 10, color: Colors.white38, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
         const SizedBox(height: 5),
         if (blackOffBoard.isNotEmpty) ...[
@@ -844,8 +837,9 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
         (p['side'] as String?) == 'black').toList()
       ..sort((a, b) => (a['id'] as String? ?? '').compareTo(b['id'] as String? ?? ''));
 
-    // Only show side pieces during Playing/GameOver (in Setup, all pieces are 'returned')
-    final showSide = _currentPhase == 'Playing' || _currentPhase == 'GameOver';
+    // Show side pieces in all phases: during Setup these are un-placed pieces,
+    // during Playing/GameOver these are captured pieces.
+    final showSide = true;
     final pSize = _boardPieceSize;
 
     return Column(children: [
