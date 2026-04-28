@@ -67,6 +67,24 @@ if $TUNNEL && [[ -z "$CF_TOKEN" ]]; then
     exit 1
 fi
 
+# ── Ensure SSH key auth for remote deploys (avoid password prompts) ───────────
+if [[ -n "$REMOTE" ]]; then
+    if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "$REMOTE" true 2>/dev/null; then
+        echo "⚠️  SSH key authentication is not set up for $REMOTE."
+        echo "   You will be prompted for a password on every SSH/SCP command."
+        echo ""
+        echo "   To fix this (one-time setup):"
+        echo "     1. Generate a key (if you don't have one):  ssh-keygen -t ed25519"
+        echo "     2. Copy it to the remote:                   ssh-copy-id $REMOTE"
+        echo ""
+        read -p "   Continue anyway? [y/N] " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
+    fi
+fi
+
 echo "=== Dedal Podman Deploy ==="
 echo "    Tag:       ${TAG}"
 echo "    Replicas:  ${REPLICAS}"
@@ -125,6 +143,19 @@ if ! $SKIP_BUILD; then
 
     echo "==> Images built successfully."
     podman images | grep -E "(node-docker06|bot-server)" | head -6
+
+    echo "==> Cleaning up dangling builder images..."
+    podman image prune -f 2>/dev/null || true
+    # Remove old tagged images (keep only :latest and current :$TAG)
+    for img in node-docker06 bot-server; do
+        podman images --format '{{.Repository}}:{{.Tag}}' \
+            | grep "^localhost/${img}:" \
+            | grep -v ":latest$" \
+            | grep -v ":${TAG}$" \
+            | xargs -r podman rmi 2>/dev/null || true
+    done
+    echo "   Done. Current disk usage:"
+    podman system df 2>/dev/null || true
 else
     echo "==> Skipping build (--skip-build)."
 fi
@@ -188,10 +219,20 @@ else
     echo "==> Deploying to remote host: ${REMOTE}..."
 
     echo "==> [R1] Transferring nd6-app image..."
-    podman save localhost/node-docker06:${TAG} | ssh "$REMOTE" "podman load"
+    # podman save localhost/node-docker06:${TAG} | pv | ssh -v "$REMOTE" "podman load"
+    skopeo copy \
+        containers-storage:localhost/node-docker06:${TAG} \
+        docker-daemon:localhost/node-docker06:${TAG} \
+        --dest-ssh-user mat \
+        --dest-ssh-host $REMOTE
 
     echo "==> [R2] Transferring bot-server image..."
-    podman save localhost/bot-server:${TAG} | ssh "$REMOTE" "podman load"
+    # podman save localhost/bot-server:${TAG}| pv | ssh -v "$REMOTE" "podman load"
+    skopeo copy \
+        containers-storage:localhost/bot-server:${TAG} \
+        docker-daemon:localhost/bot-server:${TAG} \
+        --dest-ssh-user mat \
+        --dest-ssh-host $REMOTE
 
     # Tag as latest on remote
     ssh "$REMOTE" "podman tag localhost/node-docker06:${TAG} localhost/node-docker06:latest"

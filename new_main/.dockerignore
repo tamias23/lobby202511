@@ -1,12 +1,49 @@
+# ── Build artifacts & caches ──────────────────────────────────────────────────
 **/node_modules
 **/dist
 **/target
+**/.dart_tool
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+
+# ── Frontend platform dirs (only web is needed, built inside Docker) ──────────
+frontend/build
+frontend/android
+frontend/ios
+frontend/linux
+frontend/macos
+frontend/windows
+frontend/.pub-cache
+
+# ── Backend data files ────────────────────────────────────────────────────────
 **/*.duckdb
 **/*.duckdb.wal
 **/.env
+**/podman-data
+
+# ── Git ───────────────────────────────────────────────────────────────────────
 **/.git
 **/.gitignore
-**/rust-napi/index.*.node
-**/podman-data
+
+# ── Deploy / infra files (not needed inside the image) ────────────────────────
 docker-compose.podman.yml
+docker-compose.podman.yml.old
+docker-compose.maintenance.yml
 nginx-podman.conf
+*.sh
+Dockerfile
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+frontend_legacy
+specs
+manage_billing
+maintenance
+**/*.md
+**/*.py
+**/*.json.old
+**/rust-napi/index.*.node
+*.json
+!backend/package.json
+!backend/package-lock.json
+!frontend/pubspec.yaml
+!frontend/pubspec.lock
