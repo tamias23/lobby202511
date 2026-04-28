@@ -2,11 +2,12 @@
 # deploy_to_podman.sh — Build and deploy Dedal to Podman (local or remote).
 #
 # Usage:
-#   ./deploy_to_podman.sh                                           # Local, 5 replicas
+#   ./deploy_to_podman.sh                                           # Local, 3 replicas
 #   ./deploy_to_podman.sh --replicas 3                              # Local, 3 replicas
 #   ./deploy_to_podman.sh --tunnel --token YOUR_CF_TOKEN            # Local + Cloudflare tunnel
 #   ./deploy_to_podman.sh --remote mat@192.168.1.XX                 # Deploy to spare laptop
 #   ./deploy_to_podman.sh --remote mat@192.168.1.XX --replicas 4 --tunnel --token TOKEN
+#   ./deploy_to_podman.sh --remote mat@SERVER --platform linux/arm64  # Cross-build for ARM64 server
 #   ./deploy_to_podman.sh --skip-build                              # Skip build, just (re)deploy
 #   ./deploy_to_podman.sh --api-url https://dedalthegame.com        # Custom API_URL for Flutter
 #
@@ -19,6 +20,7 @@ TUNNEL=false
 CF_TOKEN=""
 API_URL=""
 SKIP_BUILD=false
+PLATFORM=""
 TAG=$(date -u +%Y%m%dT%H%M%S)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -41,18 +43,21 @@ while [[ $# -gt 0 ]]; do
             API_URL="$2"; shift 2 ;;
         --skip-build)
             SKIP_BUILD=true; shift ;;
+        --platform)
+            PLATFORM="$2"; shift 2 ;;
         --tag)
             TAG="$2"; shift 2 ;;
         -h|--help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  --replicas N       Number of nd6-app replicas (default: 5)"
+            echo "  --replicas N       Number of nd6-app replicas (default: 3)"
             echo "  --remote USER@IP   Deploy to a remote machine via SSH"
             echo "  --tunnel           Enable Cloudflare tunnel"
             echo "  --token TOKEN      Cloudflare tunnel token (required with --tunnel)"
             echo "  --api-url URL      API URL for Flutter build (default: auto-detect)"
             echo "  --skip-build       Skip building images, just (re)deploy containers"
+            echo "  --platform PLAT    Target platform (e.g. linux/arm64). Default: native."
             echo "  --tag TAG          Image tag (default: timestamp)"
             echo "  -h, --help         Show this help"
             exit 0 ;;
@@ -89,6 +94,7 @@ echo "=== Dedal Podman Deploy ==="
 echo "    Tag:       ${TAG}"
 echo "    Replicas:  ${REPLICAS}"
 echo "    Remote:    ${REMOTE:-local}"
+echo "    Platform:  ${PLATFORM:-native}"
 echo "    Tunnel:    ${TUNNEL}"
 echo ""
 
@@ -110,14 +116,23 @@ fi
 
 # ── Build phase ───────────────────────────────────────────────────────────────
 if ! $SKIP_BUILD; then
-    echo "==> [1/5] Building Rust NAPI module..."
-    cd "${REPO_ROOT}/rust" && cargo build --release --bin rust 2>&1
-    cd "${SCRIPT_DIR}/backend" && npm run build:napi
+    # Cross-platform build args
+    PLATFORM_ARGS=""
+    if [[ -n "$PLATFORM" ]]; then
+        echo "    Cross-building for platform: ${PLATFORM}"
+        # Check QEMU emulation is available for cross-platform builds
+        if [[ "$PLATFORM" == *"arm64"* || "$PLATFORM" == *"aarch64"* ]] && [[ "$(uname -m)" != "aarch64" ]]; then
+            if ! ls /proc/sys/fs/binfmt_misc/qemu-aarch64 &>/dev/null; then
+                echo "⚠️  QEMU aarch64 emulation not detected."
+                echo "   Install it with:  sudo apt-get install qemu-user-static"
+                echo "   Then restart:     sudo systemctl restart binfmt-support"
+                exit 1
+            fi
+        fi
+        PLATFORM_ARGS="--platform ${PLATFORM}"
+    fi
 
-    echo "==> [2/5] Building Bot Server..."
-    cd "${SCRIPT_DIR}/bot-server" && cargo build --release
-
-    echo "==> [3/5] Building Flutter web frontend (inside Docker)..."
+    echo "==> [1/3] Building Flutter web frontend (inside Docker)..."
     # Determine API_URL for Flutter build
     if [[ -n "$API_URL" ]]; then
         FLUTTER_API_URL="$API_URL"
@@ -128,17 +143,17 @@ if ! $SKIP_BUILD; then
     fi
     echo "    API_URL=${FLUTTER_API_URL:-'(empty — relative URLs)'}"
 
-    echo "==> [4/5] Building nd6-app container image..."
+    echo "==> [2/3] Building nd6-app container image..."
     cd "${SCRIPT_DIR}"
-    podman build \
+    podman build ${PLATFORM_ARGS} \
         --build-arg API_URL="${FLUTTER_API_URL}" \
         --build-arg BUILD_TIMESTAMP="${TAG}" \
         -t node-docker06:${TAG} .
     podman tag localhost/node-docker06:${TAG} localhost/node-docker06:latest
 
-    echo "==> [5/5] Building bot-server container image..."
+    echo "==> [3/3] Building bot-server container image..."
     cd "${REPO_ROOT}"
-    podman build -t bot-server:${TAG} -f new_main/bot-server/Dockerfile .
+    podman build ${PLATFORM_ARGS} -t bot-server:${TAG} -f new_main/bot-server/Dockerfile .
     podman tag localhost/bot-server:${TAG} localhost/bot-server:latest
 
     echo "==> Images built successfully."
@@ -219,10 +234,18 @@ else
     echo "==> Deploying to remote host: ${REMOTE}..."
 
     echo "==> [R1] Transferring nd6-app image..."
-    podman save localhost/node-docker06:${TAG} | ssh "$REMOTE" "podman load"
+    podman save localhost/node-docker06:${TAG} | pv | ssh "$REMOTE" "podman load"
+    # skopeo copy \
+    # containers-storage:localhost/node-docker06:${TAG} \
+    # docker://mat@${REMOTE}/node-docker06:${TAG} \
+    # --dest-daemon-host ssh://mat@${REMOTE}  
 
     echo "==> [R2] Transferring bot-server image..."
-    podman save localhost/bot-server:${TAG} | ssh "$REMOTE" "podman load"
+    podman save localhost/bot-server:${TAG} | pv | ssh "$REMOTE" "podman load"
+    # skopeo copy \
+    # containers-storage:localhost/bot-server:${TAG} \
+    # docker://mat@${REMOTE}/bot-server:${TAG} \
+    # --dest-daemon-host ssh://mat@${REMOTE}
 
     # Tag as latest on remote
     ssh "$REMOTE" "podman tag localhost/node-docker06:${TAG} localhost/node-docker06:latest"
