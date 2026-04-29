@@ -132,6 +132,9 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
   bool _creating = false;
   String _error = '';
 
+  // Cache socket so dispose() never touches ref (Riverpod 3 forbids ref in dispose)
+  late final _socket = ref.read(socketServiceProvider);
+
   int get _maxBots => (_maxP - (_creatorPlays ? 1 : 0)).clamp(0, _maxP);
 
   @override
@@ -153,8 +156,7 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
       raw.map((v) => v is Map ? _deepMap(v) : (v is List ? _deepList(v) : v)).toList();
 
   void _listenSocket() {
-    final socket = ref.read(socketServiceProvider);
-    socket.on('tournament_created', (data) {
+    _socket.on('tournament_created', (data) {
       if (!mounted) return;
       try {
         Map<String, dynamic> mapData = {};
@@ -174,7 +176,7 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
         setState(() { _creating = false; _error = 'Unexpected error after creation.'; });
       }
     });
-    socket.on('tournament_error', (data) {
+    _socket.on('tournament_error', (data) {
       if (!mounted) return;
       try {
         Map<String, dynamic> mapData = {};
@@ -192,9 +194,9 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
 
   @override
   void dispose() {
-    final socket = ref.read(socketServiceProvider);
-    socket.off('tournament_created');
-    socket.off('tournament_error');
+    // Uses cached _socket — safe to call from dispose() without touching ref.
+    _socket.off('tournament_created');
+    _socket.off('tournament_error');
     super.dispose();
   }
 
@@ -238,7 +240,6 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
 
   void _handleCreate() {
     if (_creating || _format == null) return;
-    final socket = ref.read(socketServiceProvider);
     setState(() { _creating = true; _error = ''; });
 
     final payload = <String, dynamic>{
@@ -259,7 +260,7 @@ class _TournamentCreateScreenState extends ConsumerState<TournamentCreateScreen>
       payload['launchAt'] = DateTime.now().millisecondsSinceEpoch + _launchDelay * 60 * 1000;
     }
 
-    socket.emit('create_tournament', payload);
+    _socket.emit('create_tournament', payload);
     // Safety timeout: if no response in 10s, reset creating state
     Future.delayed(const Duration(seconds: 10), () {
       if (mounted && _creating) {
