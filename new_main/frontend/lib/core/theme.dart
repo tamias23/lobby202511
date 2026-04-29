@@ -74,36 +74,32 @@ class DTheme {
     fontWeight: FontWeight.w700,
     color: textMainDark,
     letterSpacing: -0.5,
-    fontFamilyFallback: _fallback,
-  );
+  ).copyWith(fontFamilyFallback: _fallback);
 
   static TextStyle get subtitle => GoogleFonts.outfit(
     fontSize: 14,
     fontWeight: FontWeight.w400,
     color: textMutedDark,
-    fontFamilyFallback: _fallback,
-  );
+  ).copyWith(fontFamilyFallback: _fallback);
 
   static TextStyle get body => GoogleFonts.inter(
     fontSize: 14,
     fontWeight: FontWeight.w400,
     color: textMainDark,
-    fontFamilyFallback: _fallback,
-  );
+  ).copyWith(fontFamilyFallback: _fallback);
 
   static TextStyle get bodyMuted => GoogleFonts.inter(
     fontSize: 13,
     color: textMutedDark,
-    fontFamilyFallback: _fallback,
-  );
+  ).copyWith(fontFamilyFallback: _fallback);
 
   static TextStyle get label => GoogleFonts.outfit(
     fontSize: 12,
     fontWeight: FontWeight.w600,
     color: textMutedDark,
     letterSpacing: 1.0,
-    fontFamilyFallback: _fallback,
-  );
+  ).copyWith(fontFamilyFallback: _fallback);
+
 
   // ── Theme Data ───────────────────────────────────────────────────────────────
   static ThemeData get dark {
