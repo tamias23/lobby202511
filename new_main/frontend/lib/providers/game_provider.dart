@@ -107,49 +107,64 @@ class GameNotifier extends Notifier<GameBoardState> {
   // ── Socket listeners ──────────────────────────────────────────────────────
 
   void _onGameUpdate(dynamic data) {
-    final d = _deepMap(data as Map);
-    final gs = state.gameState;
-    if (gs == null) return;
+    try {
+      final d = _deepMap(data as Map);
+      final gs = state.gameState;
+      if (gs == null) return;
 
-    GameState updated = gs;
-    if (d['pieces'] != null) {
-      updated = updated.copyWith(
-        pieces: (d['pieces'] as List)
-            .map((e) => Piece.fromJson(e as Map<String, dynamic>))
-            .toList(),
+      GameState updated = gs;
+      if (d['pieces'] != null) {
+        updated = updated.copyWith(
+          pieces: (d['pieces'] as List)
+              .map((e) => Piece.fromJson(e as Map<String, dynamic>))
+              .toList(),
+        );
+      }
+      if (d['turn'] != null) updated = updated.copyWith(turn: d['turn'] as String);
+      if (d['phase'] != null) updated = updated.copyWith(phase: d['phase'] as String);
+      if (d['setupStep'] != null) updated = updated.copyWith(setupStep: (d['setupStep'] as num).toInt());
+      if (d['turnCounter'] != null) updated = updated.copyWith(turnCounter: (d['turnCounter'] as num).toInt());
+      if (d['isNewTurn'] != null) updated = updated.copyWith(isNewTurn: d['isNewTurn'] as bool);
+      if (d['movesThisTurn'] != null) updated = updated.copyWith(movesThisTurn: (d['movesThisTurn'] as num).toInt());
+      // Use containsKey so null properly clears lockedSequencePiece
+      if (d.containsKey('lockedSequencePiece')) {
+        updated = updated.copyWith(lockedSequencePiece: d['lockedSequencePiece'] as String?);
+      }
+      if (d['heroeTakeCounter'] != null) updated = updated.copyWith(heroeTakeCounter: (d['heroeTakeCounter'] as num).toInt());
+      if (d['clocks'] != null) updated = updated.copyWith(
+        clocks: (d['clocks'] as Map<String, dynamic>).map((k, v) => MapEntry(k, (v as num).toInt())),
       );
-    }
-    if (d['turn'] != null) updated = updated.copyWith(turn: d['turn'] as String);
-    if (d['phase'] != null) updated = updated.copyWith(phase: d['phase'] as String);
-    if (d['setupStep'] != null) updated = updated.copyWith(setupStep: (d['setupStep'] as num).toInt());
-    if (d['turnCounter'] != null) updated = updated.copyWith(turnCounter: (d['turnCounter'] as num).toInt());
-    if (d['isNewTurn'] != null) updated = updated.copyWith(isNewTurn: d['isNewTurn'] as bool);
-    if (d['movesThisTurn'] != null) updated = updated.copyWith(movesThisTurn: (d['movesThisTurn'] as num).toInt());
-    // Use containsKey so null properly clears lockedSequencePiece
-    if (d.containsKey('lockedSequencePiece')) {
-      updated = updated.copyWith(lockedSequencePiece: d['lockedSequencePiece'] as String?);
-    }
-    if (d['heroeTakeCounter'] != null) updated = updated.copyWith(heroeTakeCounter: (d['heroeTakeCounter'] as num).toInt());
-    if (d['clocks'] != null) updated = updated.copyWith(
-      clocks: (d['clocks'] as Map<String, dynamic>).map((k, v) => MapEntry(k, (v as num).toInt())),
-    );
-    if (d['lastTurnTimestamp'] != null) updated = updated.copyWith(lastTurnTimestamp: _parseTimestamp(d['lastTurnTimestamp']));
-    if (d['colorChosen'] != null) updated = updated.copyWith(colorChosen: d['colorChosen'] as Map<String, dynamic>);
-    if (d['colorsEverChosen'] != null) updated = updated.copyWith(colorsEverChosen: List<String>.from(d['colorsEverChosen'] as List));
-    if (d['mageUnlocked'] != null) updated = updated.copyWith(mageUnlocked: d['mageUnlocked'] as bool);
-    if (d['passCount'] != null) updated = updated.copyWith(
-      passCount: (d['passCount'] as Map<String, dynamic>).map((k, v) => MapEntry(k, (v as num).toInt())),
-    );
-    if (d['moves'] != null) updated = updated.copyWith(
-      moves: (d['moves'] as List).map((e) => e as Map<String, dynamic>).toList(),
-    );
+      if (d['lastTurnTimestamp'] != null) updated = updated.copyWith(lastTurnTimestamp: _parseTimestamp(d['lastTurnTimestamp']));
+      if (d['colorChosen'] != null) updated = updated.copyWith(colorChosen: d['colorChosen'] as Map<String, dynamic>);
+      if (d['colorsEverChosen'] != null) updated = updated.copyWith(colorsEverChosen: List<String>.from(d['colorsEverChosen'] as List));
+      if (d['mageUnlocked'] != null) updated = updated.copyWith(mageUnlocked: d['mageUnlocked'] as bool);
+      if (d['passCount'] != null) updated = updated.copyWith(
+        passCount: (d['passCount'] as Map<String, dynamic>).map((k, v) => MapEntry(k, (v as num).toInt())),
+      );
+      if (d['moves'] != null) updated = updated.copyWith(
+        moves: (d['moves'] as List).map((e) => e as Map<String, dynamic>).toList(),
+      );
 
-    debugPrint('[GameUpdate] turn=${updated.turn} phase=${updated.phase}'
-        ' locked=${updated.lockedSequencePiece} colorChosen=${updated.colorChosen}');
+      debugPrint('[GameUpdate] turn=${updated.turn} phase=${updated.phase}'
+          ' locked=${updated.lockedSequencePiece} colorChosen=${updated.colorChosen}');
 
-    state = state.copyWith(gameState: updated, legalMoves: [], selectedPieceId: null);
-    // New game state = new turn → cached legal moves are no longer valid.
-    _prefetchedMoves.clear();
+      state = state.copyWith(gameState: updated, legalMoves: [], selectedPieceId: null);
+      // New game state = new turn → cached legal moves are no longer valid.
+      _prefetchedMoves.clear();
+    } catch (e, stack) {
+      debugPrint('╔══ [GameUpdate] CRASH ══════════════════════════════════════');
+      debugPrint('║ Error: $e');
+      debugPrint('║ Raw data keys: ${(data is Map) ? data.keys.toList() : 'NOT A MAP'}');
+      debugPrint('║ Current gs null? ${state.gameState == null}');
+      if (state.gameState != null) {
+        final gs = state.gameState!;
+        debugPrint('║ gs.turn=${gs.turn} gs.phase=${gs.phase} gs.pieces.length=${gs.pieces.length}');
+        debugPrint('║ gs.clocks=${gs.clocks} gs.passCount=${gs.passCount}');
+        debugPrint('║ gs.moves.length=${gs.moves.length} gs.side=${gs.side}');
+      }
+      debugPrint('╚══════════════════════════════════════════════════════════');
+      debugPrint('$stack');
+    }
   }
 
   void _onLegalMoves(dynamic data) {

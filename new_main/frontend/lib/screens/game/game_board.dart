@@ -310,6 +310,37 @@ class _GameBoardState extends ConsumerState<GameBoard> {
 
   @override
   Widget build(BuildContext context) {
+    try {
+      return _buildInner(context);
+    } catch (e, stack) {
+      debugPrint('╔══ [GameBoard.build] CRASH ═════════════════════════════════');
+      debugPrint('║ Error: $e');
+      debugPrint('║ gameId=${widget.gameId} side=${widget.side}');
+      final gs = ref.read(gameProvider(widget.gameId)).gameState;
+      if (gs != null) {
+        debugPrint('║ turn=${gs.turn} phase=${gs.phase} pieces=${gs.pieces.length}');
+        debugPrint('║ clocks=${gs.clocks} passCount=${gs.passCount}');
+        debugPrint('║ colorChosen=${gs.colorChosen} mageUnlocked=${gs.mageUnlocked}');
+        debugPrint('║ moves.length=${gs.moves.length} setupStep=${gs.setupStep}');
+        debugPrint('║ lockedSequencePiece=${gs.lockedSequencePiece}');
+        debugPrint('║ whiteName=${gs.whiteName} blackName=${gs.blackName}');
+        debugPrint('║ whiteRole=${gs.whiteRole} blackRole=${gs.blackRole}');
+        debugPrint('║ whiteRating=${gs.whiteRating} blackRating=${gs.blackRating}');
+        debugPrint('║ board keys=${gs.board.keys.toList()}');
+      } else {
+        debugPrint('║ gameState is NULL');
+      }
+      debugPrint('╚═════════════════════════════════════════════════════════');
+      debugPrint('$stack');
+      return Scaffold(
+        backgroundColor: DTheme.bgDark,
+        body: Center(child: Text('Build error — see console\n$e',
+            style: const TextStyle(color: Colors.redAccent, fontSize: 12))),
+      );
+    }
+  }
+
+  Widget _buildInner(BuildContext context) {
     final gameState = ref.watch(gameProvider(widget.gameId));
     final gs = gameState.gameState;
 
