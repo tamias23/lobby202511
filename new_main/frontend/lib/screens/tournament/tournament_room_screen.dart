@@ -33,6 +33,9 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
   Timer? _tick;
   int    _tickCount = 0;
 
+  // Cache socket so dispose() never touches ref (Riverpod 3 forbids ref in dispose)
+  late final _socket = ref.read(socketServiceProvider);
+
   @override
   void initState() {
     super.initState();
@@ -47,10 +50,9 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
   }
 
   void _joinRoom() {
-    final socket = ref.read(socketServiceProvider);
-    socket.emit('enter_tournament_room', {'tournamentId': widget.tournamentId});
+    _socket.emit('enter_tournament_room', {'tournamentId': widget.tournamentId});
 
-    socket.on('tournament_update', (data) {
+    _socket.on('tournament_update', (data) {
       if (!mounted) return;
       final d = Map<String,dynamic>.from(data as Map);
       if (d['id'] == widget.tournamentId || d['id'] == null) {
@@ -59,7 +61,7 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
       }
     });
 
-    socket.on('tournament_error', (data) {
+    _socket.on('tournament_error', (data) {
       if (!mounted) return;
       final msg = data is Map ? (data['message'] ?? 'Tournament error.') : data.toString();
       // If tournament not found (evicted from memory), go back to lobby silently
@@ -73,9 +75,9 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
       context.go('/');
     });
 
-    socket.on('tournament_game_start', (data) {
-      final d = Map<String,dynamic>.from(data as Map);
+    _socket.on('tournament_game_start', (data) {
       if (!mounted) return;
+      final d = Map<String,dynamic>.from(data as Map);
       if (d['tournamentId'] == widget.tournamentId) {
         final auth = ref.read(authProvider).value;
         if (auth != null &&
@@ -85,9 +87,9 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
       }
     });
 
-    socket.on('tournament_game_aborted', (data) {
-      final d = Map<String,dynamic>.from(data as Map);
+    _socket.on('tournament_game_aborted', (data) {
       if (!mounted) return;
+      final d = Map<String,dynamic>.from(data as Map);
       if (d['tournamentId'] == widget.tournamentId) {
         context.go('/tournament/${widget.tournamentId}');
       }
@@ -95,13 +97,13 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
   }
 
   void _leaveRoom() {
-    final socket = ref.read(socketServiceProvider);
-    socket.emit('leave_tournament_room', {'tournamentId': widget.tournamentId});
-    socket.off('tournament_update');
-    socket.off('tournament_error');
-    socket.off('tournament_game_start');
-    socket.off('tournament_game_aborted');
-    socket.off('tournament_games_download_data');
+    // Uses cached _socket — safe to call from dispose() without touching ref.
+    _socket.emit('leave_tournament_room', {'tournamentId': widget.tournamentId});
+    _socket.off('tournament_update');
+    _socket.off('tournament_error');
+    _socket.off('tournament_game_start');
+    _socket.off('tournament_game_aborted');
+    _socket.off('tournament_games_download_data');
   }
 
   void _maybeStartTick(Map<String,dynamic> t) {
@@ -119,8 +121,7 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
   }
 
   void _quit() {
-    final socket = ref.read(socketServiceProvider);
-    socket.emit('leave_tournament', {'tournamentId': widget.tournamentId});
+    _socket.emit('leave_tournament', {'tournamentId': widget.tournamentId});
     setState(() => _showQuitConfirm = false);
     context.go('/');
   }
@@ -129,11 +130,9 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
     if (_isDownloading) return;
     setState(() => _isDownloading = true);
 
-    final socket = ref.read(socketServiceProvider);
-
     // Use .once to ensure this handler only fires once for this specific request.
     // This avoids duplicate downloads if the screen was rebuilt or stacked.
-    socket.once('tournament_games_download_data', (data) {
+    _socket.once('tournament_games_download_data', (data) {
       if (!mounted) return;
       final d = Map<String, dynamic>.from(data as Map);
       if (d['tournamentId'] != widget.tournamentId) return;
@@ -142,7 +141,7 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
       _triggerDownload(d['json'] as String? ?? '');
     });
 
-    socket.emit('download_tournament_games', {'tournamentId': widget.tournamentId});
+    _socket.emit('download_tournament_games', {'tournamentId': widget.tournamentId});
   }
 
   void _triggerDownload(String jsonStr) {
