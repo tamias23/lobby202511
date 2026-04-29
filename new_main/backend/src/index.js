@@ -3429,11 +3429,13 @@ if (distPath) {
 
     // Single Page Application (SPA) catch-all
     app.get('*', (req, res, next) => {
-        // Skip API, Socket.io, and other backend routes
-        if (req.url.startsWith('/socket.io') || 
-            req.url.startsWith('/verify-email') || 
+        // Skip backend routes and Flutter static assets
+        if (req.url.startsWith('/socket.io') ||
+            req.url.startsWith('/api/') ||
+            req.url.startsWith('/verify-email') ||
             req.url.startsWith('/register') ||
-            req.url.startsWith('/login')) {
+            req.url.startsWith('/login') ||
+            req.url.startsWith('/assets/')) {   // Flutter asset bundle (fonts, legal docs, sounds…)
             return next();
         }
         res.sendFile(path.join(distPath, 'index.html'));
