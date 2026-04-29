@@ -172,7 +172,10 @@ class _GameHistoryScreenState extends State<GameHistoryScreen> {
     final color    = g['my_color'] as String? ?? '?';
     final hasTournament = (g['tournament_id'] as String?)?.isNotEmpty == true;
     final dateStr  = _fmt(g['timestamp'], g['timestamp_utc']);
-    final hasReplay = (g['moves'] as String?)?.isNotEmpty == true;
+    final rawMoves  = g['moves'];
+    final hasReplay = rawMoves is String
+        ? rawMoves.isNotEmpty
+        : (rawMoves is List ? rawMoves.isNotEmpty : false);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
