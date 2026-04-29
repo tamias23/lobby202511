@@ -11,17 +11,39 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   tz.initializeTimeZones();
 
-  // Surface uncaught errors clearly in the browser console
+  // Surface uncaught errors clearly in the browser console — ALWAYS, even in
+  // release builds, so we can diagnose production crashes from F12 console.
   FlutterError.onError = (FlutterErrorDetails details) {
+    // ignore: avoid_print
+    print('╔══ [FlutterError] ══════════════════════════════════════════');
+    // ignore: avoid_print
+    print('║ ${details.exceptionAsString()}');
+    if (details.context != null) {
+      // ignore: avoid_print
+      print('║ Context: ${details.context}');
+    }
+    if (details.library != null) {
+      // ignore: avoid_print
+      print('║ Library: ${details.library}');
+    }
+    // ignore: avoid_print
+    print('╚═══════════════════════════════════════════════════════════');
+    // ignore: avoid_print
+    print('${details.stack}');
+    // Also dump via framework helper when in debug mode
     if (kDebugMode) {
       FlutterError.dumpErrorToConsole(details);
     }
   };
   PlatformDispatcher.instance.onError = (error, stack) {
-    if (kDebugMode) {
-      // ignore: avoid_print
-      print('PlatformDispatcher uncaught: $error\n$stack');
-    }
+    // ignore: avoid_print
+    print('╔══ [PlatformDispatcher] ════════════════════════════════════');
+    // ignore: avoid_print
+    print('║ $error');
+    // ignore: avoid_print
+    print('╚═══════════════════════════════════════════════════════════');
+    // ignore: avoid_print
+    print('$stack');
     return false; // let default handler also run
   };
 
