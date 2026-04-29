@@ -254,13 +254,19 @@ else
     # DOCKER_HOST makes the docker-compose external provider use the podman socket
     REMOTE_ENV="DOCKER_HOST=unix:///run/user/\$(id -u)/podman/podman.sock TAG=${TAG} APP_URL=${APP_URL}"
 
+    ssh "$REMOTE" "cd ~/dedal-deploy && ${REMOTE_ENV} podman compose -f docker-compose.podman.yml --profile tunnel down 2>/dev/null || true"
     ssh "$REMOTE" "cd ~/dedal-deploy && ${REMOTE_ENV} podman compose -f docker-compose.podman.yml down 2>/dev/null || true"
-    ssh "$REMOTE" "cd ~/dedal-deploy && ${REMOTE_ENV} podman compose -f docker-compose.podman.yml up -d --scale nd6-app=${REPLICAS}"
 
+    # Start all services + Cloudflare tunnel in one command.
+    # Two separate `up` calls caused the second (tunnel) to reset --scale back to 1.
+    TUNNEL_ARGS=""
     if $TUNNEL; then
         echo "==> Starting Cloudflare tunnel on remote..."
-        ssh "$REMOTE" "cd ~/dedal-deploy && CF_TUNNEL_TOKEN='${CF_TOKEN}' ${REMOTE_ENV} podman compose -f docker-compose.podman.yml --profile tunnel up -d"
+        TUNNEL_ARGS="CF_TUNNEL_TOKEN='${CF_TOKEN}'"
     fi
+    PROFILE_ARG=$($TUNNEL && echo "--profile tunnel" || echo "")
+    ssh "$REMOTE" "cd ~/dedal-deploy && ${TUNNEL_ARGS} ${REMOTE_ENV} podman compose -f docker-compose.podman.yml ${PROFILE_ARG} up -d --scale nd6-app=${REPLICAS}"
+
 
     echo ""
     echo "==> Waiting for remote services..."
