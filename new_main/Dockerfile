@@ -1,5 +1,5 @@
 # --- STAGE 1: Build Rust NAPI Native Module ---
-FROM node:20-slim AS rust-builder
+FROM --platform=linux/amd64 node:20-slim AS rust-builder
 WORKDIR /app
 # Install system dependencies for Rust and NAPI build
 RUN apt-get update && apt-get install -y \
@@ -16,18 +16,22 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 COPY rust-core ./rust-core
 COPY backend/rust-napi ./backend/rust-napi
 
-# Build the native module
+# Build the native module (cache cargo registry + target dir across builds)
 WORKDIR /app/backend/rust-napi
 RUN npm install
-RUN npm run build
+RUN --mount=type=cache,target=/root/.cargo/registry \
+    --mount=type=cache,target=/root/.cargo/git \
+    --mount=type=cache,target=/app/backend/rust-napi/target \
+    npm run build
 
 # --- STAGE 2: Build Flutter Web Frontend ---
-FROM ghcr.io/cirruslabs/flutter:stable AS frontend-builder
+FROM --platform=linux/amd64 ghcr.io/cirruslabs/flutter:stable AS frontend-builder
 WORKDIR /app/frontend
 
 # Copy pubspec files first (layer cache)
 COPY frontend/pubspec.yaml frontend/pubspec.lock ./
-RUN flutter pub get
+RUN --mount=type=cache,target=/root/.pub-cache \
+    flutter pub get
 
 # Copy the full Flutter source
 COPY frontend/ ./
@@ -36,11 +40,12 @@ COPY frontend/ ./
 # Default: production domain. Override with --build-arg API_URL= for local/Podman deploys.
 ARG API_URL=https://dedalthegame.com
 ARG BUILD_TIMESTAMP=dev
-RUN flutter build web --dart-define=API_URL=${API_URL} --dart-define=BUILD_TIMESTAMP=${BUILD_TIMESTAMP}
+RUN --mount=type=cache,target=/root/.pub-cache \
+    flutter build web --dart-define=API_URL=${API_URL} --dart-define=BUILD_TIMESTAMP=${BUILD_TIMESTAMP}
 # Output: build/web/
 
 # --- STAGE 3: Production Runtime ---
-FROM node:20-slim
+FROM --platform=linux/amd64 node:20-slim
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -56,7 +61,10 @@ WORKDIR /app/backend
 COPY backend/package*.json ./
 RUN npm install --production
 
-# Copy backend source
+# Copy boards first (large, ~381MB, rarely changes → its own cached layer)
+COPY backend/src/utils/boards ./src/utils/boards
+
+# Copy remaining backend source (changes frequently)
 COPY backend/src ./src
 
 # 2. Setup Rust NAPI Module

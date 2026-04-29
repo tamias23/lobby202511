@@ -25,6 +25,8 @@ if ! systemctl --user is-active podman.socket &>/dev/null; then
     systemctl --user start podman.socket
 fi
 
+export DOCKER_HOST="unix:///run/user/$(id -u)/podman/podman.sock"
+
 # Stop tunnel first (it's in a separate profile)
 podman compose -f "$COMPOSE_FILE" --profile tunnel down 2>/dev/null || true
 

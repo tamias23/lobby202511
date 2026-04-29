@@ -32,7 +32,7 @@ services:
       resources:
         limits:
           cpus: "1.0"
-          memory: 2G
+          memory: 1G
         reservations:
           cpus: "0.5"
           memory: 512M
@@ -118,7 +118,7 @@ services:
       resources:
         limits:
           cpus: "1.0"
-          memory: 2500M
+          memory: 2000M
         reservations:
           cpus: "0.5"
           memory: 512M

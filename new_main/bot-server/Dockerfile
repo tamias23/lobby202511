@@ -1,5 +1,5 @@
 # ─── Stage 1: Build ──────────────────────────────────────────────────────────
-FROM docker.io/library/rust:latest AS builder
+FROM --platform=linux/amd64 docker.io/library/rust:latest AS builder
 WORKDIR /app
 
 # Install system dependencies
@@ -14,20 +14,21 @@ COPY new_main/rust-core ./new_main/rust-core
 COPY rust ./rust
 COPY new_main/bot-server ./new_main/bot-server
 
-# Build the specific binary
+# Build the specific binary (cache cargo registry + target dir across builds)
+# We also collect shared libraries (e.g. libonnxruntime.so) in the same step
+# because the cache mount is only available during this RUN.
 WORKDIR /app/new_main/bot-server
-RUN cargo build --release
-
-# Collect all shared libraries into a single directory for easy copying.
-# We include a dummy file to ensure the directory is never empty, 
-# preventing the final COPY command from failing if no .so files are found.
-# We look in the release folder and its 'deps' subfolder.
-RUN mkdir -p /app/runtime-libs && \
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/new_main/bot-server/target \
+    cargo build --release && \
+    cp target/release/bot-server /app/bot-server-bin && \
+    mkdir -p /app/runtime-libs && \
     touch /app/runtime-libs/.keep && \
     find target/release -name "*.so*" -exec cp {} /app/runtime-libs/ \; || true
 
 # ─── Stage 2: Runtime ────────────────────────────────────────────────────────
-FROM debian:trixie-slim
+FROM --platform=linux/amd64 debian:trixie-slim
 WORKDIR /app
 
 # Install runtime dependencies
@@ -40,7 +41,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the final binary
-COPY --from=builder /app/new_main/bot-server/target/release/bot-server ./bot-server
+COPY --from=builder /app/bot-server-bin ./bot-server
 
 # Copy all collected shared libraries (principally libonnxruntime.so)
 COPY --from=builder /app/runtime-libs/ /app/

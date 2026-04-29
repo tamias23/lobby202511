@@ -7,7 +7,6 @@
 #   ./deploy_to_podman.sh --tunnel --token YOUR_CF_TOKEN            # Local + Cloudflare tunnel
 #   ./deploy_to_podman.sh --remote mat@192.168.1.XX                 # Deploy to spare laptop
 #   ./deploy_to_podman.sh --remote mat@192.168.1.XX --replicas 4 --tunnel --token TOKEN
-#   ./deploy_to_podman.sh --remote mat@SERVER --platform linux/arm64  # Cross-build for ARM64 server
 #   ./deploy_to_podman.sh --skip-build                              # Skip build, just (re)deploy
 #   ./deploy_to_podman.sh --api-url https://dedalthegame.com        # Custom API_URL for Flutter
 #
@@ -20,8 +19,8 @@ TUNNEL=false
 CF_TOKEN=""
 API_URL=""
 SKIP_BUILD=false
-PLATFORM=""
 TAG=$(date -u +%Y%m%dT%H%M%S)
+TAG_EXPLICIT=false   # set to true when --tag is passed explicitly
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -43,10 +42,8 @@ while [[ $# -gt 0 ]]; do
             API_URL="$2"; shift 2 ;;
         --skip-build)
             SKIP_BUILD=true; shift ;;
-        --platform)
-            PLATFORM="$2"; shift 2 ;;
         --tag)
-            TAG="$2"; shift 2 ;;
+            TAG="$2"; TAG_EXPLICIT=true; shift 2 ;;
         -h|--help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
@@ -57,8 +54,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --token TOKEN      Cloudflare tunnel token (required with --tunnel)"
             echo "  --api-url URL      API URL for Flutter build (default: auto-detect)"
             echo "  --skip-build       Skip building images, just (re)deploy containers"
-            echo "  --platform PLAT    Target platform (e.g. linux/arm64). Default: native."
-            echo "  --tag TAG          Image tag (default: timestamp)"
+            echo "  --tag TAG          Image tag (default: timestamp; 'latest' with --skip-build)"
             echo "  -h, --help         Show this help"
             exit 0 ;;
         *)
@@ -70,6 +66,13 @@ done
 if $TUNNEL && [[ -z "$CF_TOKEN" ]]; then
     echo "ERROR: --tunnel requires --token YOUR_CF_TOKEN"
     exit 1
+fi
+
+# When skipping the build, default to :latest unless an explicit tag was given.
+# A fresh timestamp tag would not match any local image and cause compose to
+# attempt a (failing) registry pull.
+if $SKIP_BUILD && ! $TAG_EXPLICIT; then
+    TAG="latest"
 fi
 
 # ── Ensure SSH key auth for remote deploys (avoid password prompts) ───────────
@@ -94,7 +97,6 @@ echo "=== Dedal Podman Deploy ==="
 echo "    Tag:       ${TAG}"
 echo "    Replicas:  ${REPLICAS}"
 echo "    Remote:    ${REMOTE:-local}"
-echo "    Platform:  ${PLATFORM:-native}"
 echo "    Tunnel:    ${TUNNEL}"
 echo ""
 
@@ -103,6 +105,11 @@ if ! systemctl --user is-active podman.socket &>/dev/null; then
     echo "==> Starting Podman socket..."
     systemctl --user start podman.socket
 fi
+
+# Point the docker-compose external provider at the Podman socket.
+# Without this, docker-compose tries /var/run/docker.sock (Docker daemon)
+# which doesn't exist on a Podman-only system → "connection refused".
+export DOCKER_HOST="unix:///run/user/$(id -u)/podman/podman.sock"
 
 # ── Ensure data directories exist ────────────────────────────────────────────
 mkdir -p /home/mat/Bureau/dedalthegame/PSQL
@@ -116,22 +123,6 @@ fi
 
 # ── Build phase ───────────────────────────────────────────────────────────────
 if ! $SKIP_BUILD; then
-    # Cross-platform build args
-    PLATFORM_ARGS=""
-    if [[ -n "$PLATFORM" ]]; then
-        echo "    Cross-building for platform: ${PLATFORM}"
-        # Check QEMU emulation is available for cross-platform builds
-        if [[ "$PLATFORM" == *"arm64"* || "$PLATFORM" == *"aarch64"* ]] && [[ "$(uname -m)" != "aarch64" ]]; then
-            if ! ls /proc/sys/fs/binfmt_misc/qemu-aarch64 &>/dev/null; then
-                echo "⚠️  QEMU aarch64 emulation not detected."
-                echo "   Install it with:  sudo apt-get install -y qemu-user-static"
-                echo "   It should register automatically. If not:  sudo systemctl restart systemd-binfmt"
-                exit 1
-            fi
-        fi
-        PLATFORM_ARGS="--platform ${PLATFORM}"
-    fi
-
     echo "==> [1/3] Building Flutter web frontend (inside Docker)..."
     # Determine API_URL for Flutter build
     if [[ -n "$API_URL" ]]; then
@@ -145,7 +136,7 @@ if ! $SKIP_BUILD; then
 
     echo "==> [2/3] Building nd6-app container image..."
     cd "${SCRIPT_DIR}"
-    podman build ${PLATFORM_ARGS} \
+    podman build \
         --build-arg API_URL="${FLUTTER_API_URL}" \
         --build-arg BUILD_TIMESTAMP="${TAG}" \
         -t node-docker06:${TAG} .
@@ -153,7 +144,7 @@ if ! $SKIP_BUILD; then
 
     echo "==> [3/3] Building bot-server container image..."
     cd "${REPO_ROOT}"
-    podman build ${PLATFORM_ARGS} -t bot-server:${TAG} -f new_main/bot-server/Dockerfile .
+    podman build -t bot-server:${TAG} -f new_main/bot-server/Dockerfile .
     podman tag localhost/bot-server:${TAG} localhost/bot-server:latest
 
     echo "==> Images built successfully."
@@ -186,8 +177,9 @@ if [[ -z "$REMOTE" ]]; then
     echo ""
     echo "==> Deploying locally..."
 
-    # Stop any existing deployment
+    # Stop any existing deployment (tunnel profile first, then core services)
     cd "${SCRIPT_DIR}"
+    podman compose -f "$COMPOSE_FILE" --profile tunnel down 2>/dev/null || true
     podman compose -f "$COMPOSE_FILE" down 2>/dev/null || true
 
     # Start services (including tunnel profile if requested)
@@ -259,7 +251,8 @@ else
 
     echo "==> [R4] Starting services on remote..."
     # Build the environment string for remote
-    REMOTE_ENV="TAG=${TAG} APP_URL=${APP_URL}"
+    # DOCKER_HOST makes the docker-compose external provider use the podman socket
+    REMOTE_ENV="DOCKER_HOST=unix:///run/user/\$(id -u)/podman/podman.sock TAG=${TAG} APP_URL=${APP_URL}"
 
     ssh "$REMOTE" "cd ~/dedal-deploy && ${REMOTE_ENV} podman compose -f docker-compose.podman.yml down 2>/dev/null || true"
     ssh "$REMOTE" "cd ~/dedal-deploy && ${REMOTE_ENV} podman compose -f docker-compose.podman.yml up -d --scale nd6-app=${REPLICAS}"
