@@ -137,7 +137,10 @@ class GameNotifier extends Notifier<GameBoardState> {
       if (d['lastTurnTimestamp'] != null) updated = updated.copyWith(lastTurnTimestamp: _parseTimestamp(d['lastTurnTimestamp']));
       if (d['colorChosen'] != null) updated = updated.copyWith(colorChosen: d['colorChosen'] as Map<String, dynamic>);
       if (d['colorsEverChosen'] != null) updated = updated.copyWith(colorsEverChosen: List<String>.from(d['colorsEverChosen'] as List));
-      if (d['mageUnlocked'] != null) updated = updated.copyWith(mageUnlocked: d['mageUnlocked'] as bool);
+      if (d['mageUnlocked'] != null) {
+        final mu = d['mageUnlocked'];
+        updated = updated.copyWith(mageUnlocked: mu is bool ? mu : (mu is num ? mu != 0 : false));
+      }
       if (d['passCount'] != null) updated = updated.copyWith(
         passCount: (d['passCount'] as Map<String, dynamic>).map((k, v) => MapEntry(k, (v as num).toInt())),
       );
@@ -336,7 +339,7 @@ class GameNotifier extends Notifier<GameBoardState> {
       lastTurnTimestamp: _parseTimestamp(r['lastTurnTimestamp']),
       colorChosen: r['colorChosen'] as Map<String, dynamic>? ?? {},
       colorsEverChosen: r['colorsEverChosen'] != null ? List<String>.from(r['colorsEverChosen'] as List) : [],
-      mageUnlocked: r['mageUnlocked'] as bool? ?? false,
+      mageUnlocked: r['mageUnlocked'] is bool ? r['mageUnlocked'] as bool : (r['mageUnlocked'] is num ? (r['mageUnlocked'] as num) != 0 : false),
       passCount: r['passCount'] != null
           ? (r['passCount'] as Map<String, dynamic>).map((k, v) => MapEntry(k, (v as num).toInt()))
           : {'white': 0, 'black': 0},

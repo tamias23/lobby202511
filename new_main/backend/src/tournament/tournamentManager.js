@@ -91,12 +91,13 @@ function setDependencies(createGameFn, io, abortGameFn, broadcastLobbyUpdateFn) 
 /** Publish current tournament lists to Valkey so all instances stay in sync. */
 function _syncToValkey() {
     try {
-        const vs = _getValkeySync();
         const open = getOpenTournaments();
         const active = getActiveTournamentsList();
-        vs.syncTournamentList(open, active);
-        // valkeySync ignores our own pub/sub messages, so we MUST update the local cache too
+        // Always update the local cache first — even if Valkey fails, the local
+        // broadcastLobbyUpdate must never serve stale tournament data.
         applyRemoteTournamentList(open, active);
+        const vs = _getValkeySync();
+        vs.syncTournamentList(open, active);
     } catch (_) { /* valkeySync may not be init yet on startup */ }
 }
 
@@ -149,6 +150,10 @@ async function loadFromDb() {
                 await completeTournament(tid);
             }
         }
+
+        // Initialize the cached tournament lists so broadcastLobbyUpdate
+        // serves correct data from the very first call.
+        _syncToValkey();
     } catch (e) {
         logger.error('Tournament', 'Failed to load from DB:', e.message);
     }

@@ -16,6 +16,7 @@ class ActionButtons extends ConsumerStatefulWidget {
   final bool myTurn;
   final bool isFlipped;
   final bool spectator;
+  final bool isPortrait;
 
   // Color-choice state (Playing phase)
   final Map<String, dynamic> colorChosen;   // e.g. {'white': 'orange'}
@@ -45,6 +46,7 @@ class ActionButtons extends ConsumerStatefulWidget {
     required this.myTurn,
     required this.isFlipped,
     required this.spectator,
+    this.isPortrait = false,
     required this.colorChosen,
     required this.mageUnlocked,
     required this.colorsEverChosen,
@@ -80,6 +82,7 @@ class _ActionButtonsState extends ConsumerState<ActionButtons> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.isPortrait) return _buildPortrait(context);
     final oppTurn = !widget.myTurn;
     final isSetup    = widget.phase == 'Setup';
     final isPlaying  = widget.phase == 'Playing';
@@ -376,6 +379,228 @@ class _ActionButtonsState extends ConsumerState<ActionButtons> {
                   ),
                 );
               }).toList(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ── Portrait-specific compact horizontal layout ────────────────────────────
+
+  Widget _buildPortrait(BuildContext context) {
+    final t = ref;
+    final oppTurn = !widget.myTurn;
+    final isSetup    = widget.phase == 'Setup';
+    final isPlaying  = widget.phase == 'Playing';
+    final isGameOver = widget.phase == 'GameOver';
+
+    final myChosenColor = widget.colorChosen[widget.side] as String?;
+    final oppSide = widget.side == 'white' ? 'black' : 'white';
+    final oppColor = widget.colorChosen[oppSide] as String?;
+    final turnChosenColorGlobal = widget.colorChosen[widget.turn] as String?;
+
+    // ── Full-width button for vertical stacking ─────────────────────────────
+    Widget stackBtn({
+      required String label,
+      required Color bgColor,
+      required bool enabled,
+      required VoidCallback onTap,
+      IconData? icon,
+    }) {
+      return GestureDetector(
+        onTap: enabled ? onTap : null,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: icon != null
+              ? Icon(icon, size: 16, color: Colors.white.withValues(alpha: enabled ? 1.0 : 0.5))
+              : Text(label, textAlign: TextAlign.center, maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600,
+                    color: Colors.white.withValues(alpha: enabled ? 1.0 : 0.5))),
+        ),
+      );
+    }
+
+    // ── Left column: buttons stacked vertically ─────────────────────────────
+    final buttons = <Widget>[];
+
+    if (isSetup || isPlaying) {
+      buttons.add(stackBtn(
+        label: oppTurn
+            ? '⏳'
+            : _passConfirm
+                ? t.tr('ui.confirm_pass')
+                : (isSetup ? t.tr('ui.end_turn') : t.tr('ui.pass_turn')),
+        bgColor: oppTurn
+            ? const Color(0xFF7F8C8D)
+            : _passConfirm
+                ? const Color(0xFFC0392B)
+                : isSetup ? const Color(0xFF2ECC71) : const Color(0xFFE67E22),
+        enabled: !oppTurn,
+        onTap: () {
+          if (isSetup) {
+            widget.onEndTurnSetup();
+          } else if (widget.myPassCount >= 2) {
+            if (_passConfirm) { setState(() => _passConfirm = false); widget.onPassTurn(); }
+            else { setState(() => _passConfirm = true); }
+          } else { widget.onPassTurn(); }
+        },
+      ));
+    }
+
+    if (isSetup && !widget.spectator) {
+      buttons.add(stackBtn(
+        label: oppTurn ? '⏳' : t.tr('ui.random_setup'),
+        bgColor: oppTurn ? const Color(0xFF7F8C8D) : const Color(0xFF9B59B6),
+        enabled: !oppTurn,
+        onTap: widget.onRandomSetup,
+      ));
+    }
+
+    buttons.add(stackBtn(
+      label: '', icon: Icons.swap_vert,
+      bgColor: const Color(0xFF34495E),
+      enabled: true,
+      onTap: widget.onFlip,
+    ));
+
+    if (!widget.spectator && !isGameOver) {
+      if (_resignConfirm) {
+        buttons.add(Row(children: [
+          Expanded(child: stackBtn(label: '✓ ${t.tr('ui.resign')}', bgColor: const Color(0xFFC0392B), enabled: true,
+            onTap: () { setState(() => _resignConfirm = false); widget.onResign(); })),
+          const SizedBox(width: 4),
+          Expanded(child: stackBtn(label: '✗', bgColor: const Color(0xFF34495E), enabled: true,
+            onTap: () => setState(() => _resignConfirm = false))),
+        ]));
+      } else {
+        buttons.add(stackBtn(
+          label: t.tr('ui.resign'),
+          bgColor: const Color(0xFF7F8C8D),
+          enabled: true,
+          onTap: () => setState(() => _resignConfirm = true),
+        ));
+      }
+    }
+
+    // ── Right column: color picker + mage locked ────────────────────────────
+    Widget? colorSection;
+    if (isPlaying) {
+      final turnChosenColor = widget.spectator
+          ? turnChosenColorGlobal
+          : (widget.myTurn ? myChosenColor : oppColor);
+      final colorsToShow = turnChosenColor != null ? [turnChosenColor] : _allColors;
+      final canPick = widget.myTurn && myChosenColor == null;
+      // Bigger dots when mage section is gone (more space available)
+      final double dotSize = widget.mageUnlocked ? 44.0 : 34.0;
+      colorSection = Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 6,
+        runSpacing: 6,
+        children: colorsToShow.map((color) {
+          final c = _cssColor[color] ?? Colors.grey;
+          return GestureDetector(
+            onTap: canPick ? () => widget.onColorSelected(color) : null,
+            child: Container(
+              width: dotSize, height: dotSize,
+              decoration: BoxDecoration(
+                color: c, shape: BoxShape.circle,
+                border: Border.all(
+                  color: canPick ? Colors.white.withValues(alpha: 0.85) : Colors.white.withValues(alpha: 0.2),
+                  width: 2.5),
+                boxShadow: canPick
+                    ? [BoxShadow(color: c.withValues(alpha: 0.5), blurRadius: 8)]
+                    : [],
+              ),
+            ),
+          );
+        }).toList(),
+      );
+    }
+
+    Widget? mageSection;
+    if (isPlaying && !widget.mageUnlocked) {
+      mageSection = Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.lock, size: 13, color: Color(0xFFF97316)),
+              const SizedBox(width: 3),
+              ..._allColors.map((color) {
+                final seen = widget.colorsEverChosen.contains(color);
+                final c = _cssColor[color] ?? Colors.grey;
+                return Container(
+                  width: 16, height: 16,
+                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  decoration: BoxDecoration(
+                    color: c.withValues(alpha: seen ? 1.0 : 0.18),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: seen ? Colors.white.withValues(alpha: 0.8) : Colors.white.withValues(alpha: 0.12),
+                      width: 1.5),
+                  ),
+                );
+              }),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text('${widget.colorsEverChosen.length}/4',
+            style: const TextStyle(fontSize: 9, color: Color(0x73FFFFFF))),
+        ],
+      );
+    }
+
+    final hasRightColumn = colorSection != null || mageSection != null;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A2332),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Left: buttons stacked vertically ───────────────────────────
+          Expanded(
+            flex: hasRightColumn ? 3 : 1,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (int i = 0; i < buttons.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 4),
+                  buttons[i],
+                ],
+              ],
+            ),
+          ),
+
+          // ── Right: color + mage ────────────────────────────────────────
+          if (hasRightColumn) ...[
+            Container(width: 1, height: 60, color: Colors.white.withValues(alpha: 0.1),
+              margin: const EdgeInsets.symmetric(horizontal: 8)),
+            Expanded(
+              flex: 2,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (colorSection != null) colorSection,
+                  if (mageSection != null) ...[
+                    if (colorSection != null) const SizedBox(height: 6),
+                    mageSection,
+                  ],
+                ],
+              ),
             ),
           ],
         ],

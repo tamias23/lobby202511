@@ -117,7 +117,7 @@ class _GameBoardState extends ConsumerState<GameBoard> {
 
   /// Compute bounding box of all polygons for viewBox calculation.
   ({double minX, double minY, double maxX, double maxY}) _boardBounds(
-      Map<String, BoardPolygon> polys) {
+      Map<String, BoardPolygon> polys, {bool isPortrait = false}) {
     double minX = double.infinity, minY = double.infinity;
     double maxX = double.negativeInfinity, maxY = double.negativeInfinity;
     for (final poly in polys.values) {
@@ -134,8 +134,10 @@ class _GameBoardState extends ConsumerState<GameBoard> {
     // Without this, off-board pieces at negative X board-coords produce
     // a negative screen-X that falls outside the Stack's layout box,
     // so their GestureDetectors are never hit-tested.
-    const double padX = 60;
-    const double padY = 20;
+    // In portrait mode, off-board pieces are placed above/below, so we
+    // only need a tiny horizontal margin and the board can stretch wider.
+    final double padX = isPortrait ? 4 : 60;
+    final double padY = isPortrait ? 4 : 20;
     return (minX: minX - padX, minY: minY - padY,
             maxX: maxX + padX, maxY: maxY + padY);
   }
@@ -362,65 +364,66 @@ class _GameBoardState extends ConsumerState<GameBoard> {
 
     final bg = ref.watch(bgProvider);
 
-    final screenWidth = MediaQuery.of(context).size.width;
+    final screenSize = MediaQuery.of(context).size;
+    final screenWidth = screenSize.width;
+    final screenHeight = screenSize.height;
     final isDesktop = screenWidth > 600;
-    final leftPanelWidth = isDesktop ? (screenWidth * 0.22).clamp(220.0, 320.0) : 193.0;
-    final rightPanelWidth = isDesktop ? (screenWidth * 0.22).clamp(220.0, 320.0) : 180.0;
+    final isPortrait = !isDesktop && screenHeight > screenWidth;
+    // Panel widths are only used in landscape — cap at 20% of screen width.
+    final double maxPanelW = screenWidth * 0.20;
+    final double leftPanelWidth = isPortrait ? 0 : math.min(screenWidth * 0.18, maxPanelW);
+    final double rightPanelWidth = isPortrait ? 0 : math.min(screenWidth * 0.18, maxPanelW);
+
 
     return Scaffold(
-      backgroundColor: Colors.transparent,  // let global AppBackground show through
+      backgroundColor: Colors.transparent,
       body: SafeArea(
         child: Stack(
           children: [
             // ── Main layout ────────────────────────────────────────────────
-            Row(
-              children: [
-                // ── Left player panel ──────────────────────────────────────
-                SizedBox(
-                  width: leftPanelWidth,
-                  child: _buildPlayerPanel(gs),
-                ),
-
-                // ── Board + right action panel ──────────────────────────────
-                Expanded(
-                  child: Column(
-                    children: [
-                      // ── Main board area ───────────────────────────────────
-                      Expanded(
-                        child: Row(
-                          children: [
-                            Expanded(
-                              flex: 3,
-                              child: _buildBoardStack(context, gs, polygons, gameState),
-                            ),
-                            if (isDesktop)
-                              SizedBox(
-                                width: rightPanelWidth,
-                                child: _buildActionPanel(context, gs, gameState, isDesktop: true),
-                              ),
-                          ],
-                        ),
-                      ),
-                      if (!isDesktop)
-                        _buildActionPanel(context, gs, gameState, isDesktop: false),
-                    ],
+            if (isPortrait)
+              _buildPortraitLayout(context, gs, polygons, gameState)
+            else
+              Row(
+                children: [
+                  SizedBox(
+                    width: leftPanelWidth,
+                    child: _buildPlayerPanel(gs),
                   ),
-                ),
-              ],
-            ),
-
-            // ── Background toggle — top right (mirrors lobby) ──────────────
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _buildBoardStack(context, gs, polygons, gameState, isPortrait: false),
+                              ),
+                              if (isDesktop)
+                                SizedBox(
+                                  width: rightPanelWidth,
+                                  child: _buildActionPanel(context, gs, gameState, isDesktop: true),
+                                ),
+                            ],
+                          ),
+                        ),
+                        if (!isDesktop)
+                          _buildActionPanel(context, gs, gameState, isDesktop: false),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             Positioned(
-              top: 8, right: 8,
+              top: isPortrait ? 36 : 8, right: 8,
               child: _GameBgToggle(
                 bg: bg,
                 onTap: () => ref.read(bgProvider.notifier).cycle(),
               ),
             ),
-            // ── Spectator banner — top left ────────────────────────────────
             if (widget.side == 'spectator')
               Positioned(
-                top: 8, left: 8,
+                top: isPortrait ? 36 : 8, left: 8,
                 child: _SpectatorBanner(tournamentId: widget.tournamentId),
               ),
           ],
@@ -429,11 +432,76 @@ class _GameBoardState extends ConsumerState<GameBoard> {
     );
   }
 
+  // ── Portrait layout ─────────────────────────────────────────────────────────
+  // Vertical stack: [top clock] [board] [bottom clock] [action panel]
+  // At game start (not flipped): white clock on top, black clock on bottom.
+  // When flipped: swapped.
+
+  Widget _buildPortraitLayout(
+      BuildContext context, GameState gs, Map<String, BoardPolygon> polygons, GameBoardState gameState) {
+    // Default (unflipped): white clock on top, black clock on bottom.
+    // For black player (_isFlipped starts true at init): black on top, white on bottom
+    //   → the player's own clock is naturally near them at the top.
+    // Flipping toggles: top ↔ bottom.
+    final topSide    = _isFlipped ? 'black' : 'white';
+    final bottomSide = _isFlipped ? 'white' : 'black';
+
+    String nameFor(String side) => side == 'black'
+        ? (gs.blackName ?? 'Black') : (gs.whiteName ?? 'White');
+    String roleFor(String side) => side == 'black'
+        ? (gs.blackRole ?? 'player') : (gs.whiteRole ?? 'player');
+    double? ratingFor(String side) => side == 'black' ? gs.blackRating : gs.whiteRating;
+
+    return Column(
+      children: [
+        // ── Top clock bar ─────────────────────────────────────────────────
+        _PortraitClockBar(
+          side: topSide,
+          name: nameFor(topSide),
+          role: roleFor(topSide),
+          rating: ratingFor(topSide),
+          clockMs: gs.clocks[topSide] ?? 0,
+          lastTurnTs: gs.lastTurnTimestamp,
+          isActive: gs.turn == topSide && gs.phase != 'GameOver',
+          isRunning: gs.turn == topSide,
+        ),
+
+        // ── Board (expands to fill available space) ───────────────────────
+        Expanded(
+          child: _buildBoardStack(context, gs, polygons, gameState, isPortrait: true),
+        ),
+
+        // ── Bottom clock bar ─────────────────────────────────────────────
+        _PortraitClockBar(
+          side: bottomSide,
+          name: nameFor(bottomSide),
+          role: roleFor(bottomSide),
+          rating: ratingFor(bottomSide),
+          clockMs: gs.clocks[bottomSide] ?? 0,
+          lastTurnTs: gs.lastTurnTimestamp,
+          isActive: gs.turn == bottomSide && gs.phase != 'GameOver',
+          isRunning: gs.turn == bottomSide,
+        ),
+
+        // ── Action panel (always at bottom, capped at 25% of screen) ─────
+        ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.25,
+          ),
+          child: SingleChildScrollView(
+            child: _buildActionPanel(context, gs, gameState, isDesktop: false, isPortrait: true),
+          ),
+        ),
+      ],
+    );
+  }
+
   // ── Left vertical player panel ───────────────────────────────────────────────
 
   Widget _buildPlayerPanel(GameState gs) {
     final topSide    = _isFlipped ? 'black' : 'white';
     final bottomSide = _isFlipped ? 'white' : 'black';
+    // NOTE: This panel is only used in landscape mode.
 
     String nameFor(String side) => side == 'black'
         ? (gs.blackName ?? 'Black') : (gs.whiteName ?? 'White');
@@ -509,17 +577,20 @@ class _GameBoardState extends ConsumerState<GameBoard> {
 
 
   Widget _buildBoardStack(
-      BuildContext context, GameState gs, Map<String, BoardPolygon> polygons, GameBoardState gameState) {
+      BuildContext context, GameState gs, Map<String, BoardPolygon> polygons, GameBoardState gameState,
+      {bool isPortrait = false}) {
     if (polygons.isEmpty) {
       return const Center(child: CircularProgressIndicator(color: DTheme.primary));
     }
 
-    final bounds = _boardBounds(polygons);
+    final bounds = _boardBounds(polygons, isPortrait: isPortrait);
     final boardCx = (bounds.minX + bounds.maxX) / 2;
     final boardCy = (bounds.minY + bounds.maxY) / 2;
 
     return LayoutBuilder(builder: (context, constraints) {
-      const padding = 16.0;
+      // In portrait mode, shrink padding so the board can stretch
+      // much closer to the left/right edges of the screen.
+      final double padding = isPortrait ? 2.0 : 16.0;
       final availW = constraints.maxWidth  - padding * 2;
       final availH = constraints.maxHeight - padding * 2;
       final scaleX = availW / (bounds.maxX - bounds.minX);
@@ -613,6 +684,41 @@ class _GameBoardState extends ConsumerState<GameBoard> {
                 offCounts[p.side] = (offCounts[p.side] ?? 0) + 1;
               }
             }
+
+            // Build type-group info per side for portrait stacking.
+            // groupLookup[pieceId] = [groupIdx, idxInGroup, groupSize, groupCount]
+            final groupLookup = <String, List<int>>{};
+            {
+              final sideReturned = <String, List<Piece>>{'white': [], 'black': []};
+              for (final p in sorted) {
+                if (p.position == 'returned') {
+                  sideReturned[p.side]?.add(p);
+                }
+              }
+              for (final side in ['white', 'black']) {
+                final pieces = sideReturned[side]!;
+                // First pass: build group counts
+                final groupCounts = <int>[];
+                String? lastType;
+                for (final p in pieces) {
+                  if (p.type != lastType) {
+                    groupCounts.add(0);
+                    lastType = p.type;
+                  }
+                  groupCounts[groupCounts.length - 1]++;
+                }
+                // Second pass: assign lookup
+                lastType = null;
+                int gIdx = -1;
+                int inGroup = 0;
+                for (final p in pieces) {
+                  if (p.type != lastType) { gIdx++; inGroup = 0; lastType = p.type; }
+                  groupLookup[p.id] = [gIdx, inGroup, groupCounts[gIdx], groupCounts.length];
+                  inGroup++;
+                }
+              }
+            }
+
             // Running indices per side
             final offIndices = {'white': 0, 'black': 0};
             return sorted.map((piece) {
@@ -622,11 +728,19 @@ class _GameBoardState extends ConsumerState<GameBoard> {
                 offCnt = offCounts[piece.side] ?? 0;
                 offIndices[piece.side] = offIdx + 1;
               }
+              final gl = groupLookup[piece.id];
               return _buildPieceWidget(
                 piece, gs, polygons, gameState,
                 scale: scale, offsetX: offsetX, offsetY: offsetY,
                 boardCx: boardCx, boardCy: boardCy,
                 offBoardIdx: offIdx, offBoardCount: offCnt,
+                isPortrait: isPortrait,
+                availableWidth: constraints.maxWidth,
+                availableHeight: constraints.maxHeight,
+                groupIdx: gl?[0] ?? 0,
+                idxInGroup: gl?[1] ?? 0,
+                groupSize: gl?[2] ?? 1,
+                groupCount: gl?[3] ?? 1,
               );
             }).toList();
           }(),
@@ -669,11 +783,90 @@ class _GameBoardState extends ConsumerState<GameBoard> {
     // Off-board positioning context
     int offBoardCount = 0,   // total off-board pieces for this side
     int offBoardIdx   = 0,   // this piece's index within off-board list
+    bool isPortrait = false,
+    double availableWidth  = 0,
+    double availableHeight = 0,
+    // Group info for portrait stacking
+    int groupIdx    = 0,     // which type-group (0, 1, 2...)
+    int idxInGroup  = 0,     // position within the group
+    int groupSize   = 1,     // total pieces in this group
+    int groupCount  = 1,     // total number of type-groups for this side
   }) {
     Offset pos;
     final isOffBoard = piece.position == 'returned';
 
-    if (isOffBoard) {
+    if (isOffBoard && isPortrait) {
+      // ━━ Portrait layout: spread off-board pieces above/below the board ━━━━━
+      // Default (unflipped): white above, black below. Flipped: swapped.
+      final bool isWhite = piece.side == 'white';
+      final bool placeOnTop = _isFlipped ? !isWhite : isWhite;
+
+      final double pieceSize = (scale * 36.0).clamp(28.0, 90.0).toDouble();
+
+      // Board edges in screen coordinates
+      final bounds = _boardBounds(_latestPolygons, isPortrait: true);
+      final double scaledBoardH = (bounds.maxY - bounds.minY) * scale;
+      final double boardScreenTop = offsetY + bounds.minY * scale;
+      final double boardScreenBot = boardScreenTop + scaledBoardH;
+
+      // Check if all pieces fit side-by-side without stacking
+      final double usableW = availableWidth - pieceSize;
+      final bool fitsIndividually = offBoardCount * pieceSize * 0.9 <= usableW + pieceSize;
+
+      double cx, cy;
+
+      if (fitsIndividually) {
+        // ── Enough space: spread all pieces individually ──────────────────
+        final double step = offBoardCount <= 1
+            ? 0
+            : usableW / (offBoardCount - 1);
+        final double clampedStep = step.clamp(0.0, pieceSize * 1.1);
+        final double rowW = clampedStep * (offBoardCount - 1);
+        final double startX = (availableWidth - rowW) / 2;
+        cx = (startX + offBoardIdx * clampedStep)
+            .clamp(pieceSize / 2, availableWidth - pieceSize / 2);
+
+        // Vertical: snug against the board
+        const double margin = 4.0;
+        if (placeOnTop) {
+          cy = (boardScreenTop - margin - pieceSize / 2)
+              .clamp(pieceSize / 2, double.infinity);
+        } else {
+          cy = (boardScreenBot + margin + pieceSize / 2)
+              .clamp(0.0, availableHeight - pieceSize / 2);
+        }
+      } else {
+        // ── Tight space: stack same-type, normal spacing between groups ───
+        // Each group occupies one "slot". Slots are spread evenly.
+        final double slotStep = groupCount <= 1
+            ? 0
+            : usableW / (groupCount - 1);
+        final double clampedSlotStep = slotStep.clamp(0.0, pieceSize * 1.3);
+        final double rowW = clampedSlotStep * (groupCount - 1);
+        final double startX = (availableWidth - rowW) / 2;
+        final double groupCx = startX + groupIdx * clampedSlotStep;
+
+        // Small offset within the stack so you can see how many pieces
+        const double stackShiftX = 3.0;
+        const double stackShiftY = 3.0;
+        cx = (groupCx + idxInGroup * stackShiftX)
+            .clamp(pieceSize / 2, availableWidth - pieceSize / 2);
+
+        // Vertical: snug against the board, with stack shift
+        const double margin = 4.0;
+        if (placeOnTop) {
+          final double baseY = boardScreenTop - margin - pieceSize / 2;
+          cy = (baseY - idxInGroup * stackShiftY)
+              .clamp(pieceSize / 2, double.infinity);
+        } else {
+          final double baseY = boardScreenBot + margin + pieceSize / 2;
+          cy = (baseY + idxInGroup * stackShiftY)
+              .clamp(0.0, availableHeight - pieceSize / 2);
+        }
+      }
+
+      pos = Offset(cx, cy);
+    } else if (isOffBoard) {
       // ━━ Legacy landscape layout (GameBoard.jsx renderPieces) ━━━━━━━━━━━━━━━
       // AVAIL_H=350, step = clamp(7.2, 28, 350/total)
       // xOffset = step<16 ? (even ? +13 : -13) : 0
@@ -702,7 +895,7 @@ class _GameBoardState extends ConsumerState<GameBoard> {
       pos = Offset(offsetX + cx * scale, offsetY + cy * scale);
     }
 
-    final pieceSize = (scale * 36.0).clamp(28.0, 90.0);
+    final double pieceSize = (scale * 36.0).clamp(28.0, 90.0).toDouble();
     // Off-board pieces that aren't eligible should be grayed (legacy: grayscale+dim)
     final isGrayed = isOffBoard && !_isEligible(piece, gs);
 
@@ -783,7 +976,7 @@ class _GameBoardState extends ConsumerState<GameBoard> {
 
   // ── Action panel ────────────────────────────────────────────────────────────
 
-  Widget _buildActionPanel(BuildContext context, GameState gs, GameBoardState gameState, {bool isDesktop = false}) {
+  Widget _buildActionPanel(BuildContext context, GameState gs, GameBoardState gameState, {bool isDesktop = false, bool isPortrait = false}) {
     final notifier = ref.read(gameProvider(widget.gameId).notifier);
     final myTurn = (gs.turn == 'white' && widget.side == 'white') ||
         (gs.turn == 'black' && widget.side == 'black');
@@ -802,6 +995,7 @@ class _GameBoardState extends ConsumerState<GameBoard> {
             myTurn: myTurn,
             isFlipped: _isFlipped,
             spectator: widget.side == 'spectator',
+            isPortrait: isPortrait,
             colorChosen: gs.colorChosen,
             mageUnlocked: gs.mageUnlocked,
             colorsEverChosen: gs.colorsEverChosen,
@@ -816,8 +1010,8 @@ class _GameBoardState extends ConsumerState<GameBoard> {
             onColorSelected: (color) => notifier.selectColor(color, widget.side),
           ),
         ),
-        // ── Move history ────────────────────────────────────────────────────
-        if (gs.moves.isNotEmpty)
+        // ── Move history (hidden in portrait to save space) ──────────────────
+        if (!isPortrait && gs.moves.isNotEmpty)
           isDesktop ? Flexible(child: _buildMoveHistory(gs.moves, expand: true)) : _buildMoveHistory(gs.moves, expand: false),
       ],
     );
@@ -950,6 +1144,110 @@ class _DisconnectBanner extends ConsumerWidget {
           const SizedBox(width: 8),
           Expanded(child: Text(ref.tr('ui.connection_lost'),
               style: const TextStyle(color: Colors.white, fontSize: 12))),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Portrait clock bar — compact horizontal bar above/below the board ────────
+
+class _PortraitClockBar extends StatelessWidget {
+  final String side;
+  final String name;
+  final String role;
+  final double? rating;
+  final int clockMs;
+  final int? lastTurnTs;
+  final bool isActive;
+  final bool isRunning;
+
+  const _PortraitClockBar({
+    required this.side,
+    required this.name,
+    required this.role,
+    required this.rating,
+    required this.clockMs,
+    required this.lastTurnTs,
+    required this.isActive,
+    required this.isRunning,
+  });
+
+  String _displayName() {
+    if (role == 'guest' && name.startsWith('guest_')) {
+      return 'guest_${name.substring(6, name.length > 13 ? 13 : name.length)}';
+    }
+    return name;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: isActive
+            ? DTheme.primary.withValues(alpha: 0.10)
+            : Colors.white.withValues(alpha: 0.03),
+        border: Border(
+          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.07)),
+          top: BorderSide(color: Colors.white.withValues(alpha: 0.07)),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Side indicator
+          Container(
+            width: 12, height: 12,
+            margin: const EdgeInsets.only(right: 6),
+            decoration: BoxDecoration(
+              color: side == 'white' ? Colors.white : Colors.black,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.grey.shade400, width: 1.5),
+            ),
+          ),
+          // Name + rating
+          Expanded(
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    _displayName(),
+                    style: GoogleFonts.outfit(
+                      fontSize: 13, fontWeight: FontWeight.w700,
+                      color: isActive ? DTheme.primary : Colors.white70),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ),
+                if (rating != null) ...[
+                  const SizedBox(width: 6),
+                  Text('★ ${rating!.toStringAsFixed(0)}',
+                    style: GoogleFonts.outfit(fontSize: 11, color: Colors.white.withValues(alpha: 0.45))),
+                ],
+              ],
+            ),
+          ),
+          // Active turn dot
+          if (isActive)
+            Container(
+              width: 7, height: 7,
+              margin: const EdgeInsets.only(right: 6),
+              decoration: const BoxDecoration(
+                color: DTheme.success,
+                shape: BoxShape.circle,
+              ),
+            ),
+          // Clock
+          SizedBox(
+            width: 70,
+            child: ClockWidget(
+              initialMs: clockMs,
+              isRunning: isRunning,
+              lastTurnTs: lastTurnTs ?? 0,
+              fontSize: 24,
+            ),
+          ),
         ],
       ),
     );

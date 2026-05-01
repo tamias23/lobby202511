@@ -1636,8 +1636,8 @@ function broadcastLobbyUpdate(io) {
         available_bots: getBotsForLobby(),
         tournaments: TOURNAMENTS_ENABLED ? {
             enabled: true,
-            openTournaments: tournamentManager.getOpenTournamentsCached(),
-            activeTournaments: tournamentManager.getActiveTournamentsListCached(),
+            openTournaments: tournamentManager.getOpenTournaments(),
+            activeTournaments: tournamentManager.getActiveTournamentsList(),
         } : { enabled: false, openTournaments: [], activeTournaments: [] },
     };
     io.to('lobby').emit('lobby_update', sanitizeBigInt(payload));

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/socket_service.dart';
 import '../../core/theme.dart';
 import '../../providers/game_provider.dart';
@@ -40,6 +41,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   Map<String, dynamic>? _initialStateRaw;
   String? _tournamentId;
   bool _spectator = false;
+  String? _error;  // set when game not found
 
   @override
   void initState() {
@@ -70,7 +72,8 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       if (!mounted) return;
       final d = _deepMap(data as Map);
       if (d['error'] != null) {
-        if (mounted) setState(() {}); // trigger rebuild to show error
+        // Game no longer exists — flag for redirect
+        if (mounted) setState(() => _error = d['error'].toString());
         return;
       }
       _side = d['side'] as String? ?? 'spectator';
@@ -100,6 +103,17 @@ class _GameScreenState extends ConsumerState<GameScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Game not found → redirect to lobby
+    if (_error != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) context.go('/');
+      });
+      return Scaffold(
+        backgroundColor: DTheme.bgDark,
+        body: Center(child: Text(_error!, style: const TextStyle(color: Colors.white70))),
+      );
+    }
+
     if (!_joined) {
       return Scaffold(
         backgroundColor: DTheme.bgDark,
