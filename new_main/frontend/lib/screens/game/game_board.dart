@@ -136,8 +136,8 @@ class _GameBoardState extends ConsumerState<GameBoard> {
     // so their GestureDetectors are never hit-tested.
     // In portrait mode, off-board pieces are placed above/below, so we
     // only need a tiny horizontal margin and the board can stretch wider.
-    final double padX = isPortrait ? 4 : 60;
-    final double padY = isPortrait ? 4 : 20;
+    final double padX = isPortrait ? 4 : 30;
+    final double padY = isPortrait ? 4 : 2;
     return (minX: minX - padX, minY: minY - padY,
             maxX: maxX + padX, maxY: maxY + padY);
   }
@@ -378,6 +378,10 @@ class _GameBoardState extends ConsumerState<GameBoard> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SafeArea(
+        // In landscape, skip top/bottom SafeArea so the board can use
+        // the full screen height — only keep left/right for notch.
+        top: isPortrait,
+        bottom: isPortrait,
         child: Stack(
           children: [
             // ── Main layout ────────────────────────────────────────────────
@@ -588,9 +592,7 @@ class _GameBoardState extends ConsumerState<GameBoard> {
     final boardCy = (bounds.minY + bounds.maxY) / 2;
 
     return LayoutBuilder(builder: (context, constraints) {
-      // In portrait mode, shrink padding so the board can stretch
-      // much closer to the left/right edges of the screen.
-      final double padding = isPortrait ? 2.0 : 16.0;
+      final double padding = isPortrait ? 2.0 : 4.0;
       final availW = constraints.maxWidth  - padding * 2;
       final availH = constraints.maxHeight - padding * 2;
       final scaleX = availW / (bounds.maxX - bounds.minX);
