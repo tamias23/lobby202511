@@ -30,6 +30,7 @@ abstract class AppUser with _$AppUser {
     String? token,
     @Default(false) bool isSubscriber,
     @Default(false) bool isAdmin,
+    @Default(true) bool isChatUser,
     @Default(0) int ratedGamesPlayedToday,
     @Default(0) int botGamesPlayedToday,
     @Default('UTC') String timezone,

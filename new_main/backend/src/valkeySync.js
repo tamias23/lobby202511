@@ -41,6 +41,7 @@ const ALIVE_CACHE_TTL_MS = 10000;
 let lobby = null;          // { gameRequests: [], activeGames: Map }
 let loadBoardFn = null;    // (boardName) => boardData  — loads board JSON from disk
 let _tournamentManager = null; // Reference to tournamentManager for remote list updates
+let _chatBroadcastFn = null;   // (event, data) => void — broadcasts chat events to local lobby room
 
 /**
  * Initialize the sync module.
@@ -127,6 +128,27 @@ function syncTournamentList(openTournaments, activeTournaments) {
     }
     // Notify other instances immediately via pub/sub
     _publish({ type: 'tournament:sync', payload });
+}
+
+// ── Chat cross-replica sync ─────────────────────────────────────────────────
+
+/**
+ * Set the callback used to broadcast chat events to local lobby clients.
+ * Called from index.js after `io` is created.
+ * @param {Function} fn  — (eventName, data) => void
+ */
+function setChatBroadcaster(fn) {
+    _chatBroadcastFn = fn;
+}
+
+/** Publish a new chat message so other replicas broadcast it to their lobby. */
+function syncChatMessage(msgObj) {
+    _publish({ type: 'chat:message', data: msgObj });
+}
+
+/** Publish a chat message deletion so other replicas remove it from their lobby. */
+function syncChatDeleted(messageId) {
+    _publish({ type: 'chat:deleted', messageId });
 }
 
 /**
@@ -253,6 +275,12 @@ function _onSyncMessage(raw) {
         case 'tournament:sync':
             _applyTournamentSync(msg);
             break;
+        case 'chat:message':
+            _applyChatMessage(msg);
+            break;
+        case 'chat:deleted':
+            _applyChatDeleted(msg);
+            break;
         default:
             logger.debug('Sync', `Unknown sync message type: ${msg.type}`);
     }
@@ -339,6 +367,18 @@ function _applyTournamentSync(msg) {
     if (!_tournamentManager || !msg.payload) return;
     _tournamentManager.applyRemoteTournamentList(msg.payload.open, msg.payload.active);
     logger.debug('Sync', `Received tournament:sync from ${msg.instanceId.slice(0, 8)}`);
+}
+
+function _applyChatMessage(msg) {
+    if (!_chatBroadcastFn || !msg.data) return;
+    _chatBroadcastFn('chat:new_message', msg.data);
+    logger.debug('Sync', `Received chat:message from ${msg.instanceId.slice(0, 8)}`);
+}
+
+function _applyChatDeleted(msg) {
+    if (!_chatBroadcastFn || !msg.messageId) return;
+    _chatBroadcastFn('chat:delete_message', { id: msg.messageId });
+    logger.debug('Sync', `Received chat:deleted from ${msg.instanceId.slice(0, 8)}`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -673,4 +713,7 @@ module.exports = {
     getTournamentListFromValkey,
     checkAndIncrementBotIpLimit,
     getBotIpLimitData,
+    setChatBroadcaster,
+    syncChatMessage,
+    syncChatDeleted,
 };

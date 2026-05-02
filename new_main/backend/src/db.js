@@ -120,8 +120,8 @@ async function createUser(data) {
                 rating_bullet, rating_blitz, rating_rapid, rating_classical,
                 nb_tournaments_entered, nb_tournaments_finished,
                 is_subscriber, subscription_source, subscriber_until, subscription_id,
-                is_admin, rated_games_played_today, bot_games_played_today, timezone, created_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`,
+                is_admin, rated_games_played_today, bot_games_played_today, timezone, is_chat_user, created_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)`,
             [
                 data.id, data.username, data.email, data.email_hash || null,
                 data.password_hash,
@@ -135,6 +135,7 @@ async function createUser(data) {
                 toDate(data.subscriber_until), data.subscription_id || null,
                 data.is_admin || 0, data.rated_games_played_today || 0,
                 data.bot_games_played_today || 0, data.timezone || 'UTC',
+                data.is_chat_user !== undefined ? data.is_chat_user : 1,
                 toDate(data.created_at) || new Date(),
             ]
         );
@@ -690,6 +691,66 @@ async function deleteTournamentScheduleItem(id) {
     } catch (e) { logger.error('DB', `deleteTournamentScheduleItem(${id}) failed:`, e.message); }
 }
 
+// ─── Chat Messages ──────────────────────────────────────────────────────────
+
+async function getChatMessages(limit = 1000) {
+    if (!_isUp()) return [];
+    try {
+        const r = await _pool().query(
+            'SELECT * FROM chat_messages ORDER BY created_at DESC LIMIT $1', [limit]
+        );
+        // Return in chronological order (oldest first)
+        // Convert created_at Date objects to ISO strings for safe serialization
+        return r.rows.reverse().map(row => ({
+            ...row,
+            created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+        }));
+    } catch (e) { logger.error('DB', `getChatMessages failed:`, e.message); return []; }
+}
+
+async function saveChatMessage(data) {
+    if (!_isUp()) return;
+    try {
+        await _pool().query(
+            `INSERT INTO chat_messages (id, user_id, username, message, created_at)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [data.id, data.user_id, data.username, data.message, toDate(data.created_at) || new Date()]
+        );
+    } catch (e) { logger.error('DB', `saveChatMessage failed:`, e.message); }
+}
+
+async function deleteChatMessage(id) {
+    if (!_isUp()) return;
+    try {
+        await _pool().query('DELETE FROM chat_messages WHERE id = $1', [id]);
+    } catch (e) { logger.error('DB', `deleteChatMessage(${id}) failed:`, e.message); }
+}
+
+// ─── Chat Config ────────────────────────────────────────────────────────────
+
+async function getChatConfig() {
+    if (!_isUp()) return { max_messages: 1000, max_chars: 300, rate_limit_ms: 2000 };
+    try {
+        const r = await _pool().query('SELECT key, value FROM chat_config');
+        const config = { max_messages: 1000, max_chars: 300, rate_limit_ms: 2000 };
+        for (const row of r.rows) {
+            config[row.key] = row.value;
+        }
+        return config;
+    } catch (e) { logger.error('DB', `getChatConfig failed:`, e.message); return { max_messages: 1000, max_chars: 300, rate_limit_ms: 2000 }; }
+}
+
+async function upsertChatConfig(key, value) {
+    if (!_isUp()) return;
+    try {
+        await _pool().query(
+            `INSERT INTO chat_config (key, value) VALUES ($1, $2)
+             ON CONFLICT (key) DO UPDATE SET value = $2`,
+            [key, value]
+        );
+    } catch (e) { logger.error('DB', `upsertChatConfig(${key}) failed:`, e.message); }
+}
+
 // ─── Exports ────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -707,4 +768,6 @@ module.exports = {
     saveSubscription, getSubscriptionsForUser, resetDailyLimits,
     getTopPlayers, saveLeaderboard, getLeaderboard,
     getTournamentSchedule, upsertTournamentScheduleItem, deleteTournamentScheduleItem,
+    getChatMessages, saveChatMessage, deleteChatMessage,
+    getChatConfig, upsertChatConfig,
 };

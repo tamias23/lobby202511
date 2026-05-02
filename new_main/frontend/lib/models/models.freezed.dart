@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$AppUser {
 
- String get id; String get username; String get role; double? get rating; String? get token; bool get isSubscriber; bool get isAdmin; int get ratedGamesPlayedToday; int get botGamesPlayedToday; String get timezone;@JsonKey(name: 'rating_bullet') double? get ratingBullet;@JsonKey(name: 'rating_blitz') double? get ratingBlitz;@JsonKey(name: 'rating_rapid') double? get ratingRapid;@JsonKey(name: 'rating_classical') double? get ratingClassical;
+ String get id; String get username; String get role; double? get rating; String? get token; bool get isSubscriber; bool get isAdmin; bool get isChatUser; int get ratedGamesPlayedToday; int get botGamesPlayedToday; String get timezone;@JsonKey(name: 'rating_bullet') double? get ratingBullet;@JsonKey(name: 'rating_blitz') double? get ratingBlitz;@JsonKey(name: 'rating_rapid') double? get ratingRapid;@JsonKey(name: 'rating_classical') double? get ratingClassical;
 /// Create a copy of AppUser
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +28,16 @@ $AppUserCopyWith<AppUser> get copyWith => _$AppUserCopyWithImpl<AppUser>(this as
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is AppUser&&(identical(other.id, id) || other.id == id)&&(identical(other.username, username) || other.username == username)&&(identical(other.role, role) || other.role == role)&&(identical(other.rating, rating) || other.rating == rating)&&(identical(other.token, token) || other.token == token)&&(identical(other.isSubscriber, isSubscriber) || other.isSubscriber == isSubscriber)&&(identical(other.isAdmin, isAdmin) || other.isAdmin == isAdmin)&&(identical(other.ratedGamesPlayedToday, ratedGamesPlayedToday) || other.ratedGamesPlayedToday == ratedGamesPlayedToday)&&(identical(other.botGamesPlayedToday, botGamesPlayedToday) || other.botGamesPlayedToday == botGamesPlayedToday)&&(identical(other.timezone, timezone) || other.timezone == timezone)&&(identical(other.ratingBullet, ratingBullet) || other.ratingBullet == ratingBullet)&&(identical(other.ratingBlitz, ratingBlitz) || other.ratingBlitz == ratingBlitz)&&(identical(other.ratingRapid, ratingRapid) || other.ratingRapid == ratingRapid)&&(identical(other.ratingClassical, ratingClassical) || other.ratingClassical == ratingClassical));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is AppUser&&(identical(other.id, id) || other.id == id)&&(identical(other.username, username) || other.username == username)&&(identical(other.role, role) || other.role == role)&&(identical(other.rating, rating) || other.rating == rating)&&(identical(other.token, token) || other.token == token)&&(identical(other.isSubscriber, isSubscriber) || other.isSubscriber == isSubscriber)&&(identical(other.isAdmin, isAdmin) || other.isAdmin == isAdmin)&&(identical(other.isChatUser, isChatUser) || other.isChatUser == isChatUser)&&(identical(other.ratedGamesPlayedToday, ratedGamesPlayedToday) || other.ratedGamesPlayedToday == ratedGamesPlayedToday)&&(identical(other.botGamesPlayedToday, botGamesPlayedToday) || other.botGamesPlayedToday == botGamesPlayedToday)&&(identical(other.timezone, timezone) || other.timezone == timezone)&&(identical(other.ratingBullet, ratingBullet) || other.ratingBullet == ratingBullet)&&(identical(other.ratingBlitz, ratingBlitz) || other.ratingBlitz == ratingBlitz)&&(identical(other.ratingRapid, ratingRapid) || other.ratingRapid == ratingRapid)&&(identical(other.ratingClassical, ratingClassical) || other.ratingClassical == ratingClassical));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,username,role,rating,token,isSubscriber,isAdmin,ratedGamesPlayedToday,botGamesPlayedToday,timezone,ratingBullet,ratingBlitz,ratingRapid,ratingClassical);
+int get hashCode => Object.hash(runtimeType,id,username,role,rating,token,isSubscriber,isAdmin,isChatUser,ratedGamesPlayedToday,botGamesPlayedToday,timezone,ratingBullet,ratingBlitz,ratingRapid,ratingClassical);
 
 @override
 String toString() {
-  return 'AppUser(id: $id, username: $username, role: $role, rating: $rating, token: $token, isSubscriber: $isSubscriber, isAdmin: $isAdmin, ratedGamesPlayedToday: $ratedGamesPlayedToday, botGamesPlayedToday: $botGamesPlayedToday, timezone: $timezone, ratingBullet: $ratingBullet, ratingBlitz: $ratingBlitz, ratingRapid: $ratingRapid, ratingClassical: $ratingClassical)';
+  return 'AppUser(id: $id, username: $username, role: $role, rating: $rating, token: $token, isSubscriber: $isSubscriber, isAdmin: $isAdmin, isChatUser: $isChatUser, ratedGamesPlayedToday: $ratedGamesPlayedToday, botGamesPlayedToday: $botGamesPlayedToday, timezone: $timezone, ratingBullet: $ratingBullet, ratingBlitz: $ratingBlitz, ratingRapid: $ratingRapid, ratingClassical: $ratingClassical)';
 }
 
 
@@ -48,7 +48,7 @@ abstract mixin class $AppUserCopyWith<$Res>  {
   factory $AppUserCopyWith(AppUser value, $Res Function(AppUser) _then) = _$AppUserCopyWithImpl;
 @useResult
 $Res call({
- String id, String username, String role, double? rating, String? token, bool isSubscriber, bool isAdmin, int ratedGamesPlayedToday, int botGamesPlayedToday, String timezone,@JsonKey(name: 'rating_bullet') double? ratingBullet,@JsonKey(name: 'rating_blitz') double? ratingBlitz,@JsonKey(name: 'rating_rapid') double? ratingRapid,@JsonKey(name: 'rating_classical') double? ratingClassical
+ String id, String username, String role, double? rating, String? token, bool isSubscriber, bool isAdmin, bool isChatUser, int ratedGamesPlayedToday, int botGamesPlayedToday, String timezone,@JsonKey(name: 'rating_bullet') double? ratingBullet,@JsonKey(name: 'rating_blitz') double? ratingBlitz,@JsonKey(name: 'rating_rapid') double? ratingRapid,@JsonKey(name: 'rating_classical') double? ratingClassical
 });
 
 
@@ -65,7 +65,7 @@ class _$AppUserCopyWithImpl<$Res>
 
 /// Create a copy of AppUser
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? username = null,Object? role = null,Object? rating = freezed,Object? token = freezed,Object? isSubscriber = null,Object? isAdmin = null,Object? ratedGamesPlayedToday = null,Object? botGamesPlayedToday = null,Object? timezone = null,Object? ratingBullet = freezed,Object? ratingBlitz = freezed,Object? ratingRapid = freezed,Object? ratingClassical = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? username = null,Object? role = null,Object? rating = freezed,Object? token = freezed,Object? isSubscriber = null,Object? isAdmin = null,Object? isChatUser = null,Object? ratedGamesPlayedToday = null,Object? botGamesPlayedToday = null,Object? timezone = null,Object? ratingBullet = freezed,Object? ratingBlitz = freezed,Object? ratingRapid = freezed,Object? ratingClassical = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,username: null == username ? _self.username : username // ignore: cast_nullable_to_non_nullable
@@ -74,6 +74,7 @@ as String,rating: freezed == rating ? _self.rating : rating // ignore: cast_null
 as double?,token: freezed == token ? _self.token : token // ignore: cast_nullable_to_non_nullable
 as String?,isSubscriber: null == isSubscriber ? _self.isSubscriber : isSubscriber // ignore: cast_nullable_to_non_nullable
 as bool,isAdmin: null == isAdmin ? _self.isAdmin : isAdmin // ignore: cast_nullable_to_non_nullable
+as bool,isChatUser: null == isChatUser ? _self.isChatUser : isChatUser // ignore: cast_nullable_to_non_nullable
 as bool,ratedGamesPlayedToday: null == ratedGamesPlayedToday ? _self.ratedGamesPlayedToday : ratedGamesPlayedToday // ignore: cast_nullable_to_non_nullable
 as int,botGamesPlayedToday: null == botGamesPlayedToday ? _self.botGamesPlayedToday : botGamesPlayedToday // ignore: cast_nullable_to_non_nullable
 as int,timezone: null == timezone ? _self.timezone : timezone // ignore: cast_nullable_to_non_nullable
@@ -166,10 +167,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String username,  String role,  double? rating,  String? token,  bool isSubscriber,  bool isAdmin,  int ratedGamesPlayedToday,  int botGamesPlayedToday,  String timezone, @JsonKey(name: 'rating_bullet')  double? ratingBullet, @JsonKey(name: 'rating_blitz')  double? ratingBlitz, @JsonKey(name: 'rating_rapid')  double? ratingRapid, @JsonKey(name: 'rating_classical')  double? ratingClassical)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String username,  String role,  double? rating,  String? token,  bool isSubscriber,  bool isAdmin,  bool isChatUser,  int ratedGamesPlayedToday,  int botGamesPlayedToday,  String timezone, @JsonKey(name: 'rating_bullet')  double? ratingBullet, @JsonKey(name: 'rating_blitz')  double? ratingBlitz, @JsonKey(name: 'rating_rapid')  double? ratingRapid, @JsonKey(name: 'rating_classical')  double? ratingClassical)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _AppUser() when $default != null:
-return $default(_that.id,_that.username,_that.role,_that.rating,_that.token,_that.isSubscriber,_that.isAdmin,_that.ratedGamesPlayedToday,_that.botGamesPlayedToday,_that.timezone,_that.ratingBullet,_that.ratingBlitz,_that.ratingRapid,_that.ratingClassical);case _:
+return $default(_that.id,_that.username,_that.role,_that.rating,_that.token,_that.isSubscriber,_that.isAdmin,_that.isChatUser,_that.ratedGamesPlayedToday,_that.botGamesPlayedToday,_that.timezone,_that.ratingBullet,_that.ratingBlitz,_that.ratingRapid,_that.ratingClassical);case _:
   return orElse();
 
 }
@@ -187,10 +188,10 @@ return $default(_that.id,_that.username,_that.role,_that.rating,_that.token,_tha
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String username,  String role,  double? rating,  String? token,  bool isSubscriber,  bool isAdmin,  int ratedGamesPlayedToday,  int botGamesPlayedToday,  String timezone, @JsonKey(name: 'rating_bullet')  double? ratingBullet, @JsonKey(name: 'rating_blitz')  double? ratingBlitz, @JsonKey(name: 'rating_rapid')  double? ratingRapid, @JsonKey(name: 'rating_classical')  double? ratingClassical)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String username,  String role,  double? rating,  String? token,  bool isSubscriber,  bool isAdmin,  bool isChatUser,  int ratedGamesPlayedToday,  int botGamesPlayedToday,  String timezone, @JsonKey(name: 'rating_bullet')  double? ratingBullet, @JsonKey(name: 'rating_blitz')  double? ratingBlitz, @JsonKey(name: 'rating_rapid')  double? ratingRapid, @JsonKey(name: 'rating_classical')  double? ratingClassical)  $default,) {final _that = this;
 switch (_that) {
 case _AppUser():
-return $default(_that.id,_that.username,_that.role,_that.rating,_that.token,_that.isSubscriber,_that.isAdmin,_that.ratedGamesPlayedToday,_that.botGamesPlayedToday,_that.timezone,_that.ratingBullet,_that.ratingBlitz,_that.ratingRapid,_that.ratingClassical);case _:
+return $default(_that.id,_that.username,_that.role,_that.rating,_that.token,_that.isSubscriber,_that.isAdmin,_that.isChatUser,_that.ratedGamesPlayedToday,_that.botGamesPlayedToday,_that.timezone,_that.ratingBullet,_that.ratingBlitz,_that.ratingRapid,_that.ratingClassical);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -207,10 +208,10 @@ return $default(_that.id,_that.username,_that.role,_that.rating,_that.token,_tha
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String username,  String role,  double? rating,  String? token,  bool isSubscriber,  bool isAdmin,  int ratedGamesPlayedToday,  int botGamesPlayedToday,  String timezone, @JsonKey(name: 'rating_bullet')  double? ratingBullet, @JsonKey(name: 'rating_blitz')  double? ratingBlitz, @JsonKey(name: 'rating_rapid')  double? ratingRapid, @JsonKey(name: 'rating_classical')  double? ratingClassical)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String username,  String role,  double? rating,  String? token,  bool isSubscriber,  bool isAdmin,  bool isChatUser,  int ratedGamesPlayedToday,  int botGamesPlayedToday,  String timezone, @JsonKey(name: 'rating_bullet')  double? ratingBullet, @JsonKey(name: 'rating_blitz')  double? ratingBlitz, @JsonKey(name: 'rating_rapid')  double? ratingRapid, @JsonKey(name: 'rating_classical')  double? ratingClassical)?  $default,) {final _that = this;
 switch (_that) {
 case _AppUser() when $default != null:
-return $default(_that.id,_that.username,_that.role,_that.rating,_that.token,_that.isSubscriber,_that.isAdmin,_that.ratedGamesPlayedToday,_that.botGamesPlayedToday,_that.timezone,_that.ratingBullet,_that.ratingBlitz,_that.ratingRapid,_that.ratingClassical);case _:
+return $default(_that.id,_that.username,_that.role,_that.rating,_that.token,_that.isSubscriber,_that.isAdmin,_that.isChatUser,_that.ratedGamesPlayedToday,_that.botGamesPlayedToday,_that.timezone,_that.ratingBullet,_that.ratingBlitz,_that.ratingRapid,_that.ratingClassical);case _:
   return null;
 
 }
@@ -222,7 +223,7 @@ return $default(_that.id,_that.username,_that.role,_that.rating,_that.token,_tha
 @JsonSerializable()
 
 class _AppUser implements AppUser {
-  const _AppUser({required this.id, required this.username, this.role = 'guest', this.rating, this.token, this.isSubscriber = false, this.isAdmin = false, this.ratedGamesPlayedToday = 0, this.botGamesPlayedToday = 0, this.timezone = 'UTC', @JsonKey(name: 'rating_bullet') this.ratingBullet, @JsonKey(name: 'rating_blitz') this.ratingBlitz, @JsonKey(name: 'rating_rapid') this.ratingRapid, @JsonKey(name: 'rating_classical') this.ratingClassical});
+  const _AppUser({required this.id, required this.username, this.role = 'guest', this.rating, this.token, this.isSubscriber = false, this.isAdmin = false, this.isChatUser = true, this.ratedGamesPlayedToday = 0, this.botGamesPlayedToday = 0, this.timezone = 'UTC', @JsonKey(name: 'rating_bullet') this.ratingBullet, @JsonKey(name: 'rating_blitz') this.ratingBlitz, @JsonKey(name: 'rating_rapid') this.ratingRapid, @JsonKey(name: 'rating_classical') this.ratingClassical});
   factory _AppUser.fromJson(Map<String, dynamic> json) => _$AppUserFromJson(json);
 
 @override final  String id;
@@ -232,6 +233,7 @@ class _AppUser implements AppUser {
 @override final  String? token;
 @override@JsonKey() final  bool isSubscriber;
 @override@JsonKey() final  bool isAdmin;
+@override@JsonKey() final  bool isChatUser;
 @override@JsonKey() final  int ratedGamesPlayedToday;
 @override@JsonKey() final  int botGamesPlayedToday;
 @override@JsonKey() final  String timezone;
@@ -253,16 +255,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _AppUser&&(identical(other.id, id) || other.id == id)&&(identical(other.username, username) || other.username == username)&&(identical(other.role, role) || other.role == role)&&(identical(other.rating, rating) || other.rating == rating)&&(identical(other.token, token) || other.token == token)&&(identical(other.isSubscriber, isSubscriber) || other.isSubscriber == isSubscriber)&&(identical(other.isAdmin, isAdmin) || other.isAdmin == isAdmin)&&(identical(other.ratedGamesPlayedToday, ratedGamesPlayedToday) || other.ratedGamesPlayedToday == ratedGamesPlayedToday)&&(identical(other.botGamesPlayedToday, botGamesPlayedToday) || other.botGamesPlayedToday == botGamesPlayedToday)&&(identical(other.timezone, timezone) || other.timezone == timezone)&&(identical(other.ratingBullet, ratingBullet) || other.ratingBullet == ratingBullet)&&(identical(other.ratingBlitz, ratingBlitz) || other.ratingBlitz == ratingBlitz)&&(identical(other.ratingRapid, ratingRapid) || other.ratingRapid == ratingRapid)&&(identical(other.ratingClassical, ratingClassical) || other.ratingClassical == ratingClassical));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _AppUser&&(identical(other.id, id) || other.id == id)&&(identical(other.username, username) || other.username == username)&&(identical(other.role, role) || other.role == role)&&(identical(other.rating, rating) || other.rating == rating)&&(identical(other.token, token) || other.token == token)&&(identical(other.isSubscriber, isSubscriber) || other.isSubscriber == isSubscriber)&&(identical(other.isAdmin, isAdmin) || other.isAdmin == isAdmin)&&(identical(other.isChatUser, isChatUser) || other.isChatUser == isChatUser)&&(identical(other.ratedGamesPlayedToday, ratedGamesPlayedToday) || other.ratedGamesPlayedToday == ratedGamesPlayedToday)&&(identical(other.botGamesPlayedToday, botGamesPlayedToday) || other.botGamesPlayedToday == botGamesPlayedToday)&&(identical(other.timezone, timezone) || other.timezone == timezone)&&(identical(other.ratingBullet, ratingBullet) || other.ratingBullet == ratingBullet)&&(identical(other.ratingBlitz, ratingBlitz) || other.ratingBlitz == ratingBlitz)&&(identical(other.ratingRapid, ratingRapid) || other.ratingRapid == ratingRapid)&&(identical(other.ratingClassical, ratingClassical) || other.ratingClassical == ratingClassical));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,username,role,rating,token,isSubscriber,isAdmin,ratedGamesPlayedToday,botGamesPlayedToday,timezone,ratingBullet,ratingBlitz,ratingRapid,ratingClassical);
+int get hashCode => Object.hash(runtimeType,id,username,role,rating,token,isSubscriber,isAdmin,isChatUser,ratedGamesPlayedToday,botGamesPlayedToday,timezone,ratingBullet,ratingBlitz,ratingRapid,ratingClassical);
 
 @override
 String toString() {
-  return 'AppUser(id: $id, username: $username, role: $role, rating: $rating, token: $token, isSubscriber: $isSubscriber, isAdmin: $isAdmin, ratedGamesPlayedToday: $ratedGamesPlayedToday, botGamesPlayedToday: $botGamesPlayedToday, timezone: $timezone, ratingBullet: $ratingBullet, ratingBlitz: $ratingBlitz, ratingRapid: $ratingRapid, ratingClassical: $ratingClassical)';
+  return 'AppUser(id: $id, username: $username, role: $role, rating: $rating, token: $token, isSubscriber: $isSubscriber, isAdmin: $isAdmin, isChatUser: $isChatUser, ratedGamesPlayedToday: $ratedGamesPlayedToday, botGamesPlayedToday: $botGamesPlayedToday, timezone: $timezone, ratingBullet: $ratingBullet, ratingBlitz: $ratingBlitz, ratingRapid: $ratingRapid, ratingClassical: $ratingClassical)';
 }
 
 
@@ -273,7 +275,7 @@ abstract mixin class _$AppUserCopyWith<$Res> implements $AppUserCopyWith<$Res> {
   factory _$AppUserCopyWith(_AppUser value, $Res Function(_AppUser) _then) = __$AppUserCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String username, String role, double? rating, String? token, bool isSubscriber, bool isAdmin, int ratedGamesPlayedToday, int botGamesPlayedToday, String timezone,@JsonKey(name: 'rating_bullet') double? ratingBullet,@JsonKey(name: 'rating_blitz') double? ratingBlitz,@JsonKey(name: 'rating_rapid') double? ratingRapid,@JsonKey(name: 'rating_classical') double? ratingClassical
+ String id, String username, String role, double? rating, String? token, bool isSubscriber, bool isAdmin, bool isChatUser, int ratedGamesPlayedToday, int botGamesPlayedToday, String timezone,@JsonKey(name: 'rating_bullet') double? ratingBullet,@JsonKey(name: 'rating_blitz') double? ratingBlitz,@JsonKey(name: 'rating_rapid') double? ratingRapid,@JsonKey(name: 'rating_classical') double? ratingClassical
 });
 
 
@@ -290,7 +292,7 @@ class __$AppUserCopyWithImpl<$Res>
 
 /// Create a copy of AppUser
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? username = null,Object? role = null,Object? rating = freezed,Object? token = freezed,Object? isSubscriber = null,Object? isAdmin = null,Object? ratedGamesPlayedToday = null,Object? botGamesPlayedToday = null,Object? timezone = null,Object? ratingBullet = freezed,Object? ratingBlitz = freezed,Object? ratingRapid = freezed,Object? ratingClassical = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? username = null,Object? role = null,Object? rating = freezed,Object? token = freezed,Object? isSubscriber = null,Object? isAdmin = null,Object? isChatUser = null,Object? ratedGamesPlayedToday = null,Object? botGamesPlayedToday = null,Object? timezone = null,Object? ratingBullet = freezed,Object? ratingBlitz = freezed,Object? ratingRapid = freezed,Object? ratingClassical = freezed,}) {
   return _then(_AppUser(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,username: null == username ? _self.username : username // ignore: cast_nullable_to_non_nullable
@@ -299,6 +301,7 @@ as String,rating: freezed == rating ? _self.rating : rating // ignore: cast_null
 as double?,token: freezed == token ? _self.token : token // ignore: cast_nullable_to_non_nullable
 as String?,isSubscriber: null == isSubscriber ? _self.isSubscriber : isSubscriber // ignore: cast_nullable_to_non_nullable
 as bool,isAdmin: null == isAdmin ? _self.isAdmin : isAdmin // ignore: cast_nullable_to_non_nullable
+as bool,isChatUser: null == isChatUser ? _self.isChatUser : isChatUser // ignore: cast_nullable_to_non_nullable
 as bool,ratedGamesPlayedToday: null == ratedGamesPlayedToday ? _self.ratedGamesPlayedToday : ratedGamesPlayedToday // ignore: cast_nullable_to_non_nullable
 as int,botGamesPlayedToday: null == botGamesPlayedToday ? _self.botGamesPlayedToday : botGamesPlayedToday // ignore: cast_nullable_to_non_nullable
 as int,timezone: null == timezone ? _self.timezone : timezone // ignore: cast_nullable_to_non_nullable

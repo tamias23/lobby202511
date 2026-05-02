@@ -182,13 +182,14 @@ class _AdminJobsScreenState extends ConsumerState<AdminJobsScreen>
   List<Map<String,dynamic>> _cronJobs  = [];
   List<Map<String,dynamic>> _runLog    = [];
   List<Map<String,dynamic>> _schedule  = [];
+  Map<String,dynamic> _chatConfig = {};
   bool _loading = true;
   late TabController _tabs;
 
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 3, vsync: this);
+    _tabs = TabController(length: 4, vsync: this);
     _fetch();
   }
 
@@ -216,7 +217,15 @@ class _AdminJobsScreenState extends ConsumerState<AdminJobsScreen>
         if (res2['success'] == true) {
           _schedule = List<Map<String,dynamic>>.from(res2['schedule'] ?? []);
         }
-        setState(() => _loading = false);
+        // Also fetch chat config
+        _socket.emitWithAck('admin:get_chat_config', {}, ack: (r3) {
+          if (!mounted) return;
+          final res3 = Map<String, dynamic>.from(r3 as Map);
+          if (res3['success'] == true) {
+            _chatConfig = Map<String, dynamic>.from(res3['config'] ?? {});
+          }
+          setState(() => _loading = false);
+        });
       });
     });
   }
@@ -310,6 +319,7 @@ class _AdminJobsScreenState extends ConsumerState<AdminJobsScreen>
             Tab(text: 'Cron Schedule'),
             Tab(text: 'Run Log'),
             Tab(text: 'Daily Schedule'),
+            Tab(text: 'Chat'),
           ],
         ),
       ),
@@ -321,6 +331,7 @@ class _AdminJobsScreenState extends ConsumerState<AdminJobsScreen>
                 _buildCronTable(),
                 _buildRunLog(),
                 _buildScheduleTab(),
+                _buildChatConfigTab(),
               ],
             ),
     );
@@ -628,6 +639,94 @@ class _AdminJobsScreenState extends ConsumerState<AdminJobsScreen>
       ),
     );
   }
+
+  // ── Chat Config Tab ─────────────────────────────────────────────────────────
+
+  Widget _buildChatConfigTab() {
+    final maxMsgCtrl = TextEditingController(text: '${_chatConfig['max_messages'] ?? 1000}');
+    final maxCharsCtrl = TextEditingController(text: '${_chatConfig['max_chars'] ?? 300}');
+    final rateLimitCtrl = TextEditingController(text: '${_chatConfig['rate_limit_ms'] ?? 2000}');
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: GlassPanel(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Chat Configuration',
+                style: GoogleFonts.outfit(
+                    color: DTheme.textMainDark,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16)),
+            const SizedBox(height: 6),
+            Text('These settings apply to the lobby chat system.',
+                style: GoogleFonts.outfit(color: Colors.white38, fontSize: 12)),
+            const SizedBox(height: 24),
+            Row(children: [
+              Expanded(child: _chatField('Max Messages (history)', maxMsgCtrl)),
+              const SizedBox(width: 16),
+              Expanded(child: _chatField('Max Chars (per post)', maxCharsCtrl)),
+              const SizedBox(width: 16),
+              Expanded(child: _chatField('Rate Limit (ms)', rateLimitCtrl)),
+            ]),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: DTheme.primary,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+              icon: const Icon(Icons.save, size: 16, color: Colors.white),
+              label: const Text('Save Chat Config', style: TextStyle(color: Colors.white)),
+              onPressed: () {
+                final data = <String, dynamic>{};
+                final mm = int.tryParse(maxMsgCtrl.text.trim());
+                final mc = int.tryParse(maxCharsCtrl.text.trim());
+                final rl = int.tryParse(rateLimitCtrl.text.trim());
+                if (mm != null && mm > 0) data['max_messages'] = mm;
+                if (mc != null && mc > 0) data['max_chars'] = mc;
+                if (rl != null && rl > 0) data['rate_limit_ms'] = rl;
+                if (data.isEmpty) return;
+                _socket.emitWithAck('admin:update_chat_config', data, ack: (res) {
+                  if (!mounted) return;
+                  final r = Map<String, dynamic>.from(res as Map);
+                  if (r['success'] == true) {
+                    setState(() {
+                      _chatConfig = Map<String, dynamic>.from(r['config'] ?? _chatConfig);
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Chat config saved.', style: TextStyle(color: Colors.white)),
+                      backgroundColor: DTheme.success,
+                    ));
+                  } else {
+                    _showError(r['error'] ?? 'Failed to save.');
+                  }
+                });
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _chatField(String label, TextEditingController ctrl) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(label, style: GoogleFonts.outfit(color: Colors.white54, fontSize: 12)),
+      const SizedBox(height: 4),
+      TextField(
+        controller: ctrl,
+        style: const TextStyle(color: Colors.white, fontFamily: 'monospace'),
+        keyboardType: TextInputType.number,
+        decoration: const InputDecoration(
+          filled: true, fillColor: Colors.black26,
+          border: OutlineInputBorder(),
+          isDense: true, contentPadding: EdgeInsets.all(10),
+        ),
+      ),
+    ],
+  );
 }
 
 // ── Edit Cron Dialog ──────────────────────────────────────────────────────────

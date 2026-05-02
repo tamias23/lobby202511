@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/api_service.dart';
+import '../../core/socket_service.dart';
 import '../../core/theme.dart';
 import '../../widgets/glass_panel.dart';
 import '../profile/game_history_screen.dart';
@@ -244,6 +245,13 @@ class AdminUserProfileView extends StatefulWidget {
 
 class _AdminUserProfileViewState extends State<AdminUserProfileView> {
   bool _showGames = false;
+  late bool _isChatUser;
+
+  @override
+  void initState() {
+    super.initState();
+    _isChatUser = widget.user['is_chat_user'] != false && widget.user['is_chat_user'] != 0;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -395,6 +403,52 @@ class _AdminUserProfileViewState extends State<AdminUserProfileView> {
                 ],
 
                 const SizedBox(height: 28),
+
+                // Chat access toggle
+                if (role != 'bot') ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _isChatUser ? Icons.chat_bubble : Icons.chat_bubble_outline,
+                          color: _isChatUser ? DTheme.success : Colors.redAccent,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text('Chat Access',
+                            style: GoogleFonts.outfit(
+                                color: DTheme.textMainDark,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13)),
+                        const Spacer(),
+                        Switch(
+                          value: _isChatUser,
+                          activeColor: DTheme.success,
+                          onChanged: (v) {
+                            SocketService.instance.emitWithAck(
+                              'admin:toggle_chat_user',
+                              {'userId': u['id'], 'enabled': v},
+                              ack: (res) {
+                                if (!mounted) return;
+                                if ((res as Map)['success'] == true) {
+                                  setState(() => _isChatUser = v);
+                                }
+                              },
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
 
                 // View games button
                 SizedBox(

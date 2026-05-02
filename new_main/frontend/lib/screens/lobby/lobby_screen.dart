@@ -16,6 +16,8 @@ import '../../widgets/privacy_dialog.dart';
 import '../../widgets/terms_dialog.dart';
 import '../../widgets/settings_dialog.dart';
 import '../../providers/translations_provider.dart';
+import '../../providers/chat_provider.dart';
+import 'widgets/lobby_chat.dart';
 
 // ── Gradient constants (matching legacy) ─────────────────────────────────────
 const _kBlue   = Color(0xFF46B0D4);
@@ -63,6 +65,8 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   bool _customRated = false;   // only enabled for rated_game_creator users
   int  _botMin    = 15;
   int  _botInc    = 10;
+  bool _showChat  = false;
+  double _chatWidth = 320;
 
   final _socket = SocketService.instance;
 
@@ -196,6 +200,9 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   Widget build(BuildContext context) {
     final lobby = ref.watch(lobbyProvider);
     final auth  = ref.watch(authProvider).value;
+    // Eagerly initialize chat provider so it catches lobby_state events
+    // even before the user toggles the chat panel open.
+    ref.watch(chatProvider);
     final w     = MediaQuery.of(context).size.width;
     final wide  = w > 900;
 
@@ -217,49 +224,48 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
       backgroundColor: Colors.transparent,
       body: SafeArea(
           child: Stack(children: [
-            // ── Scrollable content ──────────────────────────────────────────
-            CustomScrollView(slivers: [
-              // ── Title — first content, sits at the very top ──────────────
-              SliverToBoxAdapter(child: _buildTitle(context, lobby)),
-              // ── Main area: stats | TC grid | (right space) ───────────────
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                sliver: SliverToBoxAdapter(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            // ── Main content (potentially with chat sidebar) ────────────────
+            wide && _showChat
+                ? Row(
                     children: [
+                      // Left: all existing content
+                      Expanded(child: _buildMainScrollView(context, lobby, auth, wide)),
+                      // Drag handle
+                      GestureDetector(
+                        onHorizontalDragUpdate: (details) {
+                          setState(() {
+                            _chatWidth = (_chatWidth - details.delta.dx).clamp(220.0, w * 0.45);
+                          });
+                        },
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.resizeColumn,
+                          child: Container(
+                            width: 5,
+                            color: Colors.white.withValues(alpha: 0.06),
+                            child: Center(
+                              child: Container(
+                                width: 3,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Right: chat sidebar
                       SizedBox(
-                        width: wide ? 140 : 80,
-                        child: _buildStatsPanel(lobby.stats, compact: !wide),
+                        width: _chatWidth,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(0, 70, 8, 40),
+                          child: const LobbyChat(fillHeight: true),
+                        ),
                       ),
-                      SizedBox(width: wide ? 20 : 10),
-                      Expanded(child: _buildTCSection(context, lobby, auth)),
-                      if (wide) const SizedBox(width: 140),
                     ],
-                  ),
-                ),
-              ),
-              // ── Bot / Custom panel ────────────────────────────────────────
-              if (_showBotPanel || _showCustomForm)
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                  sliver: SliverToBoxAdapter(
-                    child: Center(
-                      child: SizedBox(
-                        width: MediaQuery.of(context).size.width * 0.5,
-                        child: _showBotPanel ? _buildBotPanel(lobby, auth) : _buildCustomForm(),
-                      ),
-                    ),
-                  ),
-                ),
-              // ── Bottom panels (4 cols or 2×2 or stacked) ─────────────────
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
-                sliver: SliverToBoxAdapter(
-                  child: _buildBottomPanels(context, lobby, auth, wide),
-                ),
-              ),
-            ]),
+                  )
+                : _buildMainScrollView(context, lobby, auth, wide),
             // ── Auth / nav bar floated at top (like legacy position:absolute) ─
             Positioned(
               top: 0, left: 0, right: 0,
@@ -267,12 +273,67 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
             ),
             // ── Legal footer — bottom right ───────────────────────────────────
             Positioned(
-              bottom: 12, right: 16,
+              bottom: 12, right: _showChat && wide ? _chatWidth + 20 : 16,
               child: _LegalFooter(),
             ),
           ]),
         ),
     );
+  }
+
+  Widget _buildMainScrollView(BuildContext context, LobbyState lobby, AppUser? auth, bool wide) {
+    return CustomScrollView(slivers: [
+      // ── Title — first content, sits at the very top ──────────────
+      SliverToBoxAdapter(child: _buildTitle(context, lobby)),
+      // ── Main area: stats | TC grid | (right space) ───────────────
+      SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        sliver: SliverToBoxAdapter(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: wide ? 140 : 80,
+                child: _buildStatsPanel(lobby.stats, compact: !wide),
+              ),
+              SizedBox(width: wide ? 20 : 10),
+              Expanded(child: _buildTCSection(context, lobby, auth)),
+              if (wide) const SizedBox(width: 140),
+            ],
+          ),
+        ),
+      ),
+      // ── Bot / Custom panel ────────────────────────────────────────
+      if (_showBotPanel || _showCustomForm)
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+          sliver: SliverToBoxAdapter(
+            child: Center(
+              child: SizedBox(
+                width: MediaQuery.of(context).size.width * 0.5,
+                child: _showBotPanel ? _buildBotPanel(lobby, auth) : _buildCustomForm(),
+              ),
+            ),
+          ),
+        ),
+      // ── Bottom panels (4 cols or 2×2 or stacked) ─────────────────
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+        sliver: SliverToBoxAdapter(
+          child: _buildBottomPanels(context, lobby, auth, wide),
+        ),
+      ),
+      // ── Chat (portrait / narrow mode) ─────────────────────────────
+      if (!wide && _showChat)
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+          sliver: SliverToBoxAdapter(
+            child: const LobbyChat(fillHeight: false, maxHeight: 350),
+          ),
+        )
+      else
+        const SliverPadding(padding: EdgeInsets.only(bottom: 32)),
+    ]);
   }
 
   // ── Sub-builders ──────────────────────────────────────────────────────────
@@ -313,7 +374,18 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
           ),
           // Background toggle — icon only, right-aligned below auth row
           const SizedBox(height: 4),
-          _BgToggle(bg: bg, onTap: () => ref.read(bgProvider.notifier).cycle()),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              // Chat toggle
+              _ChatToggle(
+                active: _showChat,
+                onTap: () => setState(() => _showChat = !_showChat),
+              ),
+              const SizedBox(width: 6),
+              _BgToggle(bg: bg, onTap: () => ref.read(bgProvider.notifier).cycle()),
+            ],
+          ),
         ],
       ),
     );
@@ -1546,6 +1618,53 @@ class _UserBadge extends StatelessWidget {
               style: const TextStyle(fontSize: 11, color: _kOrange)),
           ],
         ]),
+      ),
+    );
+  }
+}
+
+// ── Chat toggle button ───────────────────────────────────────────────────────
+
+class _ChatToggle extends StatefulWidget {
+  final bool active;
+  final VoidCallback onTap;
+  const _ChatToggle({required this.active, required this.onTap});
+  @override
+  State<_ChatToggle> createState() => _ChatToggleState();
+}
+
+class _ChatToggleState extends State<_ChatToggle> {
+  bool _hovered = false;
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit:  (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: widget.active
+                ? const Color(0xFF46B0D4).withValues(alpha: 0.20)
+                : _hovered
+                    ? Colors.white.withValues(alpha: 0.15)
+                    : Colors.white.withValues(alpha: 0.07),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: widget.active
+                  ? const Color(0xFF46B0D4).withValues(alpha: 0.5)
+                  : Colors.white.withValues(alpha: _hovered ? 0.25 : 0.10),
+            ),
+          ),
+          child: Icon(
+            widget.active ? Icons.chat_bubble : Icons.chat_bubble_outline,
+            size: 15,
+            color: widget.active ? const Color(0xFF46B0D4) : DTheme.textMutedDark,
+          ),
+        ),
       ),
     );
   }

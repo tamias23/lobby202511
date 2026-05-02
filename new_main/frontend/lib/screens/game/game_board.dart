@@ -396,24 +396,15 @@ class _GameBoardState extends ConsumerState<GameBoard> {
                     child: _buildPlayerPanel(gs),
                   ),
                   Expanded(
-                    child: Column(
+                    child: Row(
                       children: [
                         Expanded(
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: _buildBoardStack(context, gs, polygons, gameState, isPortrait: false),
-                              ),
-                              if (isDesktop)
-                                SizedBox(
-                                  width: rightPanelWidth,
-                                  child: _buildActionPanel(context, gs, gameState, isDesktop: true),
-                                ),
-                            ],
-                          ),
+                          child: _buildBoardStack(context, gs, polygons, gameState, isPortrait: false),
                         ),
-                        if (!isDesktop)
-                          _buildActionPanel(context, gs, gameState, isDesktop: false),
+                        SizedBox(
+                          width: rightPanelWidth,
+                          child: _buildActionPanel(context, gs, gameState, isDesktop: true),
+                        ),
                       ],
                     ),
                   ),

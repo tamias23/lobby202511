@@ -787,6 +787,9 @@ initDb()
     .then(async () => {
     logger.info('Server', 'Database layer initialized.');
 
+    // Load chat configuration from DB
+    await loadChatConfig();
+
     // Start bot polling NOW that the DB is ready
     fetchAvailableBots();
     setInterval(fetchAvailableBots, BOT_POLL_INTERVAL_MS);
@@ -1258,6 +1261,7 @@ app.post('/login', async (req, res) => {
             ratingVolatility: user.rating_volatility || 0.06,
             isSubscriber: user.is_subscriber === 1,
             isAdmin: user.is_admin === 1,
+            isChatUser: user.is_chat_user !== 0,
             ratedGamesPlayedToday: user.rated_games_played_today || 0,
             botGamesPlayedToday: user.bot_games_played_today || 0,
             timezone: user.timezone || 'UTC',
@@ -1293,6 +1297,7 @@ app.get('/api/me', async (req, res) => {
             timezone: user.timezone || 'UTC',
             isSubscriber: user.is_subscriber === 1,
             isAdmin: user.is_admin === 1,
+            isChatUser: user.is_chat_user !== 0,
             ratedGamesPlayedToday: user.rated_games_played_today || 0,
             botGamesPlayedToday: user.bot_games_played_today || 0,
         });
@@ -1446,6 +1451,7 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
             rating_classical: Math.round(u.rating_classical || 1500),
             is_subscriber:    u.is_subscriber === 1,
             is_admin:         u.is_admin === 1,
+            is_chat_user:     u.is_chat_user !== 0,
             created_at_utc:   u.created_at_utc || null,
             rated_games_played_today: u.rated_games_played_today || 0,
             bot_games_played_today:   u.bot_games_played_today   || 0,
@@ -1568,8 +1574,28 @@ const lobby = {
     connectedUsers: new Set(), // set of socket IDs
 };
 
+// --- CHAT STATE ---
+let chatConfig = { max_messages: 1000, max_chars: 300, rate_limit_ms: 2000 };
+const lastChatPost = new Map(); // userId → timestamp
+
+// Load chat config from DB at startup (called after initDb)
+async function loadChatConfig() {
+    try {
+        const db = require('./db');
+        chatConfig = await db.getChatConfig();
+        logger.info('Chat', `Config loaded: max_messages=${chatConfig.max_messages}, max_chars=${chatConfig.max_chars}, rate_limit_ms=${chatConfig.rate_limit_ms}`);
+    } catch (e) {
+        logger.warn('Chat', 'Failed to load chat config, using defaults:', e.message);
+    }
+}
+
 // Initialize Valkey state sync (needs lobby reference)
 valkeySync.init(lobby, loadBoardByName, tournamentManager);
+
+// Register chat broadcaster so remote chat messages are forwarded to local lobby clients
+valkeySync.setChatBroadcaster((event, data) => {
+    io.to('lobby').emit(event, sanitizeBigInt(data));
+});
 
 function buildLobbyStats() {
     // Count unique users, not socket connections
@@ -2089,8 +2115,16 @@ io.on('connection', (socket) => {
     });
 
     // --- ENTER LOBBY: join room + send full state ---
-    socket.on('enter_lobby', () => {
+    socket.on('enter_lobby', async () => {
         socket.join('lobby');
+        // Load chat history
+        const db = require('./db');
+        let chatMessages = [];
+        try {
+            chatMessages = await db.getChatMessages(chatConfig.max_messages);
+        } catch (e) {
+            logger.warn('Chat', 'Failed to load chat history:', e.message);
+        }
         socket.emit('lobby_state', sanitizeBigInt({
             gameRequests: buildRequestsList(),
             activeGames: buildActiveGamesList(),
@@ -2101,7 +2135,75 @@ io.on('connection', (socket) => {
                 openTournaments: tournamentManager.getOpenTournaments(),
                 activeTournaments: tournamentManager.getActiveTournamentsList(),
             } : { enabled: false, openTournaments: [], activeTournaments: [] },
+            chatMessages,
+            chatConfig: { max_chars: chatConfig.max_chars, rate_limit_ms: chatConfig.rate_limit_ms },
         }));
+    });
+
+    // --- CHAT: SEND MESSAGE ---
+    socket.on('chat:send', async ({ message }, callback) => {
+        if (typeof callback !== 'function') callback = () => {};
+        const userId   = socket.userId;
+        const username = socket.username;
+        const role     = socket.userRole;
+
+        // Must be registered
+        if (!userId || userId.startsWith('guest_') || role === 'guest') {
+            return callback({ success: false, error: 'Login required to chat.' });
+        }
+
+        // Check is_chat_user flag
+        try {
+            const db = require('./db');
+            const user = await db.getUser(userId);
+            if (user && user.is_chat_user === 0) {
+                return callback({ success: false, error: 'You have been banned from chat.' });
+            }
+        } catch (e) {
+            logger.warn('Chat', `Failed to check is_chat_user for ${userId}:`, e.message);
+        }
+
+        // Validate message
+        if (!message || typeof message !== 'string') {
+            return callback({ success: false, error: 'Empty message.' });
+        }
+        const trimmed = message.trim();
+        if (trimmed.length === 0) {
+            return callback({ success: false, error: 'Empty message.' });
+        }
+        if (trimmed.length > chatConfig.max_chars) {
+            return callback({ success: false, error: `Message too long (max ${chatConfig.max_chars} chars).` });
+        }
+
+        // Rate-limit
+        const now = Date.now();
+        const last = lastChatPost.get(userId) || 0;
+        if (now - last < chatConfig.rate_limit_ms) {
+            const wait = Math.ceil((chatConfig.rate_limit_ms - (now - last)) / 1000);
+            return callback({ success: false, error: `Please wait ${wait}s before posting again.` });
+        }
+        lastChatPost.set(userId, now);
+
+        // Save and broadcast
+        const msgObj = {
+            id: uuidv4(),
+            user_id: userId,
+            username: username || 'Unknown',
+            message: trimmed,
+            created_at: new Date().toISOString(),
+        };
+        try {
+            const db = require('./db');
+            await db.saveChatMessage(msgObj);
+        } catch (e) {
+            logger.warn('Chat', 'Failed to save chat message:', e.message);
+        }
+
+        // Broadcast to all lobby members (local replica)
+        io.to('lobby').emit('chat:new_message', sanitizeBigInt(msgObj));
+        // Sync to other replicas via Valkey pub/sub
+        valkeySync.syncChatMessage(msgObj);
+        callback({ success: true });
     });
 
     // --- CREATE GAME REQUEST ---
@@ -3371,6 +3473,57 @@ io.on('connection', (socket) => {
         }
         const db = require('./db');
         await db.deleteTournamentScheduleItem(id);
+        callback({ success: true });
+    });
+
+    // --- ADMIN CHAT ---
+    socket.on('admin:get_chat_config', async (data, callback) => {
+        if (typeof data === 'function') callback = data;
+        if (!permissions.canUser(socket.userRole, 'manage_jobs')) {
+            return callback({ success: false, error: 'Forbidden' });
+        }
+        callback({ success: true, config: { ...chatConfig } });
+    });
+
+    socket.on('admin:update_chat_config', async (data, callback) => {
+        if (!permissions.canUser(socket.userRole, 'manage_jobs')) {
+            return callback({ success: false, error: 'Forbidden' });
+        }
+        const db = require('./db');
+        const allowed = ['max_messages', 'max_chars', 'rate_limit_ms'];
+        for (const key of allowed) {
+            if (data[key] !== undefined) {
+                const val = parseInt(data[key], 10);
+                if (!isNaN(val) && val > 0) {
+                    await db.upsertChatConfig(key, val);
+                    chatConfig[key] = val;
+                }
+            }
+        }
+        logger.info('Admin', 'Chat config updated:', chatConfig);
+        callback({ success: true, config: { ...chatConfig } });
+    });
+
+    socket.on('admin:delete_chat_message', async ({ messageId }, callback) => {
+        if (!permissions.canUser(socket.userRole, 'manage_jobs')) {
+            return callback({ success: false, error: 'Forbidden' });
+        }
+        const db = require('./db');
+        await db.deleteChatMessage(messageId);
+        // Notify lobby clients to remove the message (local replica)
+        io.to('lobby').emit('chat:delete_message', { id: messageId });
+        // Sync deletion to other replicas via Valkey pub/sub
+        valkeySync.syncChatDeleted(messageId);
+        callback({ success: true });
+    });
+
+    socket.on('admin:toggle_chat_user', async ({ userId, enabled }, callback) => {
+        if (!permissions.canUser(socket.userRole, 'manage_jobs')) {
+            return callback({ success: false, error: 'Forbidden' });
+        }
+        const db = require('./db');
+        await db.updateUser(userId, { is_chat_user: enabled ? 1 : 0 });
+        logger.info('Admin', `Chat access for user ${userId} set to ${enabled}`);
         callback({ success: true });
     });
 

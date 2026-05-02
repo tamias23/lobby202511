@@ -146,11 +146,10 @@ CREATE TABLE IF NOT EXISTS users (
     rated_games_played_today INTEGER DEFAULT 0,
     bot_games_played_today   INTEGER DEFAULT 0,
     timezone                 TEXT DEFAULT 'UTC',
+    is_chat_user             INTEGER DEFAULT 1,
     created_at               TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
--- Ensure email_hash column exists before indexing it (idempotent for existing tables)
-ALTER TABLE users ADD COLUMN IF NOT EXISTS email_hash TEXT;
 CREATE INDEX IF NOT EXISTS idx_users_email_hash ON users(email_hash);
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_users_verification_token ON users(verification_token);
@@ -303,9 +302,26 @@ CREATE TABLE IF NOT EXISTS tournament_schedule (
     enabled          BOOLEAN NOT NULL DEFAULT TRUE,
     created_at       TIMESTAMPTZ
 );
--- Idempotent migrations (safe on re-deploy)
-ALTER TABLE tournament_schedule ADD COLUMN IF NOT EXISTS launch_mode TEXT NOT NULL DEFAULT 'any';
-ALTER TABLE tournament_schedule ADD COLUMN IF NOT EXISTS start_in_minutes INTEGER NOT NULL DEFAULT 0;
+
+-- chat_messages
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id          TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL,
+    username    TEXT NOT NULL,
+    message     TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_chat_created ON chat_messages(created_at DESC);
+
+-- chat_config (admin-tunable key/value pairs)
+CREATE TABLE IF NOT EXISTS chat_config (
+    key    TEXT PRIMARY KEY,
+    value  INTEGER NOT NULL
+);
+-- Seed defaults (no-op if already present)
+INSERT INTO chat_config (key, value) VALUES ('max_messages', 1000)  ON CONFLICT (key) DO NOTHING;
+INSERT INTO chat_config (key, value) VALUES ('max_chars',    300)   ON CONFLICT (key) DO NOTHING;
+INSERT INTO chat_config (key, value) VALUES ('rate_limit_ms', 2000) ON CONFLICT (key) DO NOTHING;
 `;
 
 module.exports = {
