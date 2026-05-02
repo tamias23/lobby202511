@@ -340,34 +340,38 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
 
   Widget _buildTopBar(BuildContext context, AppUser? auth) {
     final bg = ref.watch(bgProvider);
+    final narrow = MediaQuery.of(context).size.width < 500;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Auth / nav row
-          Row(
+          // Auth / nav row — wraps on narrow screens to avoid overflow
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            alignment: WrapAlignment.center,
             children: [
               _HeaderButton(label: ref.tr('ui.analysis'), onTap: () => context.go('/analysis')),
-              const SizedBox(width: 6),
               _HeaderButton(label: ref.tr('ui.tutorial'), onTap: () => context.go('/tutorial')),
-              const SizedBox(width: 6),
-              _HeaderButton(label: ref.tr('ui.leaderboard'), onTap: () => context.go('/leaderboard')),
-              const Spacer(),
+              if (!narrow)
+                _HeaderButton(label: ref.tr('ui.leaderboard'), onTap: () => context.go('/leaderboard')),
               if (auth == null) ...[
-              _HeaderButton(label: ref.tr('ui.login'),    onTap: () => context.go('/login')),
-              const SizedBox(width: 6),
-              _HeaderButton(label: ref.tr('ui.register'), onTap: () => context.go('/register')),
-              const SizedBox(width: 6),
-              IconButton(
-                icon: const Icon(Icons.settings_outlined, color: DTheme.textMutedDark, size: 18),
-                onPressed: () => SettingsDialog.show(context),
-                tooltip: ref.tr('ui.settings'),
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
+                _HeaderButton(label: ref.tr('ui.login'),    onTap: () => context.go('/login')),
+                _HeaderButton(label: ref.tr('ui.register'), onTap: () => context.go('/register')),
+                GestureDetector(
+                  onTap: () => SettingsDialog.show(context),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.07),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+                    ),
+                    child: const Icon(Icons.settings_outlined, color: Colors.white70, size: 16),
+                  ),
+                ),
               ] else
                 _UserBadge(auth: auth, onLogout: () => ref.read(authProvider.notifier).logout()),
             ],
@@ -377,6 +381,9 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
+              if (narrow)
+                _HeaderButton(label: '🏆', onTap: () => context.go('/leaderboard')),
+              if (narrow) const SizedBox(width: 6),
               // Chat toggle
               _ChatToggle(
                 active: _showChat,
@@ -392,15 +399,30 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   }
 
   Widget _buildTitle(BuildContext context, LobbyState lobby) {
+    final screenW = MediaQuery.of(context).size.width;
+    final screenH = MediaQuery.of(context).size.height;
+    final isPhoneLandscape = screenH < 500 && screenW > screenH;
+    // On narrow/portrait screens the top bar is taller (buttons may wrap),
+    // so push the title down further to avoid overlap.
+    // On phone-landscape the width is "wide" but the bar still covers the title.
+    final topPad = isPhoneLandscape
+        ? 70.0
+        : screenW < 500 ? 90.0 : screenW < 700 ? 80.0 : 0.0;
+    final titleSize = isPhoneLandscape
+        ? 40.0
+        : screenW < 400 ? 42.0 : screenW < 600 ? 52.0 : 64.0;
+    final welcomeSize = (screenW < 400 || isPhoneLandscape) ? 9.0 : 11.0;
+    final subtitleSize = (screenW < 400 || isPhoneLandscape) ? 12.0 : 14.0;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      padding: EdgeInsets.fromLTRB(20, topPad, 20, 12),
       child: Center(
         child: Column(
           children: [
             // "welcome to ..." in muted small caps
             Text('WELCOME TO …',
               style: GoogleFonts.outfit(
-                fontSize: 11, fontWeight: FontWeight.w700,
+                fontSize: welcomeSize, fontWeight: FontWeight.w700,
                 color: DTheme.textMutedDark, letterSpacing: 3,
               ),
             ),
@@ -410,7 +432,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
               shaderCallback: (bounds) => _kGrad.createShader(bounds),
               child: Text('DEDAL',
                 style: GoogleFonts.outfit(
-                  fontSize: 64, fontWeight: FontWeight.w900,
+                  fontSize: titleSize, fontWeight: FontWeight.w900,
                   color: Colors.white, letterSpacing: -2, height: 1,
                 ),
               ),
@@ -418,7 +440,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
             const SizedBox(height: 4),
             Text(ref.tr('ui.choose_tc'),
               style: GoogleFonts.outfit(
-                fontSize: 14, color: DTheme.textMutedDark,
+                fontSize: subtitleSize, color: DTheme.textMutedDark,
               ),
             ),
           ],
