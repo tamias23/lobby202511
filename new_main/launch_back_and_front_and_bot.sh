@@ -64,7 +64,7 @@ FLUTTER=/home/mat/Bureau/standalone/flutter_linux_3.41.7-stable/flutter/bin/flut
 BUILD_TIMESTAMP=$(date -u +%Y%m%dT%H%M%S)
 echo "==> Building Flutter web frontend (relative URLs, timestamp: ${BUILD_TIMESTAMP})..."
 cd "${SCRIPT_DIR}/frontend"
-$FLUTTER build web --dart-define=API_URL= --dart-define=BUILD_TIMESTAMP=${BUILD_TIMESTAMP}
+$FLUTTER build web --wasm --dart-define=API_URL= --dart-define=BUILD_TIMESTAMP=${BUILD_TIMESTAMP}
 
 # Disable set -e for background processes (they run independently)
 set +e

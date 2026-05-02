@@ -42,8 +42,8 @@ services:
     image: docker.io/library/postgres:16-alpine
     container_name: dedal-postgres
     restart: unless-stopped
-    # No host port binding — app containers reach postgres via the internal
-    # compose network. For direct access: podman exec -it dedal-postgres psql
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_DB: dedalthegame01
       POSTGRES_USER: tamias23

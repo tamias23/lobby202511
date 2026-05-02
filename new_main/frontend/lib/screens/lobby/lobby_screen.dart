@@ -1659,10 +1659,9 @@ class _ChatToggleState extends State<_ChatToggle> {
                   : Colors.white.withValues(alpha: _hovered ? 0.25 : 0.10),
             ),
           ),
-          child: Icon(
-            widget.active ? Icons.chat_bubble : Icons.chat_bubble_outline,
-            size: 15,
-            color: widget.active ? const Color(0xFF46B0D4) : DTheme.textMutedDark,
+          child: Opacity(
+            opacity: widget.active ? 1.0 : 0.5,
+            child: const Text('💬', style: TextStyle(fontSize: 14)),
           ),
         ),
       ),

@@ -19,6 +19,7 @@ TUNNEL=false
 CF_TOKEN=""
 API_URL=""
 SKIP_BUILD=false
+NO_CACHE=false
 TAG=$(date -u +%Y%m%dT%H%M%S)
 TAG_EXPLICIT=false   # set to true when --tag is passed explicitly
 
@@ -42,6 +43,8 @@ while [[ $# -gt 0 ]]; do
             API_URL="$2"; shift 2 ;;
         --skip-build)
             SKIP_BUILD=true; shift ;;
+        --no-cache)
+            NO_CACHE=true; shift ;;
         --tag)
             TAG="$2"; TAG_EXPLICIT=true; shift 2 ;;
         -h|--help)
@@ -54,6 +57,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --token TOKEN      Cloudflare tunnel token (required with --tunnel)"
             echo "  --api-url URL      API URL for Flutter build (default: auto-detect)"
             echo "  --skip-build       Skip building images, just (re)deploy containers"
+            echo "  --no-cache         Force clean build (no Podman layer cache)"
             echo "  --tag TAG          Image tag (default: timestamp; 'latest' with --skip-build)"
             echo "  -h, --help         Show this help"
             exit 0 ;;
@@ -136,7 +140,13 @@ if ! $SKIP_BUILD; then
 
     echo "==> [2/3] Building nd6-app container image..."
     cd "${SCRIPT_DIR}"
+    CACHE_FLAG=""
+    if $NO_CACHE; then
+        CACHE_FLAG="--no-cache"
+        echo "    (--no-cache: forcing clean build)"
+    fi
     podman build \
+        $CACHE_FLAG \
         --build-arg API_URL="${FLUTTER_API_URL}" \
         --build-arg BUILD_TIMESTAMP="${TAG}" \
         -t node-docker06:${TAG} .

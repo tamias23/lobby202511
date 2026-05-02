@@ -34,14 +34,16 @@ RUN --mount=type=cache,target=/root/.pub-cache \
     flutter pub get
 
 # Copy the full Flutter source
+# BUILD_TIMESTAMP is declared here (before COPY) so that each deploy busts the
+# Podman layer cache and forces a fresh Flutter build.
+ARG BUILD_TIMESTAMP=dev
 COPY frontend/ ./
 
 # Build Flutter web (API_URL + BUILD_TIMESTAMP baked in at build time)
 # Default: production domain. Override with --build-arg API_URL= for local/Podman deploys.
 ARG API_URL=https://dedalthegame.com
-ARG BUILD_TIMESTAMP=dev
 RUN --mount=type=cache,target=/root/.pub-cache \
-    flutter build web --dart-define=API_URL=${API_URL} --dart-define=BUILD_TIMESTAMP=${BUILD_TIMESTAMP}
+    flutter build web --wasm --dart-define=API_URL=${API_URL} --dart-define=BUILD_TIMESTAMP=${BUILD_TIMESTAMP}
 # Output: build/web/
 
 # --- STAGE 3: Production Runtime ---
