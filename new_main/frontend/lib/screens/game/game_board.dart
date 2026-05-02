@@ -367,8 +367,9 @@ class _GameBoardState extends ConsumerState<GameBoard> {
     final screenSize = MediaQuery.of(context).size;
     final screenWidth = screenSize.width;
     final screenHeight = screenSize.height;
-    final isDesktop = screenWidth > 600;
-    final isPortrait = !isDesktop && screenHeight > screenWidth;
+    final orientation = MediaQuery.of(context).orientation;
+    final isPortrait = orientation == Orientation.portrait;
+    final isDesktop = screenWidth > 900; // true desktop/laptop only — tablets stay in mobile layout
     // Panel widths are only used in landscape — cap at 20% of screen width.
     final double maxPanelW = screenWidth * 0.20;
     final double leftPanelWidth = isPortrait ? 0 : math.min(screenWidth * 0.18, maxPanelW);

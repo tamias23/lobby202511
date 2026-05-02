@@ -669,9 +669,15 @@ class _TutorialScreenState extends ConsumerState<TutorialScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.of(context).size.width > 900;
+    final mq = MediaQuery.of(context).size;
+    final wide = mq.width > 900;
     final lang = ref.watch(localeProvider).languageCode;
     final isRtl = _rtlLangs.contains(lang);
+
+    // Mobile landscape: not wide-desktop, but device is in landscape orientation
+    final orientation = MediaQuery.of(context).orientation;
+    final mobileLandscape = !wide && orientation == Orientation.landscape;
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SafeArea(
@@ -681,12 +687,31 @@ class _TutorialScreenState extends ConsumerState<TutorialScreen> {
                 Expanded(child: _buildContent(isRtl)),
                 SizedBox(width: _boardWidth, child: _buildBoard()),
               ])
-            : Column(children: [
-                _buildMobileTopBar(isRtl),
-                Expanded(child: _buildContent(isRtl)),
-                SizedBox(height: 300, child: _buildBoard()),
-                if (_sidebarOpen) _buildMobileDrawer(isRtl),
-              ]),
+            : Stack(
+                children: [
+                  mobileLandscape
+                      // Landscape phone: top bar + row of content & board
+                      ? Column(children: [
+                          _buildMobileTopBar(isRtl),
+                          Expanded(
+                            child: Row(children: [
+                              Expanded(child: _buildContent(isRtl)),
+                              SizedBox(
+                                width: mq.width * 0.45,
+                                child: _buildBoard(),
+                              ),
+                            ]),
+                          ),
+                        ])
+                      // Portrait phone: top bar + scrollable content + board
+                      : Column(children: [
+                          _buildMobileTopBar(isRtl),
+                          Expanded(child: _buildContent(isRtl)),
+                          SizedBox(height: 300, child: _buildBoard()),
+                        ]),
+                  if (_sidebarOpen) _buildMobileDrawer(isRtl),
+                ],
+              ),
       ),
     );
   }

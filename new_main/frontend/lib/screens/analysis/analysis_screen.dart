@@ -407,7 +407,7 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.of(context).size.width > 750;
+    final wide = MediaQuery.of(context).size.width > 900;
     final bg   = ref.watch(bgProvider);
     return KeyboardListener(
       focusNode: FocusNode()..requestFocus(),

@@ -668,7 +668,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
         )).toList(),
       );
     }
-    if (MediaQuery.of(context).size.width > 600) {
+    if (MediaQuery.of(context).size.width > 900) {
       // 2×2
       return Column(children: [
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [

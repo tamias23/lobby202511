@@ -209,7 +209,7 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
   Widget build(BuildContext context) {
     final t    = _tournament;
     final auth = ref.watch(authProvider).value;
-    final wide = MediaQuery.of(context).size.width > 800;
+    final wide = MediaQuery.of(context).size.width > 900;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
