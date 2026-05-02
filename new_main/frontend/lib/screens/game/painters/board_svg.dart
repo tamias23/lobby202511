@@ -44,7 +44,8 @@ String buildBoardSvg({
 
   final buf = StringBuffer()
     ..write('<svg xmlns="http://www.w3.org/2000/svg" '
-        'width="${width.toStringAsFixed(0)}" height="${height.toStringAsFixed(0)}">')
+        'width="${width.toStringAsFixed(0)}" height="${height.toStringAsFixed(0)}" '
+        'shape-rendering="geometricPrecision">')
     ..write('<g transform="translate(${_f(offsetX)},${_f(offsetY)}) scale(${_f(scale)})">');
 
   // Flip group — a 180° rotation around the board centre (identical to legacy)
@@ -85,7 +86,7 @@ String buildBoardSvg({
   for (final poly in polygons.values) {
     if (poly.points.length < 3) continue;
     buf.write('<polygon points="${_polyPts(poly.points)}" fill="none" '
-        'stroke="black" stroke-width="0.5" stroke-linejoin="round"/>');
+        'stroke="black" stroke-width="1.0" stroke-linejoin="round"/>');
   }
 
   // ── Pass 3 · black allEdges ────────────────────────────────────────
@@ -143,9 +144,9 @@ void _writeEdges(StringBuffer buf, Map<String, dynamic> allEdges,
 
   // Legacy renderEdges():
   //   red   → stroke="#ef4444"  stroke-width="3"  (board-space units)
-  //   black → stroke="black"    stroke-width="0.5" opacity="0.6"
+  //   black → stroke="black"    stroke-width="1.0" opacity="0.6"
   final stroke = isRed ? '#ef4444' : 'black';
-  final sw     = isRed ? '3'       : '0.5';
+  final sw     = isRed ? '3'       : '1.0';
   final extra  = isRed ? '' : ' opacity="0.6"';
   buf.write('<line x1="${_f(x0)}" y1="${_f(y0)}" x2="${_f(x1)}" y2="${_f(y1)}" '
       'stroke="$stroke" stroke-width="$sw" '

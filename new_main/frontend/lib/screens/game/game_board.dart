@@ -479,11 +479,9 @@ class _GameBoardState extends ConsumerState<GameBoard> {
           isRunning: gs.turn == bottomSide,
         ),
 
-        // ── Action panel (always at bottom, capped at 25% of screen) ─────
-        ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.25,
-          ),
+        // ── Action panel (fixed height = 25% of screen, never resizes) ───
+        SizedBox(
+          height: MediaQuery.of(context).size.height * 0.25,
           child: SingleChildScrollView(
             child: _buildActionPanel(context, gs, gameState, isDesktop: false, isPortrait: true),
           ),
