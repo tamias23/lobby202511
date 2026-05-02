@@ -1121,6 +1121,12 @@ app.post('/register', async (req, res) => {
         return res.status(400).json({ error: 'Missing required fields' });
     }
 
+    // Rate-limit check for registration (per IP)
+    const check = await valkeySync.isRegistrationAllowed(req.ip);
+    if (!check.allowed) {
+        return res.status(429).json({ error: check.reason });
+    }
+
     // ── 2. Username format validation (no DB, no delay) ───────────────────────
 
     // Must be 3–30 chars, only letters, digits, underscores, hyphens
@@ -1178,6 +1184,9 @@ app.post('/register', async (req, res) => {
             is_verified: 0,
         });
 
+        // Record successful registration for IP rate-limiting
+        await valkeySync.recordRegistration(req.ip);
+
         res.status(201).json({ message: 'User registered successfully. You can now log in.' });
     } catch (err) {
         if (err.message.includes('already registered')) {
@@ -1219,23 +1228,28 @@ app.post('/login', async (req, res) => {
         return res.status(400).json({ error: 'Missing identifier (username/email) or password' });
     }
 
+    // Brute-force / Rate-limit check
+    const check = await valkeySync.isLoginAllowed(identifier, req.ip);
+    if (!check.allowed) {
+        return res.status(429).json({ error: check.reason });
+    }
+
     try {
         const user = await getUserByEmailOrUsername(identifier);
 
         if (!user) {
+            await valkeySync.recordLoginFailure(identifier, req.ip);
             return res.status(401).json({ error: 'Invalid email or password' });
         }
-
-        // NOTE: Email verification gate is currently DISABLED.
-        // To re-enable: uncomment the block below.
-        // if (!user.is_verified) {
-        //     return res.status(401).json({ error: 'Please verify your email before logging in.' });
-        // }
 
         const isMatch = await bcrypt.compare(password, user.password_hash);
         if (!isMatch) {
+            await valkeySync.recordLoginFailure(identifier, req.ip);
             return res.status(401).json({ error: 'Invalid email or password' });
         }
+
+        // Success! Reset failure counters
+        await valkeySync.recordLoginSuccess(identifier, req.ip);
 
         // Determine timezone by IP and update if it changed or was unset
         const geo = geoip.lookup(req.ip);
@@ -1591,11 +1605,6 @@ async function loadChatConfig() {
 
 // Initialize Valkey state sync (needs lobby reference)
 valkeySync.init(lobby, loadBoardByName, tournamentManager);
-
-// Register chat broadcaster so remote chat messages are forwarded to local lobby clients
-valkeySync.setChatBroadcaster((event, data) => {
-    io.to('lobby').emit(event, sanitizeBigInt(data));
-});
 
 function buildLobbyStats() {
     // Count unique users, not socket connections
@@ -2199,10 +2208,8 @@ io.on('connection', (socket) => {
             logger.warn('Chat', 'Failed to save chat message:', e.message);
         }
 
-        // Broadcast to all lobby members (local replica)
+        // Broadcast to all lobby members (cross-replica via @socket.io/redis-adapter)
         io.to('lobby').emit('chat:new_message', sanitizeBigInt(msgObj));
-        // Sync to other replicas via Valkey pub/sub
-        valkeySync.syncChatMessage(msgObj);
         callback({ success: true });
     });
 
@@ -3510,10 +3517,8 @@ io.on('connection', (socket) => {
         }
         const db = require('./db');
         await db.deleteChatMessage(messageId);
-        // Notify lobby clients to remove the message (local replica)
+        // Notify lobby clients to remove the message (cross-replica via @socket.io/redis-adapter)
         io.to('lobby').emit('chat:delete_message', { id: messageId });
-        // Sync deletion to other replicas via Valkey pub/sub
-        valkeySync.syncChatDeleted(messageId);
         callback({ success: true });
     });
 

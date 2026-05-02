@@ -33,6 +33,15 @@ const HEARTBEAT_INTERVAL_MS = 15000;             // write heartbeat every 15s
 const BOT_IP_PREFIX = 'nd6:bot_ip:';             // nd6:bot_ip:<ip> — rolling 24h counter
 const BOT_IP_TTL_S  = 86400;                     // 24h rolling window
 const BOT_IP_LIMIT  = parseInt(process.env.BOT_IP_LIMIT || '30'); // default 30/24h per IP
+const LOGIN_IP_PREFIX = 'nd6:login:ip:';         // nd6:login:ip:<ip> — request counter
+const LOGIN_USER_PREFIX = 'nd6:login:user:';     // nd6:login:user:<identifier> — failure counter
+const LOGIN_IP_LIMIT = 10;                       // max 10 login requests per minute per IP
+const LOGIN_IP_TTL_S = 60;                       // 1 minute window for IP limit
+const LOGIN_USER_LIMIT = 5;                      // max 5 failed attempts per account
+const LOGIN_USER_TTL_S = 900;                    // 15 minutes lockout for account brute-force
+const REGISTER_IP_PREFIX = 'nd6:register:ip:';   // nd6:register:ip:<ip>
+const REGISTER_IP_LIMIT = 5;                     // max 5 registrations per hour per IP
+const REGISTER_IP_TTL_S = 3600;                  // 1 hour window
 // Local cache for isInstanceAlive() — avoids Valkey query every sweep tick
 const _aliveCache = new Map(); // instanceId → { alive: bool, checkedAt: number }
 const ALIVE_CACHE_TTL_MS = 10000;
@@ -41,7 +50,6 @@ const ALIVE_CACHE_TTL_MS = 10000;
 let lobby = null;          // { gameRequests: [], activeGames: Map }
 let loadBoardFn = null;    // (boardName) => boardData  — loads board JSON from disk
 let _tournamentManager = null; // Reference to tournamentManager for remote list updates
-let _chatBroadcastFn = null;   // (event, data) => void — broadcasts chat events to local lobby room
 
 /**
  * Initialize the sync module.
@@ -128,27 +136,6 @@ function syncTournamentList(openTournaments, activeTournaments) {
     }
     // Notify other instances immediately via pub/sub
     _publish({ type: 'tournament:sync', payload });
-}
-
-// ── Chat cross-replica sync ─────────────────────────────────────────────────
-
-/**
- * Set the callback used to broadcast chat events to local lobby clients.
- * Called from index.js after `io` is created.
- * @param {Function} fn  — (eventName, data) => void
- */
-function setChatBroadcaster(fn) {
-    _chatBroadcastFn = fn;
-}
-
-/** Publish a new chat message so other replicas broadcast it to their lobby. */
-function syncChatMessage(msgObj) {
-    _publish({ type: 'chat:message', data: msgObj });
-}
-
-/** Publish a chat message deletion so other replicas remove it from their lobby. */
-function syncChatDeleted(messageId) {
-    _publish({ type: 'chat:deleted', messageId });
 }
 
 /**
@@ -274,12 +261,6 @@ function _onSyncMessage(raw) {
             break;
         case 'tournament:sync':
             _applyTournamentSync(msg);
-            break;
-        case 'chat:message':
-            _applyChatMessage(msg);
-            break;
-        case 'chat:deleted':
-            _applyChatDeleted(msg);
             break;
         default:
             logger.debug('Sync', `Unknown sync message type: ${msg.type}`);
@@ -674,6 +655,137 @@ async function checkAndIncrementBotIpLimit(ip) {
     }
 }
 
+// ── Auth rate-limiting helpers ────────────────────────────────────────────────
+
+/** Format a TTL in seconds into a human-readable string, e.g. "2 min 30s" or "45s". */
+function _formatTtl(seconds) {
+    if (seconds <= 0) return 'a moment';
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    if (m > 0 && s > 0) return `${m} min ${s}s`;
+    if (m > 0) return `${m} min`;
+    return `${s}s`;
+}
+
+/**
+ * Check if a login attempt is allowed based on IP rate-limiting and user brute-force protection.
+ * @param {string} identifier — username or email
+ * @param {string} ip         — client IP address
+ * @returns {Promise<{ allowed: boolean, reason?: string }>}
+ */
+async function isLoginAllowed(identifier, ip) {
+    const client = valkey.getClient();
+    if (!client || !identifier) return { allowed: true };
+
+    const normIp = (ip || '').replace(/^::ffff:/, '') || 'unknown';
+    const ipKey = `${LOGIN_IP_PREFIX}${normIp}`;
+    const userKey = `${LOGIN_USER_PREFIX}${identifier.toLowerCase().trim()}`;
+
+    try {
+        const [ipCount, userCount] = await Promise.all([
+            client.get(ipKey),
+            client.get(userKey)
+        ]);
+
+        if (ipCount && parseInt(ipCount, 10) >= LOGIN_IP_LIMIT) {
+            const ttl = await client.ttl(ipKey);
+            const wait = _formatTtl(ttl > 0 ? ttl : LOGIN_IP_TTL_S);
+            return { allowed: false, reason: `Too many login attempts from this IP. Try again in ${wait}.` };
+        }
+
+        if (userCount && parseInt(userCount, 10) >= LOGIN_USER_LIMIT) {
+            const ttl = await client.ttl(userKey);
+            const wait = _formatTtl(ttl > 0 ? ttl : LOGIN_USER_TTL_S);
+            return { allowed: false, reason: `Too many failed attempts for this account. Try again in ${wait}.` };
+        }
+
+        // Increment IP request counter immediately (to prevent flooding)
+        // Always set TTL to prevent keys stuck without expiry after a crash
+        await client.incr(ipKey);
+        await client.expire(ipKey, LOGIN_IP_TTL_S);
+
+        return { allowed: true };
+    } catch (e) {
+        logger.warn('Auth', `isLoginAllowed check failed for ${identifier}/${normIp}:`, e.message);
+        return { allowed: true }; // fail-open
+    }
+}
+
+/**
+ * Record a failed login attempt. Increments the per-user failure counter.
+ */
+async function recordLoginFailure(identifier, ip) {
+    const client = valkey.getClient();
+    if (!client || !identifier) return;
+
+    const userKey = `${LOGIN_USER_PREFIX}${identifier.toLowerCase().trim()}`;
+    try {
+        // Always set TTL to prevent keys stuck without expiry after a crash
+        const count = await client.incr(userKey);
+        await client.expire(userKey, LOGIN_USER_TTL_S);
+        logger.warn('Auth', `Login failure ${count}/${LOGIN_USER_LIMIT} for ${identifier}`);
+    } catch (e) {
+        logger.warn('Auth', `recordLoginFailure failed for ${identifier}:`, e.message);
+    }
+}
+
+/**
+ * Record a successful login. Clears the user's failure counter.
+ */
+async function recordLoginSuccess(identifier, ip) {
+    const client = valkey.getClient();
+    if (!client || !identifier) return;
+
+    const userKey = `${LOGIN_USER_PREFIX}${identifier.toLowerCase().trim()}`;
+    try {
+        await client.del(userKey);
+    } catch (e) {
+        logger.warn('Auth', `recordLoginSuccess failed for ${identifier}:`, e.message);
+    }
+}
+
+/**
+ * Check if registration is allowed for this IP.
+ */
+async function isRegistrationAllowed(ip) {
+    const client = valkey.getClient();
+    if (!client) return { allowed: true };
+
+    const normIp = (ip || '').replace(/^::ffff:/, '') || 'unknown';
+    const ipKey = `${REGISTER_IP_PREFIX}${normIp}`;
+
+    try {
+        const count = await client.get(ipKey);
+        if (count && parseInt(count, 10) >= REGISTER_IP_LIMIT) {
+            const ttl = await client.ttl(ipKey);
+            const wait = _formatTtl(ttl > 0 ? ttl : REGISTER_IP_TTL_S);
+            return { allowed: false, reason: `Too many accounts created from this IP. Try again in ${wait}.` };
+        }
+        return { allowed: true };
+    } catch (e) {
+        logger.warn('Auth', `isRegistrationAllowed failed for ${normIp}:`, e.message);
+        return { allowed: true };
+    }
+}
+
+/**
+ * Record a successful registration to increment the IP limit.
+ */
+async function recordRegistration(ip) {
+    const client = valkey.getClient();
+    if (!client) return;
+
+    const normIp = (ip || '').replace(/^::ffff:/, '') || 'unknown';
+    const ipKey = `${REGISTER_IP_PREFIX}${normIp}`;
+    try {
+        // Always set TTL to prevent keys stuck without expiry after a crash
+        await client.incr(ipKey);
+        await client.expire(ipKey, REGISTER_IP_TTL_S);
+    } catch (e) {
+        logger.warn('Auth', `recordRegistration failed for ${normIp}:`, e.message);
+    }
+}
+
 /**
  * Enumerate all nd6:bot_ip:* keys with their current counts and TTLs.
  * Used by the extract_from_valkey.py script.
@@ -713,7 +825,9 @@ module.exports = {
     getTournamentListFromValkey,
     checkAndIncrementBotIpLimit,
     getBotIpLimitData,
-    setChatBroadcaster,
-    syncChatMessage,
-    syncChatDeleted,
+    isLoginAllowed,
+    recordLoginFailure,
+    recordLoginSuccess,
+    isRegistrationAllowed,
+    recordRegistration,
 };
