@@ -183,13 +183,14 @@ class _AdminJobsScreenState extends ConsumerState<AdminJobsScreen>
   List<Map<String,dynamic>> _runLog    = [];
   List<Map<String,dynamic>> _schedule  = [];
   Map<String,dynamic> _chatConfig = {};
+  List<Map<String,dynamic>> _blackoutWindows = [];
   bool _loading = true;
   late TabController _tabs;
 
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 4, vsync: this);
+    _tabs = TabController(length: 5, vsync: this);
     _fetch();
   }
 
@@ -224,7 +225,17 @@ class _AdminJobsScreenState extends ConsumerState<AdminJobsScreen>
           if (res3['success'] == true) {
             _chatConfig = Map<String, dynamic>.from(res3['config'] ?? {});
           }
-          setState(() => _loading = false);
+          // Also fetch blackout windows
+          _socket.emitWithAck('admin:get_blackout', {}, ack: (r4) {
+            if (!mounted) return;
+            final res4 = Map<String, dynamic>.from(r4 as Map);
+            if (res4['success'] == true) {
+              _blackoutWindows = List<Map<String,dynamic>>.from(
+                (res4['windows'] as List? ?? []).map((w) => Map<String,dynamic>.from(w as Map)),
+              );
+            }
+            setState(() => _loading = false);
+          });
         });
       });
     });
@@ -320,6 +331,7 @@ class _AdminJobsScreenState extends ConsumerState<AdminJobsScreen>
             Tab(text: 'Run Log'),
             Tab(text: 'Daily Schedule'),
             Tab(text: 'Chat'),
+            Tab(text: 'Stop Server'),
           ],
         ),
       ),
@@ -332,6 +344,7 @@ class _AdminJobsScreenState extends ConsumerState<AdminJobsScreen>
                 _buildRunLog(),
                 _buildScheduleTab(),
                 _buildChatConfigTab(),
+                _buildStopServerTab(),
               ],
             ),
     );
@@ -727,6 +740,413 @@ class _AdminJobsScreenState extends ConsumerState<AdminJobsScreen>
       ),
     ],
   );
+
+  // ── Stop Server Tab ─────────────────────────────────────────────────────────
+
+  Map<String,dynamic>? _findBlackout(String key) {
+    for (final w in _blackoutWindows) {
+      if (w['key'] == key) return w;
+    }
+    return null;
+  }
+
+  Widget _buildStopServerTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          GlassPanel(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 32),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Server Maintenance Windows',
+                          style: GoogleFonts.outfit(
+                              color: DTheme.textMainDark,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16)),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Define time windows during which game or tournament creation is blocked.\n'
+                        'Users will see: "the game server will reboot in a few minutes".',
+                        style: GoogleFonts.outfit(color: Colors.white38, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          // Game blackout
+          _buildBlackoutCard(
+            key: 'game',
+            title: '🎮  No-Activity Window (Games)',
+            subtitle: 'Blocks all game creation: human vs human, bot games, and game request acceptance.',
+            iconColor: Colors.redAccent,
+          ),
+          const SizedBox(height: 16),
+          // Tournament blackout
+          _buildBlackoutCard(
+            key: 'tournament',
+            title: '🏆  No-Activity Window (Tournaments)',
+            subtitle: 'Blocks all tournament creation: user-created and system/cron-scheduled tournaments.',
+            iconColor: Colors.deepPurpleAccent,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBlackoutCard({
+    required String key,
+    required String title,
+    required String subtitle,
+    required Color iconColor,
+  }) {
+    final existing = _findBlackout(key);
+    final now = DateTime.now().toUtc();
+
+    DateTime? startAt;
+    DateTime? endAt;
+    bool isActive = false;
+    bool isPast = false;
+    bool isFuture = false;
+
+    if (existing != null) {
+      try {
+        startAt = DateTime.parse(existing['start_at'].toString()).toUtc();
+        endAt = DateTime.parse(existing['end_at'].toString()).toUtc();
+        isActive = now.isAfter(startAt) && now.isBefore(endAt);
+        isPast = now.isAfter(endAt);
+        isFuture = now.isBefore(startAt);
+      } catch (_) {}
+    }
+
+    final statusLabel = existing == null
+        ? 'NOT SET'
+        : isActive
+            ? 'ACTIVE NOW'
+            : isFuture
+                ? 'SCHEDULED'
+                : 'EXPIRED';
+    final statusColor = existing == null
+        ? Colors.white38
+        : isActive
+            ? Colors.redAccent
+            : isFuture
+                ? Colors.orange
+                : Colors.white38;
+
+    return GlassPanel(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: GoogleFonts.outfit(
+                            color: DTheme.textMainDark,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14)),
+                    const SizedBox(height: 4),
+                    Text(subtitle,
+                        style: GoogleFonts.outfit(color: Colors.white38, fontSize: 11)),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: statusColor.withValues(alpha: 0.4)),
+                ),
+                child: Text(statusLabel,
+                    style: TextStyle(
+                        color: statusColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11)),
+              ),
+            ],
+          ),
+          if (existing != null && startAt != null && endAt != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  _dateChip('From', startAt, isActive ? Colors.redAccent : Colors.white70),
+                  const SizedBox(width: 16),
+                  const Icon(Icons.arrow_forward, color: Colors.white24, size: 16),
+                  const SizedBox(width: 16),
+                  _dateChip('To', endAt, isActive ? Colors.redAccent : Colors.white70),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: iconColor,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                ),
+                icon: const Icon(Icons.schedule, size: 16, color: Colors.white),
+                label: Text(existing != null ? 'Edit Window' : 'Set Window',
+                    style: const TextStyle(color: Colors.white, fontSize: 13)),
+                onPressed: () => _openBlackoutDialog(key, startAt, endAt),
+              ),
+              if (existing != null) ...[
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white54,
+                    side: const BorderSide(color: Colors.white24),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  ),
+                  icon: const Icon(Icons.clear, size: 16),
+                  label: const Text('Clear', style: TextStyle(fontSize: 13)),
+                  onPressed: () => _clearBlackout(key),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _dateChip(String label, DateTime dt, Color color) {
+    final h = dt.hour.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0');
+    final dateStr = '${dt.year}-${dt.month.toString().padLeft(2,'0')}-${dt.day.toString().padLeft(2,'0')}';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: GoogleFonts.outfit(color: Colors.white38, fontSize: 10)),
+        Text('$dateStr  $h:$m UTC',
+            style: TextStyle(fontFamily: 'monospace', color: color, fontSize: 13, fontWeight: FontWeight.w600)),
+      ],
+    );
+  }
+
+  void _openBlackoutDialog(String key, DateTime? existingStart, DateTime? existingEnd) {
+    final now = DateTime.now().toUtc();
+    DateTime startDt = existingStart ?? now;
+    DateTime endDt = existingEnd ?? now.add(const Duration(hours: 1));
+
+    showDialog(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setD) {
+          return AlertDialog(
+            backgroundColor: DTheme.bgDarkTop,
+            title: Text('Set ${key == 'game' ? 'Game' : 'Tournament'} Blackout',
+                style: GoogleFonts.outfit(color: DTheme.textMainDark, fontSize: 16)),
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('All times are in UTC.',
+                      style: GoogleFonts.outfit(color: Colors.white38, fontSize: 12)),
+                  const SizedBox(height: 16),
+                  _buildDateTimePicker('Start', startDt, (dt) => setD(() => startDt = dt)),
+                  const SizedBox(height: 16),
+                  _buildDateTimePicker('End', endDt, (dt) => setD(() => endDt = dt)),
+                  if (endDt.isBefore(startDt) || endDt.isAtSameMomentAs(startDt)) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.error_outline, color: Colors.redAccent, size: 16),
+                          SizedBox(width: 8),
+                          Text('End date must be after start date.',
+                              style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: DTheme.primary),
+                onPressed: endDt.isAfter(startDt)
+                    ? () {
+                        Navigator.pop(ctx);
+                        _saveBlackout(key, startDt, endDt);
+                      }
+                    : null,
+                child: const Text('Save', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildDateTimePicker(String label, DateTime value, ValueChanged<DateTime> onChanged) {
+    final dateStr = '${value.year}-${value.month.toString().padLeft(2,'0')}-${value.day.toString().padLeft(2,'0')}';
+    final timeStr = '${value.hour.toString().padLeft(2,'0')}:${value.minute.toString().padLeft(2,'0')}';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: GoogleFonts.outfit(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Expanded(
+              child: InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: value,
+                    firstDate: DateTime.now().subtract(const Duration(days: 1)),
+                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                    builder: (ctx, child) => Theme(
+                      data: Theme.of(ctx).copyWith(
+                        colorScheme: ColorScheme.dark(
+                          primary: DTheme.primary,
+                          surface: DTheme.bgDarkTop,
+                        ),
+                      ),
+                      child: child!,
+                    ),
+                  );
+                  if (picked != null) {
+                    onChanged(DateTime.utc(picked.year, picked.month, picked.day, value.hour, value.minute));
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.black26,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white12),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.calendar_today, size: 14, color: Colors.white54),
+                      const SizedBox(width: 8),
+                      Text(dateStr, style: const TextStyle(fontFamily: 'monospace', color: Colors.white, fontSize: 13)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: InkWell(
+                onTap: () async {
+                  final picked = await showTimePicker(
+                    context: context,
+                    initialTime: TimeOfDay(hour: value.hour, minute: value.minute),
+                    builder: (ctx, child) => Theme(
+                      data: Theme.of(ctx).copyWith(
+                        colorScheme: ColorScheme.dark(
+                          primary: DTheme.primary,
+                          surface: DTheme.bgDarkTop,
+                        ),
+                      ),
+                      child: child!,
+                    ),
+                  );
+                  if (picked != null) {
+                    onChanged(DateTime.utc(value.year, value.month, value.day, picked.hour, picked.minute));
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.black26,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white12),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.access_time, size: 14, color: Colors.white54),
+                      const SizedBox(width: 8),
+                      Text(timeStr, style: const TextStyle(fontFamily: 'monospace', color: Colors.white, fontSize: 13)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  void _saveBlackout(String key, DateTime start, DateTime end) {
+    _socket.emitWithAck('admin:set_blackout', {
+      'key': key,
+      'startAt': start.toIso8601String(),
+      'endAt': end.toIso8601String(),
+    }, ack: (res) {
+      if (!mounted) return;
+      final r = Map<String, dynamic>.from(res as Map);
+      if (r['success'] == true) {
+        _fetch();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${key == 'game' ? 'Game' : 'Tournament'} blackout window saved.',
+              style: const TextStyle(color: Colors.white)),
+          backgroundColor: DTheme.success,
+        ));
+      } else {
+        _showError(r['error'] ?? 'Failed to save blackout window.');
+      }
+    });
+  }
+
+  void _clearBlackout(String key) {
+    _socket.emitWithAck('admin:clear_blackout', {'key': key}, ack: (res) {
+      if (!mounted) return;
+      final r = Map<String, dynamic>.from(res as Map);
+      if (r['success'] == true) {
+        _fetch();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${key == 'game' ? 'Game' : 'Tournament'} blackout window cleared.',
+              style: const TextStyle(color: Colors.white)),
+          backgroundColor: DTheme.success,
+        ));
+      } else {
+        _showError(r['error'] ?? 'Failed to clear blackout window.');
+      }
+    });
+  }
 }
 
 // ── Edit Cron Dialog ──────────────────────────────────────────────────────────

@@ -5,6 +5,14 @@ const logger = require('../../utils/logger');
 
 async function execute(job) {
     logger.info('Jobs', `Executing launch_tournament job with payload: ${JSON.stringify(job.payload || {})}`);
+
+    // ── Blackout check: skip if tournament blackout is active ────────────
+    try {
+        if (await db.isBlackoutActive('tournament')) {
+            logger.info('Jobs', 'Tournament blackout is active — skipping launch_tournament.');
+            return;
+        }
+    } catch (_) {}
     
     // Default config per user request: "10+10, arena, max participants"
     const payload = job.payload || {};

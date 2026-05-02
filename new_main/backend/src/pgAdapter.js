@@ -322,6 +322,14 @@ CREATE TABLE IF NOT EXISTS chat_config (
 INSERT INTO chat_config (key, value) VALUES ('max_messages', 1000)  ON CONFLICT (key) DO NOTHING;
 INSERT INTO chat_config (key, value) VALUES ('max_chars',    300)   ON CONFLICT (key) DO NOTHING;
 INSERT INTO chat_config (key, value) VALUES ('rate_limit_ms', 2000) ON CONFLICT (key) DO NOTHING;
+
+-- server_blackout (admin-defined maintenance windows: 'game' and 'tournament')
+CREATE TABLE IF NOT EXISTS server_blackout (
+    key        TEXT PRIMARY KEY,
+    start_at   TIMESTAMPTZ NOT NULL,
+    end_at     TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 `;
 
 module.exports = {

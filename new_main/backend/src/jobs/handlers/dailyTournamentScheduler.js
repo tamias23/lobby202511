@@ -58,6 +58,15 @@ function _resolveTimings(item, jobStartedAt) {
 
 async function execute(job) {
     logger.info('Jobs', 'Executing daily_tournament_scheduler job.');
+
+    // ── Blackout check: skip if tournament blackout is active ────────────
+    try {
+        if (await db.isBlackoutActive('tournament')) {
+            logger.info('Jobs', 'Tournament blackout is active — skipping daily_tournament_scheduler.');
+            return;
+        }
+    } catch (_) {}
+
     const jobStartedAt = Date.now();
 
     const schedule = await db.getTournamentSchedule();

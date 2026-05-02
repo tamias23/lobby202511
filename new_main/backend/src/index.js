@@ -2214,7 +2214,16 @@ io.on('connection', (socket) => {
     });
 
     // --- CREATE GAME REQUEST ---
-    socket.on('create_game_request', ({ timeControl, boardId, userId, username, role, rated }) => {
+    socket.on('create_game_request', async ({ timeControl, boardId, userId, username, role, rated }) => {
+        // ── Blackout check: no games during maintenance window ────────────
+        try {
+            const db = require('./db');
+            if (await db.isBlackoutActive('game')) {
+                socket.emit('request_error', { message: 'The game server will reboot in a few minutes.' });
+                return;
+            }
+        } catch (_) {}
+
         const effectiveUserId = userId || socket.userId || generateGuestId();
         // Check for duplicate by socketId OR userId — catches stale requests from
         // previous socket connections (e.g. after a brief reconnect as a guest).
@@ -2309,6 +2318,15 @@ io.on('connection', (socket) => {
 
     // --- ACCEPT GAME REQUEST ---
     socket.on('accept_game_request', async ({ requestId, userId, username, role }) => {
+        // ── Blackout check: no games during maintenance window ────────────
+        try {
+            const db = require('./db');
+            if (await db.isBlackoutActive('game')) {
+                socket.emit('request_error', { message: 'The game server will reboot in a few minutes.' });
+                return;
+            }
+        } catch (_) {}
+
         const reqIndex = lobby.gameRequests.findIndex(r => r.requestId === requestId);
         if (reqIndex === -1) {
             socket.emit('request_error', { message: 'Request no longer available.' });
@@ -2429,6 +2447,15 @@ io.on('connection', (socket) => {
 
     // --- CREATE BOT GAME ---
     socket.on('create_bot_game', async ({ userId, username, role, timeControl, botConfig }) => {
+        // ── Blackout check: no games during maintenance window ────────────
+        try {
+            const db = require('./db');
+            if (await db.isBlackoutActive('game')) {
+                socket.emit('bot_error', { message: 'The game server will reboot in a few minutes.' });
+                return;
+            }
+        } catch (_) {}
+
         // Role: JWT identity from socket is always authoritative; client role is fallback only
         const effectiveUserId = userId || socket.userId || generateGuestId();
         const effectiveUsername = username || effectiveUserId;
@@ -2557,6 +2584,15 @@ io.on('connection', (socket) => {
             socket.emit('tournament_error', { message: 'Tournaments are disabled on this server.' });
             return;
         }
+        // ── Blackout check: no tournaments during maintenance window ──────
+        try {
+            const db = require('./db');
+            if (await db.isBlackoutActive('tournament')) {
+                socket.emit('tournament_error', { message: 'The game server will reboot in a few minutes.' });
+                return;
+            }
+        } catch (_) {}
+
         const { canUser } = require('./utils/permissions');
         if (!canUser(socket.userRole, 'tournament_creator')) {
             socket.emit('tournament_error', { message: 'Only subscribers and admins can create tournaments.' });
@@ -3519,6 +3555,50 @@ io.on('connection', (socket) => {
         await db.deleteChatMessage(messageId);
         // Notify lobby clients to remove the message (cross-replica via @socket.io/redis-adapter)
         io.to('lobby').emit('chat:delete_message', { id: messageId });
+        callback({ success: true });
+    });
+
+    // --- ADMIN BLACKOUT (Stop Server) ---
+    socket.on('admin:get_blackout', async (data, callback) => {
+        if (typeof data === 'function') callback = data;
+        if (!permissions.canUser(socket.userRole, 'manage_jobs')) {
+            return callback({ success: false, error: 'Forbidden' });
+        }
+        const db = require('./db');
+        const windows = await db.getBlackoutWindows();
+        callback({ success: true, windows });
+    });
+
+    socket.on('admin:set_blackout', async (data, callback) => {
+        if (!permissions.canUser(socket.userRole, 'manage_jobs')) {
+            return callback({ success: false, error: 'Forbidden' });
+        }
+        const { key, startAt, endAt } = data;
+        if (!key || !['game', 'tournament'].includes(key)) {
+            return callback({ success: false, error: 'Invalid key. Must be "game" or "tournament".' });
+        }
+        if (!startAt || !endAt) {
+            return callback({ success: false, error: 'Start and end timestamps are required.' });
+        }
+        if (new Date(endAt) <= new Date(startAt)) {
+            return callback({ success: false, error: 'End date must be after start date.' });
+        }
+        const db = require('./db');
+        await db.upsertBlackoutWindow(key, startAt, endAt);
+        logger.info('Admin', `Blackout window set: ${key} from ${new Date(startAt).toISOString()} to ${new Date(endAt).toISOString()}`);
+        callback({ success: true });
+    });
+
+    socket.on('admin:clear_blackout', async ({ key }, callback) => {
+        if (!permissions.canUser(socket.userRole, 'manage_jobs')) {
+            return callback({ success: false, error: 'Forbidden' });
+        }
+        if (!key || !['game', 'tournament'].includes(key)) {
+            return callback({ success: false, error: 'Invalid key.' });
+        }
+        const db = require('./db');
+        await db.deleteBlackoutWindow(key);
+        logger.info('Admin', `Blackout window cleared: ${key}`);
         callback({ success: true });
     });
 

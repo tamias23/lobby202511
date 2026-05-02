@@ -751,6 +751,51 @@ async function upsertChatConfig(key, value) {
     } catch (e) { logger.error('DB', `upsertChatConfig(${key}) failed:`, e.message); }
 }
 
+// ─── Server Blackout (admin-defined maintenance windows) ────────────────────
+
+async function getBlackoutWindows() {
+    if (!_isUp()) return [];
+    try {
+        const r = await _pool().query('SELECT * FROM server_blackout ORDER BY key');
+        return r.rows;
+    } catch (e) { logger.error('DB', 'getBlackoutWindows failed:', e.message); return []; }
+}
+
+async function upsertBlackoutWindow(key, startAt, endAt) {
+    if (!_isUp()) return;
+    try {
+        await _pool().query(
+            `INSERT INTO server_blackout (key, start_at, end_at, updated_at)
+             VALUES ($1, $2, $3, NOW())
+             ON CONFLICT (key) DO UPDATE SET start_at = $2, end_at = $3, updated_at = NOW()`,
+            [key, toDate(startAt), toDate(endAt)]
+        );
+    } catch (e) { logger.error('DB', `upsertBlackoutWindow(${key}) failed:`, e.message); }
+}
+
+async function deleteBlackoutWindow(key) {
+    if (!_isUp()) return;
+    try {
+        await _pool().query('DELETE FROM server_blackout WHERE key = $1', [key]);
+    } catch (e) { logger.error('DB', `deleteBlackoutWindow(${key}) failed:`, e.message); }
+}
+
+/**
+ * Check whether a blackout of the given type is currently active.
+ * @param {'game'|'tournament'} type
+ * @returns {Promise<boolean>}
+ */
+async function isBlackoutActive(type) {
+    if (!_isUp()) return false;
+    try {
+        const r = await _pool().query(
+            `SELECT 1 FROM server_blackout WHERE key = $1 AND start_at <= NOW() AND end_at >= NOW()`,
+            [type]
+        );
+        return r.rows.length > 0;
+    } catch (e) { logger.error('DB', `isBlackoutActive(${type}) failed:`, e.message); return false; }
+}
+
 // ─── Exports ────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -770,4 +815,6 @@ module.exports = {
     getTournamentSchedule, upsertTournamentScheduleItem, deleteTournamentScheduleItem,
     getChatMessages, saveChatMessage, deleteChatMessage,
     getChatConfig, upsertChatConfig,
+    getBlackoutWindows, upsertBlackoutWindow, deleteBlackoutWindow, isBlackoutActive,
 };
+
