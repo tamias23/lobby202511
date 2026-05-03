@@ -1887,6 +1887,23 @@ setInterval(async () => {
     }
 }, 1000);
 
+// --- helper to extract the real client IP from a socket ---
+// socket.handshake.address is the TCP-level remote address which, behind
+// nginx / Cloudflare Tunnel, is always the proxy container IP.
+// The real client IP is passed in X-Forwarded-For or X-Real-IP headers.
+function getSocketRealIp(socket) {
+    const headers = socket.handshake?.headers || {};
+    // X-Forwarded-For may contain a comma-separated chain; the first entry is the client.
+    const xff = headers['x-forwarded-for'];
+    if (xff) {
+        const first = xff.split(',')[0].trim();
+        if (first) return first;
+    }
+    const xri = headers['x-real-ip'];
+    if (xri) return xri.trim();
+    return socket.handshake?.address || 'unknown';
+}
+
 // --- helper to build initialState payload ---
 function buildInitialState(gameData) {
     return {
@@ -2500,7 +2517,7 @@ io.on('connection', (socket) => {
 
         // IP-based rate limit (applies to all roles, including guests)
         // Fail-open: if Valkey is unavailable, the check is skipped.
-        const ip = socket.handshake?.address || 'unknown';
+        const ip = getSocketRealIp(socket);
         const ipCheck = await valkeySync.checkAndIncrementBotIpLimit(ip);
         if (!ipCheck.allowed) {
             socket.emit('bot_error', { message: `Too many bot games from your network today (${ipCheck.count}/${ipCheck.limit}). Try again tomorrow.` });

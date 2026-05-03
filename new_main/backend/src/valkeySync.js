@@ -139,6 +139,39 @@ function syncTournamentList(openTournaments, activeTournaments) {
 }
 
 /**
+ * Publish the full tournament state (complete objects with participants & games)
+ * to Valkey so all instances can serve enter_tournament_room, join, leave.
+ *
+ * @param {Object} fullState — { tournamentId: { ...tournamentObj } }
+ */
+function syncTournamentFullState(fullState) {
+    _publish({ type: 'tournament:full_state', fullState });
+}
+
+/**
+ * Notify all instances that a participant joined a tournament.
+ * Used when a join happens on a non-owning instance so the owner can merge.
+ */
+function syncTournamentParticipantJoin(tournamentId, participant) {
+    _publish({ type: 'tournament:participant_join', tournamentId, participant });
+}
+
+/**
+ * Notify all instances that a participant left a tournament.
+ */
+function syncTournamentParticipantLeave(tournamentId, userId) {
+    _publish({ type: 'tournament:participant_leave', tournamentId, userId });
+}
+
+/**
+ * Notify all instances that a tournament game completed.
+ * Used when a game finishes on a non-owning instance so the owner updates standings.
+ */
+function syncTournamentGameResult(tournamentId, gameHash, winnerSide, moves) {
+    _publish({ type: 'tournament:game_result', tournamentId, gameHash, winnerSide, moves });
+}
+
+/**
  * Read the latest tournament list from Valkey.
  * Returns null if Valkey is unavailable or no data.
  * @returns {Promise<{open: Array, active: Array}|null>}
@@ -262,6 +295,18 @@ function _onSyncMessage(raw) {
         case 'tournament:sync':
             _applyTournamentSync(msg);
             break;
+        case 'tournament:full_state':
+            _applyTournamentFullState(msg);
+            break;
+        case 'tournament:participant_join':
+            _applyTournamentParticipantJoin(msg);
+            break;
+        case 'tournament:participant_leave':
+            _applyTournamentParticipantLeave(msg);
+            break;
+        case 'tournament:game_result':
+            _applyTournamentGameResult(msg);
+            break;
         default:
             logger.debug('Sync', `Unknown sync message type: ${msg.type}`);
     }
@@ -348,6 +393,30 @@ function _applyTournamentSync(msg) {
     if (!_tournamentManager || !msg.payload) return;
     _tournamentManager.applyRemoteTournamentList(msg.payload.open, msg.payload.active);
     logger.debug('Sync', `Received tournament:sync from ${msg.instanceId.slice(0, 8)}`);
+}
+
+function _applyTournamentFullState(msg) {
+    if (!_tournamentManager || !msg.fullState) return;
+    _tournamentManager.applyRemoteTournamentFullState(msg.fullState, msg.instanceId);
+    logger.debug('Sync', `Received tournament:full_state from ${msg.instanceId.slice(0, 8)}`);
+}
+
+function _applyTournamentParticipantJoin(msg) {
+    if (!_tournamentManager || !msg.tournamentId || !msg.participant) return;
+    _tournamentManager.applyRemoteParticipantJoin(msg.tournamentId, msg.participant);
+    logger.debug('Sync', `Received tournament:participant_join for ${msg.tournamentId} from ${msg.instanceId.slice(0, 8)}`);
+}
+
+function _applyTournamentParticipantLeave(msg) {
+    if (!_tournamentManager || !msg.tournamentId || !msg.userId) return;
+    _tournamentManager.applyRemoteParticipantLeave(msg.tournamentId, msg.userId);
+    logger.debug('Sync', `Received tournament:participant_leave for ${msg.tournamentId} from ${msg.instanceId.slice(0, 8)}`);
+}
+
+function _applyTournamentGameResult(msg) {
+    if (!_tournamentManager) return;
+    _tournamentManager.applyRemoteGameResult(msg.tournamentId, msg.gameHash, msg.winnerSide, msg.moves || []);
+    logger.debug('Sync', `Received tournament:game_result for ${msg.tournamentId} from ${msg.instanceId.slice(0, 8)}`);
 }
 
 function _applyChatMessage(msg) {
@@ -822,6 +891,10 @@ module.exports = {
     tryLockRequest,
     tryLockJob,
     syncTournamentList,
+    syncTournamentFullState,
+    syncTournamentParticipantJoin,
+    syncTournamentParticipantLeave,
+    syncTournamentGameResult,
     getTournamentListFromValkey,
     checkAndIncrementBotIpLimit,
     getBotIpLimitData,

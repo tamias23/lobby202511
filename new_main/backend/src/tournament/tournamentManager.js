@@ -98,6 +98,18 @@ function _syncToValkey() {
         applyRemoteTournamentList(open, active);
         const vs = _getValkeySync();
         vs.syncTournamentList(open, active);
+
+        // Also broadcast full tournament state so all instances can serve
+        // enter_tournament_room, join_tournament, leave_tournament.
+        const fullState = {};
+        for (const [id, t] of activeTournaments) {
+            // Only broadcast locally-owned tournaments (not those received from other instances)
+            if (t._remoteOwned) continue;
+            // Strip non-serializable / instance-local fields
+            const { _remoteOwned, _sourceInstanceId, ...serializable } = t;
+            fullState[id] = serializable;
+        }
+        vs.syncTournamentFullState(fullState);
     } catch (_) { /* valkeySync may not be init yet on startup */ }
 }
 
@@ -335,6 +347,15 @@ async function joinTournament(tournamentId, userId, username, password, skipPass
     broadcastTournamentUpdate(tournamentId);
 
     _syncToValkey();
+
+    // If this tournament is remote-owned, also broadcast a specific participant
+    // event so the owning instance merges the join immediately.
+    if (t._remoteOwned) {
+        try {
+            _getValkeySync().syncTournamentParticipantJoin(tournamentId, participant);
+        } catch (_) {}
+    }
+
     return participant;
 }
 
@@ -359,6 +380,13 @@ async function leaveTournament(tournamentId, userId) {
         await db.removeParticipant(tournamentId, userId);
         await db.updateTournament(tournamentId, { current_count: t.current_count });
         broadcastTournamentUpdate(tournamentId);
+
+        // Notify owning instance if this is a remote tournament
+        if (t._remoteOwned) {
+            try {
+                _getValkeySync().syncTournamentParticipantLeave(tournamentId, userId);
+            } catch (_) {}
+        }
     }
 
     // If creator leaves an open tournament, cancel it
@@ -727,6 +755,18 @@ async function onGameComplete(gameHash, winnerSide, moves = []) {
         }
 
         broadcastTournamentUpdate(tid);
+
+        // If this tournament is remote-owned, notify the owning instance
+        // so it updates its authoritative standings.
+        if (t._remoteOwned) {
+            try {
+                _getValkeySync().syncTournamentGameResult(tid, gameHash, winnerSide, moves);
+            } catch (_) {}
+        } else {
+            // We own this tournament — re-sync full state so all instances get updated standings
+            _syncToValkey();
+        }
+
         return tid;
     }
     return null;
@@ -875,6 +915,8 @@ async function abortArenaExpiredGames(tournamentId) {
 async function checkArenaExpiry() {
     const nowMs = Date.now();
     for (const [tid, t] of activeTournaments) {
+        // Skip remote-owned tournaments — their owning instance handles lifecycle
+        if (t._remoteOwned) continue;
         if (t.format === 'arena' && t.status === 'active') {
             if (t.arenaEndAt && nowMs >= new Date(t.arenaEndAt).getTime()) {
                 // Fire-and-forget; errors are logged inside
@@ -891,6 +933,9 @@ async function checkArenaExpiry() {
 async function cleanupExpired() {
     const nowMs = Date.now();
     for (const [tid, t] of activeTournaments) {
+        // Skip remote-owned tournaments — their owning instance handles lifecycle
+        if (t._remoteOwned) continue;
+
         // Remove if past remove_at
         if (t.remove_at && nowMs > ms(t.remove_at)) {
             logger.info('Tournament', `${tid} expired (past remove_at). Cancelling.`);
@@ -1160,6 +1205,103 @@ function getActiveTournamentsListCached() {
     return _cachedActiveList !== null ? _cachedActiveList : getActiveTournamentsList();
 }
 
+/**
+ * Merge full tournament objects received from a remote instance into the local
+ * activeTournaments Map.  This enables any instance to serve enter_tournament_room,
+ * join_tournament, and leave_tournament for tournaments created on other instances.
+ *
+ * @param {Object} remoteFull     — { tournamentId: { ...tournament } }
+ * @param {string} senderInstanceId — UUID of the sending instance
+ */
+function applyRemoteTournamentFullState(remoteFull, senderInstanceId) {
+    if (!remoteFull || typeof remoteFull !== 'object') return;
+
+    const remoteIds = new Set(Object.keys(remoteFull));
+
+    // Upsert tournaments from the remote instance
+    for (const [id, data] of Object.entries(remoteFull)) {
+        const existing = activeTournaments.get(id);
+
+        if (!existing) {
+            // New tournament from remote — add it
+            activeTournaments.set(id, { ...data, _remoteOwned: true, _sourceInstanceId: senderInstanceId });
+        } else if (existing._remoteOwned && existing._sourceInstanceId === senderInstanceId) {
+            // Tournament owned by the same remote instance — update with latest
+            activeTournaments.set(id, { ...data, _remoteOwned: true, _sourceInstanceId: senderInstanceId });
+        } else if (!existing._remoteOwned) {
+            // We own this tournament locally — merge participant list from remote
+            // (handles the case where a user joined on a different instance)
+            if (Array.isArray(data.participants) && data.participants.length > existing.participants.length) {
+                // Remote has more participants — merge new ones
+                for (const rp of data.participants) {
+                    if (!existing.participants.find(lp => lp.user_id === rp.user_id)) {
+                        existing.participants.push(rp);
+                        existing.current_count = existing.participants.length;
+                    }
+                }
+            }
+        }
+    }
+
+    // Remove tournaments that came from this sender but are no longer in their state
+    for (const [id, t] of activeTournaments) {
+        if (t._remoteOwned && t._sourceInstanceId === senderInstanceId && !remoteIds.has(id)) {
+            activeTournaments.delete(id);
+        }
+    }
+}
+
+/**
+ * Apply a remote participant join event.  Called when a user joins on a non-owning
+ * instance and broadcasts the join so all instances (especially the owner) stay in sync.
+ */
+function applyRemoteParticipantJoin(tournamentId, participant) {
+    const t = activeTournaments.get(tournamentId);
+    if (!t) return;
+    // Don't add if already present
+    if (t.participants.find(p => p.user_id === participant.user_id)) return;
+    t.participants.push(participant);
+    t.current_count = t.participants.length;
+    logger.info('Tournament', `Remote join: ${participant.username || participant.user_id} joined ${tournamentId} (now ${t.current_count} players)`);
+    broadcastTournamentUpdate(tournamentId);
+    // If we own this tournament, re-sync so all instances get the updated state
+    if (!t._remoteOwned) _syncToValkey();
+}
+
+/**
+ * Apply a remote participant leave event.
+ */
+function applyRemoteParticipantLeave(tournamentId, userId) {
+    const t = activeTournaments.get(tournamentId);
+    if (!t || t.status !== 'open') return;
+    const idx = t.participants.findIndex(p => p.user_id === userId);
+    if (idx === -1) return;
+    t.participants.splice(idx, 1);
+    t.current_count = t.participants.length;
+    logger.info('Tournament', `Remote leave: ${userId} left ${tournamentId} (now ${t.current_count} players)`);
+    broadcastTournamentUpdate(tournamentId);
+    if (!t._remoteOwned) _syncToValkey();
+}
+
+/**
+ * Apply a remote game result.  Called when a game finishes on a non-owning
+ * instance and broadcasts the result so the owner updates standings, advances
+ * rounds, and checks for tournament completion.
+ */
+async function applyRemoteGameResult(tournamentId, gameHash, winnerSide, moves) {
+    const t = activeTournaments.get(tournamentId);
+    if (!t) return;
+    // Only the owning instance should process this (to advance rounds, etc.)
+    if (t._remoteOwned) return;
+    // Delegate to the existing onGameComplete logic which handles scoring,
+    // round advancement, and tournament completion.
+    try {
+        await onGameComplete(gameHash, winnerSide, moves);
+    } catch (e) {
+        logger.error('Tournament', `applyRemoteGameResult error for ${tournamentId}/${gameHash}:`, e.message);
+    }
+}
+
 module.exports = {
     initConfig,
     loadFromDb,
@@ -1176,6 +1318,10 @@ module.exports = {
     getOpenTournamentsCached,
     getActiveTournamentsListCached,
     applyRemoteTournamentList,
+    applyRemoteTournamentFullState,
+    applyRemoteParticipantJoin,
+    applyRemoteParticipantLeave,
+    applyRemoteGameResult,
     getTournamentById,
     getUserActiveTournament,
     getUserActiveTournamentSync,
