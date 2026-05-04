@@ -3451,6 +3451,25 @@ io.on('connection', (socket) => {
         socket.join(gameId);
         const game = lobby.activeGames.get(gameId);
         if (game) {
+            // Relink socket and clear disconnect timers if a registered player is returning
+            if (socket.userId && !socket.userId.startsWith('guest_')) {
+                if (game.white === socket.userId && game.whiteSocketId !== socket.id) {
+                    game.whiteSocketId = socket.id;
+                    if (game.whiteDisconnectedAt) {
+                        game.whiteDisconnectedAt = null;
+                        valkeySync.syncDisconnect(gameId, 'white', null);
+                        logger.info('Game', `Player (white) reconnected to game ${gameId}`);
+                    }
+                } else if (game.black === socket.userId && game.blackSocketId !== socket.id) {
+                    game.blackSocketId = socket.id;
+                    if (game.blackDisconnectedAt) {
+                        game.blackDisconnectedAt = null;
+                        valkeySync.syncDisconnect(gameId, 'black', null);
+                        logger.info('Game', `Player (black) reconnected to game ${gameId}`);
+                    }
+                }
+            }
+
             socket.emit('game_update', {
                 pieces: game.pieces,
                 turn: game.turn,

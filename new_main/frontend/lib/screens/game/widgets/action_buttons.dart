@@ -412,6 +412,7 @@ class _ActionButtonsState extends ConsumerState<ActionButtons> {
         onTap: enabled ? onTap : null,
         child: Container(
           width: double.infinity,
+          alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(vertical: 7),
           decoration: BoxDecoration(
             color: bgColor,
@@ -464,7 +465,7 @@ class _ActionButtonsState extends ConsumerState<ActionButtons> {
     }
 
     buttons.add(stackBtn(
-      label: '', icon: Icons.swap_vert,
+      label: widget.isFlipped ? t.tr('ui.unflip_board') : t.tr('ui.flip_board'),
       bgColor: const Color(0xFF34495E),
       enabled: true,
       onTap: widget.onFlip,
@@ -472,7 +473,9 @@ class _ActionButtonsState extends ConsumerState<ActionButtons> {
 
     if (!widget.spectator && !isGameOver) {
       if (_resignConfirm) {
-        buttons.add(Row(children: [
+        buttons.add(Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
           Expanded(child: stackBtn(label: '✓ ${t.tr('ui.resign')}', bgColor: const Color(0xFFC0392B), enabled: true,
             onTap: () { setState(() => _resignConfirm = false); widget.onResign(); })),
           const SizedBox(width: 4),
@@ -568,17 +571,17 @@ class _ActionButtonsState extends ConsumerState<ActionButtons> {
         border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // ── Left: buttons stacked vertically ───────────────────────────
           Expanded(
             flex: hasRightColumn ? 3 : 1,
             child: Column(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisSize: MainAxisSize.max,
               children: [
                 for (int i = 0; i < buttons.length; i++) ...[
                   if (i > 0) const SizedBox(height: 4),
-                  buttons[i],
+                  Expanded(child: buttons[i]),
                 ],
               ],
             ),
@@ -586,15 +589,15 @@ class _ActionButtonsState extends ConsumerState<ActionButtons> {
 
           // ── Right: color + mage ────────────────────────────────────────
           if (hasRightColumn) ...[
-            Container(width: 1, height: 60, color: Colors.white.withValues(alpha: 0.1),
+            Container(width: 1, color: Colors.white.withValues(alpha: 0.1),
               margin: const EdgeInsets.symmetric(horizontal: 8)),
             Expanded(
               flex: 2,
               child: Column(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisSize: MainAxisSize.max,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  if (colorSection != null) colorSection,
+                  if (colorSection != null) Expanded(child: Center(child: colorSection)),
                   if (mageSection != null) ...[
                     if (colorSection != null) const SizedBox(height: 6),
                     mageSection,

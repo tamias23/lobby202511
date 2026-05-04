@@ -482,9 +482,7 @@ class _GameBoardState extends ConsumerState<GameBoard> {
         // ── Action panel (fixed height = 25% of screen, never resizes) ───
         SizedBox(
           height: MediaQuery.of(context).size.height * 0.25,
-          child: SingleChildScrollView(
-            child: _buildActionPanel(context, gs, gameState, isDesktop: false, isPortrait: true),
-          ),
+          child: _buildActionPanel(context, gs, gameState, isDesktop: false, isPortrait: true),
         ),
       ],
     );
@@ -974,34 +972,37 @@ class _GameBoardState extends ConsumerState<GameBoard> {
         (gs.turn == 'black' && widget.side == 'black');
     final myPassCount = (gs.passCount[widget.side] ?? 0);
 
+    final actionButtonsWidget = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      child: ActionButtons(
+        gameId: widget.gameId,
+        phase: gs.phase,
+        side: widget.side,
+        turn: gs.turn,
+        myTurn: myTurn,
+        isFlipped: _isFlipped,
+        spectator: widget.side == 'spectator',
+        isPortrait: isPortrait,
+        colorChosen: gs.colorChosen,
+        mageUnlocked: gs.mageUnlocked,
+        colorsEverChosen: gs.colorsEverChosen,
+        myPassCount: myPassCount,
+        colorTheme: _colorTheme,
+        onColorThemeChanged: (t) => setState(() => _colorTheme = t),
+        onFlip: () => setState(() => _isFlipped = !_isFlipped),
+        onEndTurnSetup: notifier.endTurnSetup,
+        onRandomSetup: () => notifier.randomizeSetup(widget.side),
+        onPassTurn: notifier.passTurnPlaying,
+        onResign: notifier.resign,
+        onColorSelected: (color) => notifier.selectColor(color, widget.side),
+      ),
+    );
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: isPortrait ? CrossAxisAlignment.stretch : CrossAxisAlignment.center,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-          child: ActionButtons(
-            gameId: widget.gameId,
-            phase: gs.phase,
-            side: widget.side,
-            turn: gs.turn,
-            myTurn: myTurn,
-            isFlipped: _isFlipped,
-            spectator: widget.side == 'spectator',
-            isPortrait: isPortrait,
-            colorChosen: gs.colorChosen,
-            mageUnlocked: gs.mageUnlocked,
-            colorsEverChosen: gs.colorsEverChosen,
-            myPassCount: myPassCount,
-            colorTheme: _colorTheme,
-            onColorThemeChanged: (t) => setState(() => _colorTheme = t),
-            onFlip: () => setState(() => _isFlipped = !_isFlipped),
-            onEndTurnSetup: notifier.endTurnSetup,
-            onRandomSetup: () => notifier.randomizeSetup(widget.side),
-            onPassTurn: notifier.passTurnPlaying,
-            onResign: notifier.resign,
-            onColorSelected: (color) => notifier.selectColor(color, widget.side),
-          ),
-        ),
+        isPortrait ? Expanded(child: actionButtonsWidget) : actionButtonsWidget,
         // ── Move history (hidden in portrait to save space) ──────────────────
         if (!isPortrait && gs.moves.isNotEmpty)
           isDesktop ? Flexible(child: _buildMoveHistory(gs.moves, expand: true)) : _buildMoveHistory(gs.moves, expand: false),
