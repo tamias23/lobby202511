@@ -128,18 +128,16 @@ class _GameBoardState extends ConsumerState<GameBoard> {
         maxY = math.max(maxY, pt[1]);
       }
     }
-    // Mirror the legacy SVG viewBox calculation:
-    //   padX = 60  — wide enough to include off-board piece clusters
-    //               at x≈-33 (white side) and x≈443 (black side).
-    // Without this, off-board pieces at negative X board-coords produce
-    // a negative screen-X that falls outside the Stack's layout box,
-    // so their GestureDetectors are never hit-tested.
-    // In portrait mode, off-board pieces are placed above/below, so we
-    // only need a tiny horizontal margin and the board can stretch wider.
-    final double padX = isPortrait ? 4 : 30;
-    final double padY = isPortrait ? 4 : 2;
-    return (minX: minX - padX, minY: minY - padY,
-            maxX: maxX + padX, maxY: maxY + padY);
+    // In portrait mode, off-board pieces are placed above/below the board canvas,
+    // requiring vertical padding to prevent them from overlapping the board or screen edges.
+    // In landscape mode, off-board pieces are placed left/right and extend downwards.
+    final double padLeft   = isPortrait ? 4 : 45;
+    final double padRight  = isPortrait ? 4 : 45;
+    final double padTop    = isPortrait ? 60 : 10;
+    final double padBottom = isPortrait ? 60 : 10;
+
+    return (minX: minX - padLeft, minY: minY - padTop,
+            maxX: maxX + padRight, maxY: maxY + padBottom);
   }
 
   /// Convert raw board JSON to a map of BoardPolygon objects.
@@ -370,10 +368,10 @@ class _GameBoardState extends ConsumerState<GameBoard> {
     final orientation = MediaQuery.of(context).orientation;
     final isPortrait = orientation == Orientation.portrait;
     final isDesktop = screenWidth > 900; // true desktop/laptop only — tablets stay in mobile layout
-    // Panel widths are only used in landscape — cap at 20% of screen width.
-    final double maxPanelW = screenWidth * 0.20;
-    final double leftPanelWidth = isPortrait ? 0 : math.min(screenWidth * 0.18, maxPanelW);
-    final double rightPanelWidth = isPortrait ? 0 : math.min(screenWidth * 0.18, maxPanelW);
+    // Panel widths are only used in landscape — cap at 18% of screen width.
+    final double maxPanelW = screenWidth * 0.18;
+    final double leftPanelWidth = isPortrait ? 0 : math.min(screenWidth * 0.16, maxPanelW);
+    final double rightPanelWidth = isPortrait ? 0 : math.min(screenWidth * 0.16, maxPanelW);
 
 
     return Scaffold(
@@ -479,9 +477,9 @@ class _GameBoardState extends ConsumerState<GameBoard> {
           isRunning: gs.turn == bottomSide,
         ),
 
-        // ── Action panel (fixed height = 25% of screen, never resizes) ───
+        // ── Action panel (fixed height = 22% of screen, never resizes) ───
         SizedBox(
-          height: MediaQuery.of(context).size.height * 0.25,
+          height: MediaQuery.of(context).size.height * 0.22,
           child: _buildActionPanel(context, gs, gameState, isDesktop: false, isPortrait: true),
         ),
       ],
@@ -793,11 +791,16 @@ class _GameBoardState extends ConsumerState<GameBoard> {
 
       final double pieceSize = (scale * 36.0).clamp(28.0, 90.0).toDouble();
 
-      // Board edges in screen coordinates
-      final bounds = _boardBounds(_latestPolygons, isPortrait: true);
-      final double scaledBoardH = (bounds.maxY - bounds.minY) * scale;
-      final double boardScreenTop = offsetY + bounds.minY * scale;
-      final double boardScreenBot = boardScreenTop + scaledBoardH;
+      // Visual board edges in screen coordinates (ignoring padding)
+      double minPolyY = double.infinity, maxPolyY = double.negativeInfinity;
+      for (final poly in _latestPolygons.values) {
+        for (final pt in poly.points) {
+          minPolyY = math.min(minPolyY, pt[1]);
+          maxPolyY = math.max(maxPolyY, pt[1]);
+        }
+      }
+      final double visualBoardScreenTop = offsetY + minPolyY * scale;
+      final double visualBoardScreenBot = offsetY + maxPolyY * scale;
 
       // Check if all pieces fit side-by-side without stacking
       final double usableW = availableWidth - pieceSize;
@@ -819,10 +822,10 @@ class _GameBoardState extends ConsumerState<GameBoard> {
         // Vertical: snug against the board
         const double margin = 4.0;
         if (placeOnTop) {
-          cy = (boardScreenTop - margin - pieceSize / 2)
+          cy = (visualBoardScreenTop - margin - pieceSize / 2)
               .clamp(pieceSize / 2, double.infinity);
         } else {
-          cy = (boardScreenBot + margin + pieceSize / 2)
+          cy = (visualBoardScreenBot + margin + pieceSize / 2)
               .clamp(0.0, availableHeight - pieceSize / 2);
         }
       } else {
@@ -845,11 +848,11 @@ class _GameBoardState extends ConsumerState<GameBoard> {
         // Vertical: snug against the board, with stack shift
         const double margin = 4.0;
         if (placeOnTop) {
-          final double baseY = boardScreenTop - margin - pieceSize / 2;
+          final double baseY = visualBoardScreenTop - margin - pieceSize / 2;
           cy = (baseY - idxInGroup * stackShiftY)
               .clamp(pieceSize / 2, double.infinity);
         } else {
-          final double baseY = boardScreenBot + margin + pieceSize / 2;
+          final double baseY = visualBoardScreenBot + margin + pieceSize / 2;
           cy = (baseY + idxInGroup * stackShiftY)
               .clamp(0.0, availableHeight - pieceSize / 2);
         }
