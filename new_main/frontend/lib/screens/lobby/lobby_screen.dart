@@ -282,12 +282,17 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   }
 
   Widget _buildMainScrollView(BuildContext context, LobbyState lobby, AppUser? auth, bool wide) {
+    final screenW = MediaQuery.of(context).size.width;
+    final screenH = MediaQuery.of(context).size.height;
+    final isPhoneLandscape = screenH < 500 && screenW > screenH;
+    final topPad = isPhoneLandscape
+        ? 70.0
+        : screenW < 400 ? 160.0 : screenW < 500 ? 140.0 : screenW < 700 ? 100.0 : 80.0;
+
     return CustomScrollView(slivers: [
-      // ── Title — first content, sits at the very top ──────────────
-      SliverToBoxAdapter(child: _buildTitle(context, lobby)),
       // ── Main area: stats | TC grid | (right space) ───────────────
       SliverPadding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: EdgeInsets.fromLTRB(16, topPad, 16, 0),
         sliver: SliverToBoxAdapter(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -340,19 +345,38 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
 
   Widget _buildTopBar(BuildContext context, AppUser? auth) {
     final bg = ref.watch(bgProvider);
-    final narrow = MediaQuery.of(context).size.width < 500;
+    final screenW = MediaQuery.of(context).size.width;
+    final screenH = MediaQuery.of(context).size.height;
+    final narrow = screenW < 500;
+    final isPhoneLandscape = screenH < 500 && screenW > screenH;
+    final subtitleSize = (screenW < 400 || isPhoneLandscape) ? 12.0 : 14.0;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Auth / nav row — wraps on narrow screens to avoid overflow
-          Wrap(
-            spacing: 6,
-            runSpacing: 4,
-            alignment: WrapAlignment.center,
-            children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 6.0, left: 4.0),
+            child: Text('dedalthegame.com',
+              style: GoogleFonts.outfit(
+                fontSize: subtitleSize,
+                color: DTheme.textMutedDark,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Auth / nav row — wraps on narrow screens to avoid overflow
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  alignment: WrapAlignment.end,
+                  children: [
               _HeaderButton(label: ref.tr('ui.analysis'), onTap: () => context.go('/analysis')),
               _HeaderButton(label: ref.tr('ui.tutorial'), onTap: () => context.go('/tutorial')),
               if (!narrow)
@@ -393,58 +417,10 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
               _BgToggle(bg: bg, onTap: () => ref.read(bgProvider.notifier).cycle()),
             ],
           ),
+              ],
+            ),
+          ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildTitle(BuildContext context, LobbyState lobby) {
-    final screenW = MediaQuery.of(context).size.width;
-    final screenH = MediaQuery.of(context).size.height;
-    final isPhoneLandscape = screenH < 500 && screenW > screenH;
-    // On narrow/portrait screens the top bar is taller (buttons may wrap),
-    // so push the title down further to avoid overlap.
-    // On phone-landscape the width is "wide" but the bar still covers the title.
-    final topPad = isPhoneLandscape
-        ? 70.0
-        : screenW < 500 ? 90.0 : screenW < 700 ? 80.0 : 0.0;
-    final titleSize = isPhoneLandscape
-        ? 40.0
-        : screenW < 400 ? 42.0 : screenW < 600 ? 52.0 : 64.0;
-    final welcomeSize = (screenW < 400 || isPhoneLandscape) ? 9.0 : 11.0;
-    final subtitleSize = (screenW < 400 || isPhoneLandscape) ? 12.0 : 14.0;
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(20, topPad, 20, 12),
-      child: Center(
-        child: Column(
-          children: [
-            // "welcome to ..." in muted small caps
-            Text('WELCOME TO …',
-              style: GoogleFonts.outfit(
-                fontSize: welcomeSize, fontWeight: FontWeight.w700,
-                color: DTheme.textMutedDark, letterSpacing: 3,
-              ),
-            ),
-            const SizedBox(height: 2),
-            // "DEDAL" with gradient text (ShaderMask)
-            ShaderMask(
-              shaderCallback: (bounds) => _kGrad.createShader(bounds),
-              child: Text('DEDAL',
-                style: GoogleFonts.outfit(
-                  fontSize: titleSize, fontWeight: FontWeight.w900,
-                  color: Colors.white, letterSpacing: -2, height: 1,
-                ),
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(ref.tr('ui.choose_tc'),
-              style: GoogleFonts.outfit(
-                fontSize: subtitleSize, color: DTheme.textMutedDark,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

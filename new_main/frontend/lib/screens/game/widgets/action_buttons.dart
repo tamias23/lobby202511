@@ -501,7 +501,7 @@ class _ActionButtonsState extends ConsumerState<ActionButtons> {
       final colorsToShow = turnChosenColor != null ? [turnChosenColor] : _allColors;
       final canPick = widget.myTurn && myChosenColor == null;
       // Bigger dots when mage section is gone (more space available)
-      final double dotSize = widget.mageUnlocked ? 44.0 : 34.0;
+      final double dotSize = widget.mageUnlocked ? 77.0 : 59.5;
       colorSection = Wrap(
         alignment: WrapAlignment.center,
         spacing: 6,
@@ -736,8 +736,8 @@ class _ColorDotState extends State<_ColorDot> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          width: 44,
-          height: 44,
+          width: 77,
+          height: 77,
           transform: _hovered ? (Matrix4.identity()..scale(1.18)) : Matrix4.identity(),
           transformAlignment: Alignment.center,
           decoration: BoxDecoration(
