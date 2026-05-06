@@ -1,0 +1,16 @@
+{
+  "name": "visualize_and_delete",
+  "version": "1.0.0",
+  "description": "A small tool to visualize and clean up board JSON files.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

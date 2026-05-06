@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Board Visualizer & Cleaner</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Outfit:wght@500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1>Board Visualizer</h1>
+            <div class="directory-selector">
+                <input type="text" id="dirPath" value="/home/mat/Bureau/lobby202511/games/data" placeholder="Directory Path">
+                <button id="loadBtn" class="secondary-btn">Load Directory</button>
+            </div>
+        </header>
+
+        <main>
+            <div class="board-view">
+                <div id="status" class="status-badge">Loading...</div>
+                <div id="filename-display" class="filename">Select a directory to start</div>
+                <div class="canvas-container">
+                    <svg id="board-svg" viewBox="0 0 410 410"></svg>
+                </div>
+            </div>
+
+            <div class="controls">
+                <div class="stats">
+                    <span id="current-index">0</span> / <span id="total-files">0</span>
+                </div>
+                <div class="button-group">
+                    <button id="deleteBtn" class="danger-btn" disabled>
+                        <span class="icon">🗑️</span> Delete (Move)
+                    </button>
+                    <button id="nextBtn" class="primary-btn" disabled>
+                        Next <span class="icon">➡️</span>
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <div id="toast" class="toast"></div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
