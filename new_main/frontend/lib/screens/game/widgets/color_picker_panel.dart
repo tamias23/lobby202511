@@ -65,8 +65,8 @@ class _ColorSwatchState extends State<_ColorSwatch> {
       onExit:  (_) => setState(() => _hovered = false),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        width: 77,
-        height: 77,
+        width: 56,
+        height: 56,
         decoration: BoxDecoration(
           color: widget.color,
           borderRadius: BorderRadius.circular(8),
