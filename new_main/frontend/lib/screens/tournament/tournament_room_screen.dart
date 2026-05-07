@@ -359,13 +359,15 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
                 3: FixedColumnWidth(30),
                 4: FixedColumnWidth(30),
                 5: FixedColumnWidth(30),
+                6: FixedColumnWidth(30),
+                7: FixedColumnWidth(35),
               },
               children: [
                 TableRow(
                   decoration: BoxDecoration(
                     border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08)))),
                   children: [
-                    _TH('#'), _TH('Player'), _TH('Pts'),
+                    _TH('#'), _TH('Player'), _TH('Pts'), _TH('Pld'),
                     _TH('W'), _TH('D'), _TH('L'),
                     if (isSwiss) _TH('TB'),
                   ].map((w) => Padding(padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4), child: w)).toList(),
@@ -412,11 +414,12 @@ class _TournamentRoomScreenState extends ConsumerState<TournamentRoomScreen> {
                             const Text(' ✗', style: TextStyle(color: Colors.red, fontSize: 11)),
                         ])),
                       _TD('${s['score'] ?? 0}'),
+                      _TD('${s['games_played'] ?? ((s['wins'] as num?) ?? 0) + ((s['draws'] as num?) ?? 0) + ((s['losses'] as num?) ?? 0)}'),
                       _TD('${s['wins']   ?? 0}'),
                       _TD('${s['draws']  ?? 0}'),
                       _TD('${s['losses'] ?? 0}'),
                       if (isSwiss) _TD('${(_parseDouble(s['tiebreak']) ?? 0.0).toStringAsFixed(1)}'),
-                    ].take(isSwiss ? 7 : 6).toList(),
+                    ].take(isSwiss ? 8 : 7).toList(),
                   );
                 }),
               ],

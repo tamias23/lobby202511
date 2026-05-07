@@ -13,7 +13,15 @@ function computeStandings(participants, games, format) {
     // Build lookup
     const pMap = new Map();
     for (const p of participants) {
-        pMap.set(p.user_id, { ...p });
+        pMap.set(p.user_id, { ...p, games_played: 0 });
+    }
+
+    // Count games played
+    for (const g of games) {
+        if (g.result && g.result !== 'aborted') {
+            if (pMap.has(g.white_id)) pMap.get(g.white_id).games_played += 1;
+            if (pMap.has(g.black_id)) pMap.get(g.black_id).games_played += 1;
+        }
     }
 
     // For Swiss, compute Buchholz tiebreak (sum of opponents' scores)

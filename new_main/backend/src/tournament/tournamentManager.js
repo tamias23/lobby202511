@@ -676,19 +676,19 @@ async function onGameComplete(gameHash, winnerSide, moves = []) {
         if (game.result === 'white') {
             game.white_score = CONFIG.WIN_POINTS;
             game.black_score = CONFIG.LOSS_POINTS;
-            if (whitePart) { whitePart.score += CONFIG.WIN_POINTS; whitePart.wins += 1; }
-            if (blackPart) { blackPart.score += CONFIG.LOSS_POINTS; blackPart.losses += 1; }
+            if (whitePart) { whitePart.score += CONFIG.WIN_POINTS; whitePart.wins += 1; whitePart.games_played = (whitePart.games_played || 0) + 1; }
+            if (blackPart) { blackPart.score += CONFIG.LOSS_POINTS; blackPart.losses += 1; blackPart.games_played = (blackPart.games_played || 0) + 1; }
         } else if (game.result === 'black') {
             game.white_score = CONFIG.LOSS_POINTS;
             game.black_score = CONFIG.WIN_POINTS;
-            if (whitePart) { whitePart.score += CONFIG.LOSS_POINTS; whitePart.losses += 1; }
-            if (blackPart) { blackPart.score += CONFIG.WIN_POINTS; blackPart.wins += 1; }
+            if (whitePart) { whitePart.score += CONFIG.LOSS_POINTS; whitePart.losses += 1; whitePart.games_played = (whitePart.games_played || 0) + 1; }
+            if (blackPart) { blackPart.score += CONFIG.WIN_POINTS; blackPart.wins += 1; blackPart.games_played = (blackPart.games_played || 0) + 1; }
         } else if (game.result === 'abandoned') {
             // Double loss: both players disconnected — 0 pts each, recorded as a loss for both
             game.white_score = CONFIG.LOSS_POINTS;
             game.black_score = CONFIG.LOSS_POINTS;
-            if (whitePart) { whitePart.score += CONFIG.LOSS_POINTS; whitePart.losses += 1; }
-            if (blackPart) { blackPart.score += CONFIG.LOSS_POINTS; blackPart.losses += 1; }
+            if (whitePart) { whitePart.score += CONFIG.LOSS_POINTS; whitePart.losses += 1; whitePart.games_played = (whitePart.games_played || 0) + 1; }
+            if (blackPart) { blackPart.score += CONFIG.LOSS_POINTS; blackPart.losses += 1; blackPart.games_played = (blackPart.games_played || 0) + 1; }
 
             // Suspend both players: they will not be paired again until they reconnect
             if (whitePart) whitePart.suspended = true;
@@ -698,8 +698,8 @@ async function onGameComplete(gameHash, winnerSide, moves = []) {
             // draw
             game.white_score = CONFIG.DRAW_POINTS;
             game.black_score = CONFIG.DRAW_POINTS;
-            if (whitePart) { whitePart.score += CONFIG.DRAW_POINTS; whitePart.draws += 1; }
-            if (blackPart) { blackPart.score += CONFIG.DRAW_POINTS; blackPart.draws += 1; }
+            if (whitePart) { whitePart.score += CONFIG.DRAW_POINTS; whitePart.draws += 1; whitePart.games_played = (whitePart.games_played || 0) + 1; }
+            if (blackPart) { blackPart.score += CONFIG.DRAW_POINTS; blackPart.draws += 1; blackPart.games_played = (blackPart.games_played || 0) + 1; }
         }
 
         // Persist scores and MOVES to Firestore
@@ -713,12 +713,12 @@ async function onGameComplete(gameHash, winnerSide, moves = []) {
         // Update participant scores
         if (whitePart) {
             await db.updateParticipantScore(tid, whitePart.user_id, {
-                score: whitePart.score, wins: whitePart.wins, draws: whitePart.draws, losses: whitePart.losses,
+                score: whitePart.score, wins: whitePart.wins, draws: whitePart.draws, losses: whitePart.losses, games_played: whitePart.games_played,
             });
         }
         if (blackPart) {
             await db.updateParticipantScore(tid, blackPart.user_id, {
-                score: blackPart.score, wins: blackPart.wins, draws: blackPart.draws, losses: blackPart.losses,
+                score: blackPart.score, wins: blackPart.wins, draws: blackPart.draws, losses: blackPart.losses, games_played: blackPart.games_played,
             });
         }
 
