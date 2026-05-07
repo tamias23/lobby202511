@@ -15,6 +15,7 @@ import 'widgets/action_buttons.dart';
 import 'widgets/game_over_overlay.dart';
 import '../../providers/bg_provider.dart';
 import '../../providers/translations_provider.dart';
+import '../../core/sound_service.dart';
 
 // ── Color themes — mirrors legacy COLOR_THEMES in GameBoard.jsx ───────────────
 
@@ -341,6 +342,22 @@ class _GameBoardState extends ConsumerState<GameBoard> {
   }
 
   Widget _buildInner(BuildContext context) {
+    // ── Sound listener — play move/capture sound on each game_update with a lastMove.
+    // ref.listen in build() is the standard Riverpod pattern; it auto-deduplicates
+    // across rebuilds and respects widget lifecycle.
+    ref.listen<GameBoardState>(gameProvider(widget.gameId), (prev, next) {
+      final wasCapture = next.lastMoveWasCapture;
+      if (wasCapture == null) return; // not a move update (e.g. clock, color choice)
+      if (wasCapture) {
+        SoundService.instance.playCapture();
+      } else {
+        SoundService.instance.playMove();
+      }
+      // Clear the flag so the sound doesn't replay on non-move state changes
+      // (e.g. piece selection). The null check above filters the resulting no-op callback.
+      ref.read(gameProvider(widget.gameId).notifier).clearLastMoveSound();
+    });
+
     final gameState = ref.watch(gameProvider(widget.gameId));
     final gs = gameState.gameState;
 

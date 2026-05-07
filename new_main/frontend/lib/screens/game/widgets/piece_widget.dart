@@ -48,6 +48,9 @@ class PieceWidget extends StatefulWidget {
 class _PieceWidgetState extends State<PieceWidget> {
   /// Non-null only while the user is dragging.
   Offset? _dragPos;
+  /// Remembers the drop position after a drag-end, so the piece stays there
+  /// (instead of snapping back to origin) while waiting for the server update.
+  Offset? _lastDropPos;
 
   // Grayscale ColorFilter — matches legacy CSS grayscale(100%)
   static const _grayFilter = ColorFilter.matrix(<double>[
@@ -61,10 +64,15 @@ class _PieceWidgetState extends State<PieceWidget> {
   void didUpdateWidget(covariant PieceWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     // When the game state moves this piece to a new polygon, widget.position
-    // changes.  Clear _dragPos so AnimatedPositioned smoothly animates from
-    // the drag-drop point to the new polygon center.
-    if (widget.position != oldWidget.position && _dragPos != null) {
-      setState(() => _dragPos = null);
+    // changes.  Clear drag state so AnimatedPositioned smoothly animates from
+    // the drop point to the new polygon center.
+    if (widget.position != oldWidget.position) {
+      if (_dragPos != null || _lastDropPos != null) {
+        setState(() {
+          _dragPos = null;
+          _lastDropPos = null;
+        });
+      }
     }
   }
 
@@ -112,17 +120,19 @@ class _PieceWidgetState extends State<PieceWidget> {
       onPanEnd: widget.isDraggable
           ? (d) {
               final endPos = _dragPos;
-              // DON'T clear _dragPos here — keep the piece at the drop position.
-              // _dragPos is cleared in didUpdateWidget when widget.position
-              // changes (game state update), so the piece animates smoothly
-              // from drop-point → target polygon center.
               if (endPos != null) {
+                // Clear drag state but remember drop position so the piece
+                // stays at the drop point while waiting for the server update.
+                setState(() {
+                  _dragPos = null;
+                  _lastDropPos = endPos;
+                });
                 widget.onDropTarget?.call(endPos, widget.piece.id);
                 // Safety: if the move is illegal (widget.position won't change),
-                // snap back after a short delay.
-                Future.delayed(const Duration(milliseconds: 100), () {
-                  if (mounted && _dragPos != null) {
-                    setState(() => _dragPos = null);
+                // snap back after a generous delay to cover the server round-trip.
+                Future.delayed(const Duration(milliseconds: 600), () {
+                  if (mounted && _lastDropPos != null) {
+                    setState(() => _lastDropPos = null);
                   }
                 });
               }
@@ -150,7 +160,7 @@ class _PieceWidgetState extends State<PieceWidget> {
     // Switching between Positioned and AnimatedPositioned mid-gesture
     // destroys the child subtree (including the GestureDetector), killing
     // the active pan gesture — causing the "first drag doesn't work" bug.
-    final center = _dragPos ?? widget.position;
+    final center = _dragPos ?? _lastDropPos ?? widget.position;
     final left   = center.dx - s / 2;
     final top    = center.dy - s / 2;
 

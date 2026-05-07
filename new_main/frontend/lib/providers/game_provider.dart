@@ -41,6 +41,9 @@ class GameBoardState {
   final RatingDelta? ratingDelta;
   final bool isSocketDisconnected;
   final String? notification;
+  /// True when the most recent game_update contained a capture move.
+  /// Null means "no move in this update" (e.g., clock tick, color choice).
+  final bool? lastMoveWasCapture;
 
   const GameBoardState({
     this.gameState,
@@ -51,6 +54,7 @@ class GameBoardState {
     this.ratingDelta,
     this.isSocketDisconnected = false,
     this.notification,
+    this.lastMoveWasCapture,
   });
 
   GameBoardState copyWith({
@@ -62,6 +66,7 @@ class GameBoardState {
     Object? ratingDelta = _sentinel,
     bool? isSocketDisconnected,
     Object? notification = _sentinel,
+    Object? lastMoveWasCapture = _sentinel,
   }) {
     return GameBoardState(
       gameState: gameState ?? this.gameState,
@@ -72,6 +77,7 @@ class GameBoardState {
       ratingDelta: ratingDelta == _sentinel ? this.ratingDelta : ratingDelta as RatingDelta?,
       isSocketDisconnected: isSocketDisconnected ?? this.isSocketDisconnected,
       notification: notification == _sentinel ? this.notification : notification as String?,
+      lastMoveWasCapture: lastMoveWasCapture == _sentinel ? this.lastMoveWasCapture : lastMoveWasCapture as bool?,
     );
   }
 }
@@ -151,7 +157,23 @@ class GameNotifier extends Notifier<GameBoardState> {
       debugPrint('[GameUpdate] turn=${updated.turn} phase=${updated.phase}'
           ' locked=${updated.lockedSequencePiece} colorChosen=${updated.colorChosen}');
 
-      state = state.copyWith(gameState: updated, legalMoves: [], selectedPieceId: null);
+      // Extract capture info from lastMove (sent by backend on apply_move).
+      // Note: captured is a List of captured piece type names (e.g. ["soldier"]),
+      // not a boolean. Non-empty list means a capture occurred.
+      bool? wasCapture;
+      if (d['lastMove'] != null) {
+        final lm = d['lastMove'] as Map<String, dynamic>;
+        final captured = lm['captured'];
+        wasCapture = (captured is List && captured.isNotEmpty);
+        debugPrint('[GameUpdate] lastMove detected — captured=$captured wasCapture=$wasCapture');
+      }
+
+      state = state.copyWith(
+        gameState: updated,
+        legalMoves: [],
+        selectedPieceId: null,
+        lastMoveWasCapture: wasCapture,
+      );
       // New game state = new turn → cached legal moves are no longer valid.
       _prefetchedMoves.clear();
     } catch (e, stack) {
@@ -312,6 +334,12 @@ class GameNotifier extends Notifier<GameBoardState> {
   void randomizeSetup(String side) => _socket.emit('randomize_setup', {'gameId': _gameId, 'side': side});
   void resign() => _socket.emit('resign', {'gameId': _gameId});
   void selectColor(String color, String side) => _socket.emit('color_selected', {'gameId': _gameId, 'color': color, 'side': side});
+
+  /// Resets the [lastMoveWasCapture] flag so that subsequent non-move state
+  /// changes (e.g. piece selection) don't re-trigger the sound effect.
+  void clearLastMoveSound() {
+    state = state.copyWith(lastMoveWasCapture: null);
+  }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 

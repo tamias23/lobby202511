@@ -4,12 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/api_service.dart';
 import 'core/socket_service.dart';
+import 'core/sound_service.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'app.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   tz.initializeTimeZones();
+  SoundService.instance.init(); // fire-and-forget; non-fatal if it fails
 
   // Surface uncaught errors clearly in the browser console — ALWAYS, even in
   // release builds, so we can diagnose production crashes from F12 console.
