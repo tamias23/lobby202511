@@ -82,12 +82,12 @@ Landing on a polygon triggers checks that determine if the move or turn ends:
 - The **turn ends** ONLY if the piece is pinned on a **chosen colour** polygon.
 
 #### C. Landing on Chosen Colour (Rule 15/16)
-- **Soldiers & Minotaurs**: The piece becomes **sequence-locked**. The turn does NOT end; this piece must move again (or pass) before other pieces can act.
+- **Soldiers & Minotaurs**: The piece becomes **sequence-locked**. The turn does NOT end; this piece must move again before any other piece can act.
 - **Other Pieces**: The **turn ends immediately**.
 
 #### D. Landing on Different Colour (Rule 14)
-- Sequence locks are cleared. The **turn does NOT end**. The player may continue acting with other eligible pieces (on-colour pieces).
-- **Heroe Exception**: If a Heroe captures a piece and lands on a different colour (and hasn't used its bonus move yet), it becomes **sequence-locked** for one extra move (Rule 44).
+- The **turn does NOT end**. The player may continue acting with other eligible pieces (on-colour pieces).
+- **Heroe Exception**: If a Heroe captures a piece and lands on a different colour (and hasn't used its bonus move yet), it gains one extra move : this extra movie is possible, not mandatory (Rule 44).
 
 ---
 
@@ -162,7 +162,7 @@ The following rule numbers are referenced in the engine source code (`engine.rs`
 
 ### **Rule 44: Heroe Bonus Action**
 - **Description**: Heroe bonus move after capture.
-- **Explanation**: A Heroe that captures an enemy piece is granted one immediate bonus move, if the landing color is not the turn-chosen-color (provided it hasn't already used its bonus move this turn) and if it is not immobilized by a siren.
+- **Explanation**: A Heroe that captures an enemy piece is granted one immediate optional bonus move, if the landing color is not the turn-chosen-color (provided it hasn't already used its bonus move this turn) and if it is not immobilized by a siren.
 
 ### **Rule 78 / Rule 79: Deployment Turn-End Variations**
 - **Description**: **Rule 78**: Entering on chosen color ends turn. **Rule 79**: Entering via Mage on different color does NOT end turn.

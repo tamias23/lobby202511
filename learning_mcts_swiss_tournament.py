@@ -181,7 +181,7 @@ def load_agents(filepath):
                 diego_mcts_budget_val = None
                 if agent_type == "greedy_bob":
                     data = [float(x) for x in raw_data.split(",") if x.strip()]
-                elif agent_type == "quick_diego":
+                elif agent_type in ("quick_diego", "better_mario"):
                     diego_mcts_budget_val = mcts_budget or None
                     mcts_budget = ""
                     if raw_data.endswith('.json'):
@@ -214,7 +214,7 @@ def validate_agent_files(agents):
         if a.type in ("mcts", "greedy_jack"):
             if not os.path.isfile(a.data):
                 errors.append(f"  {a.name} ({a.type}): file not found: {a.data}")
-        elif a.type == "quick_diego" and isinstance(a.data, list):
+        elif a.type in ("quick_diego", "better_mario") and isinstance(a.data, list):
             if len(a.data) == 0:
                 errors.append(f"  {a.name} ({a.type}): empty weight vector")
         elif a.type == "greedy_bob" and isinstance(a.data, list):
@@ -286,7 +286,7 @@ async def run_match(sem, agent1, agent2, board_path, mcts_data_dir, temp_dir):
         for side, agent in [("white", white), ("black", black)]:
             if agent.type == "greedy_bob":
                 cmd.extend([f"--greedy-weights-{side}", weights_to_str(agent.data)])
-            elif agent.type == "quick_diego":
+            elif agent.type in ("quick_diego", "better_mario"):
                 has_diego = True
                 cmd.extend([f"--greedy-weights-{side}", weights_to_str(agent.data)])
                 diego_budget = agent.diego_mcts_budget

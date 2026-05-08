@@ -15,7 +15,7 @@ import torch
 import torch.nn as nn
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
-from torch_geometric.nn import GATConv, global_mean_pool
+from torch_geometric.nn import GATv2Conv, LayerNorm, global_mean_pool
 from torch_geometric.utils import softmax as pyg_softmax
 class MCTSData(Data):
     def __inc__(self, key, value, *args, **kwargs):
@@ -72,14 +72,29 @@ class ValueHead(nn.Module):
         expected_value = self.value_network(graph_embedding)
         return expected_value
 
+class GATResidualBlock(nn.Module):
+    def __init__(self, channels, heads=4):
+        super().__init__()
+        # concat=False ensures dimensionality stays at 'channels'
+        self.conv = GATv2Conv(channels, channels, heads=heads, concat=False, add_self_loops=False)
+        self.norm = LayerNorm(channels)
+        self.act = nn.ReLU()
+
+    def forward(self, x, edge_index):
+        # Residual Connection: x_new = act(norm(x + conv(x)))
+        return self.act(self.norm(x + self.conv(x, edge_index)))
+
 class MCTS_GAT(nn.Module):
-    def __init__(self, in_channels=12, hidden_channels=128):
+    def __init__(self, in_channels=12, hidden_channels=256, num_layers=8):
         super(MCTS_GAT, self).__init__()
-        self.conv1 = GATConv(in_channels, hidden_channels, add_self_loops=False)
-        self.conv2 = GATConv(hidden_channels, hidden_channels, add_self_loops=False)
-        self.conv3 = GATConv(hidden_channels, hidden_channels, add_self_loops=False)
-        self.conv4 = GATConv(hidden_channels, hidden_channels, add_self_loops=False)
-        self.conv5 = GATConv(hidden_channels, hidden_channels, add_self_loops=False)
+        # Initial projection to hidden dimension
+        self.input_proj = nn.Linear(in_channels, hidden_channels)
+        
+        # Deep residual backbone
+        self.blocks = nn.ModuleList([
+            GATResidualBlock(hidden_channels) for _ in range(num_layers)
+        ])
+        
         self.policy_head = RelationalPolicyHead(hidden_channels)
         self.value_head = ValueHead(hidden_channels)
         
@@ -87,14 +102,16 @@ class MCTS_GAT(nn.Module):
         if batch is None:
             batch = torch.zeros(x.size(0), dtype=torch.long, device=x.device)
             
-        node_embeddings = torch.relu(self.conv1(x, edge_index))
-        node_embeddings = torch.relu(self.conv2(node_embeddings, edge_index))
-        node_embeddings = torch.relu(self.conv3(node_embeddings, edge_index))
-        node_embeddings = torch.relu(self.conv4(node_embeddings, edge_index))
-        node_embeddings = torch.relu(self.conv5(node_embeddings, edge_index))
+        # 1. Project to hidden space
+        h = torch.relu(self.input_proj(x))
         
-        value = self.value_head(node_embeddings, batch)
-        probs = self.policy_head(node_embeddings, legal_moves, batch)
+        # 2. Pass through deep blocks
+        for block in self.blocks:
+            h = block(h, edge_index)
+            
+        # 3. Heads
+        value = self.value_head(h, batch)
+        probs = self.policy_head(h, legal_moves, batch)
         return value, probs
 
 def load_data(data_dir):
@@ -153,7 +170,7 @@ def load_data(data_dir):
 def train(epochs=10, batch_size=64):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"--- Training Device: {device.type.upper()} ({torch.cuda.get_device_name(0) if device.type == 'cuda' else 'CPU'}) ---")
-    model = MCTS_GAT(in_channels=12, hidden_channels=128).to(device)
+    model = MCTS_GAT(in_channels=12, hidden_channels=256, num_layers=8).to(device)
     
     checkpoint_path = "./rust/model_weights.pth"
     if os.path.exists(checkpoint_path):
@@ -163,7 +180,7 @@ def train(epochs=10, batch_size=64):
         except Exception as e:
             print(f"Warning: Failed to load checkpoint: {e}. Starting with random weights.")
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
     
     # Policy Loss: Cross Entropy / KL Divergence
     # Value Loss: MSE

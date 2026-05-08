@@ -40,3 +40,4 @@ pub mod graph;
 pub mod mcts;
 pub mod quick_diego;
 pub mod imprudent_klaus;
+pub mod better_mario;

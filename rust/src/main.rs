@@ -109,8 +109,19 @@ fn make_agent(name: &str, weights_str: Option<&String>, mcts_budget: u64, mcts_d
                 mcts_record,
             ))
         }
+        "better_mario" => {
+            let num = agents::better_mario::NUM_PARAMS;
+            let mut weights = [0.0; 64];
+            if let Some(w_str) = weights_str {
+                let parsed: Vec<f64> = w_str.split(',').filter_map(|s| s.parse().ok()).collect();
+                for (i, val) in parsed.into_iter().enumerate().take(num) {
+                    weights[i] = val;
+                }
+            }
+            Arc::new(agents::better_mario::BetterMarioAgent::new(weights))
+        }
         other => {
-            eprintln!("Unknown agent '{}'. Available: random, greedy_bob, greedy_jack, quick_diego, imprudent_klaus, mcts", other);
+            eprintln!("Unknown agent '{}'. Available: random, greedy_bob, greedy_jack, quick_diego, imprudent_klaus, better_mario, mcts", other);
             std::process::exit(1);
         }
     }

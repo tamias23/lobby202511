@@ -5,7 +5,15 @@ import json
 import glob
 import time
 from torch_geometric.loader import DataLoader
-from train_mcts import MCTS_GAT, MCTSData, MCTSDataset
+from train_mcts import MCTS_GAT, MCTSData, load_data
+
+class MCTSDataset(torch.utils.data.Dataset):
+    def __init__(self, data_dir):
+        self.data = load_data(data_dir)
+    def __len__(self):
+        return len(self.data)
+    def __getitem__(self, idx):
+        return self.data[idx]
 
 def test_gpu_performance():
     print("--- Full GPU Performance Test ---")
