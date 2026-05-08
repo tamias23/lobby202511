@@ -26,6 +26,9 @@ class ActionButtons extends ConsumerStatefulWidget {
   /// My (current player's) pass count — used to decide when to confirm.
   final int myPassCount;
 
+  /// Heroe bonus counter — when > 0, a Heroe has an optional bonus move.
+  final int heroeTakeCounter;
+
   // Color theme
   final ColorTheme colorTheme;
   final void Function(ColorTheme) onColorThemeChanged;
@@ -34,6 +37,7 @@ class ActionButtons extends ConsumerStatefulWidget {
   final VoidCallback onEndTurnSetup;
   final VoidCallback onRandomSetup;
   final VoidCallback onPassTurn;
+  final VoidCallback onEndHeroeBonus;
   final VoidCallback onResign;
   final void Function(String color) onColorSelected;
 
@@ -51,12 +55,14 @@ class ActionButtons extends ConsumerStatefulWidget {
     required this.mageUnlocked,
     required this.colorsEverChosen,
     this.myPassCount = 0,
+    this.heroeTakeCounter = 0,
     required this.colorTheme,
     required this.onColorThemeChanged,
     required this.onFlip,
     required this.onEndTurnSetup,
     required this.onRandomSetup,
     required this.onPassTurn,
+    required this.onEndHeroeBonus,
     required this.onResign,
     required this.onColorSelected,
   });
@@ -98,11 +104,18 @@ class _ActionButtonsState extends ConsumerState<ActionButtons> {
     final t = ref;
     final String turnKey = widget.turn == 'white' ? 'ui.white' : 'ui.black';
 
+    // During a Heroe bonus window, show "End Turn" instead of "Pass Turn"
+    // since declining the bonus is free (no pass penalty).
+    final bool inHeroeBonus = widget.heroeTakeCounter > 0;
     final String endTurnLabel = oppTurn
         ? t.tr('ui.waiting_opponent')
         : _passConfirm
             ? t.tr('ui.confirm_pass')
-            : (isSetup ? t.tr('ui.end_turn') : t.tr('ui.pass_turn'));
+            : isSetup
+                ? t.tr('ui.end_turn')
+                : inHeroeBonus
+                    ? t.tr('ui.end_turn')
+                    : t.tr('ui.pass_turn');
 
     final String colorPickerLabel = widget.spectator
         ? (turnChosenColorGlobal != null
@@ -159,6 +172,9 @@ class _ActionButtonsState extends ConsumerState<ActionButtons> {
               onTap: () {
                 if (isSetup) {
                   widget.onEndTurnSetup();
+                } else if (inHeroeBonus) {
+                  // Decline Heroe bonus — ends turn without pass penalty
+                  widget.onEndHeroeBonus();
                 } else {
                   // Mirror legacy: only show confirmation if passCount >= 2
                   if (widget.myPassCount >= 2) {
@@ -431,13 +447,18 @@ class _ActionButtonsState extends ConsumerState<ActionButtons> {
     // ── Left column: buttons stacked vertically ─────────────────────────────
     final buttons = <Widget>[];
 
+    final bool inHeroeBonusP = widget.heroeTakeCounter > 0;
     if (isSetup || isPlaying) {
       buttons.add(stackBtn(
         label: oppTurn
             ? '⏳'
             : _passConfirm
                 ? t.tr('ui.confirm_pass')
-                : (isSetup ? t.tr('ui.end_turn') : t.tr('ui.pass_turn')),
+                : isSetup
+                    ? t.tr('ui.end_turn')
+                    : inHeroeBonusP
+                        ? t.tr('ui.end_turn')
+                        : t.tr('ui.pass_turn'),
         bgColor: oppTurn
             ? const Color(0xFF7F8C8D)
             : _passConfirm
@@ -447,6 +468,8 @@ class _ActionButtonsState extends ConsumerState<ActionButtons> {
         onTap: () {
           if (isSetup) {
             widget.onEndTurnSetup();
+          } else if (inHeroeBonusP) {
+            widget.onEndHeroeBonus();
           } else if (widget.myPassCount >= 2) {
             if (_passConfirm) { setState(() => _passConfirm = false); widget.onPassTurn(); }
             else { setState(() => _passConfirm = true); }

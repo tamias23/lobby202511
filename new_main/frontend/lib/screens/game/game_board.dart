@@ -235,9 +235,15 @@ class _GameBoardState extends ConsumerState<GameBoard> {
     if (gs.phase == 'Playing' &&
         piece.position == 'returned' &&
         gs.colorChosen[widget.side] == null) return false;
-    // If a specific piece is locked, only it is eligible
+    // Sequence lock check — distinguish hard vs soft lock:
+    // - Hard lock (Soldier/Minotaur chain, heroeTakeCounter == 0): ONLY the locked piece may move.
+    // - Soft lock (Heroe bonus, heroeTakeCounter > 0): the locked Heroe MAY move, but other
+    //   on-color pieces are also eligible — moving one forfeits the bonus.
     final locked = gs.lockedSequencePiece;
-    if (locked != null && locked.isNotEmpty && piece.id != locked) return false;
+    if (locked != null && locked.isNotEmpty && piece.id != locked) {
+      if (gs.heroeTakeCounter <= 0) return false; // hard lock — only locked piece
+      // soft lock — fall through, this piece is eligible if it passed the color check above
+    }
     return true;
   }
 
@@ -1007,12 +1013,14 @@ class _GameBoardState extends ConsumerState<GameBoard> {
         mageUnlocked: gs.mageUnlocked,
         colorsEverChosen: gs.colorsEverChosen,
         myPassCount: myPassCount,
+        heroeTakeCounter: gs.heroeTakeCounter,
         colorTheme: _colorTheme,
         onColorThemeChanged: (t) => setState(() => _colorTheme = t),
         onFlip: () => setState(() => _isFlipped = !_isFlipped),
         onEndTurnSetup: notifier.endTurnSetup,
         onRandomSetup: () => notifier.randomizeSetup(widget.side),
         onPassTurn: notifier.passTurnPlaying,
+        onEndHeroeBonus: notifier.endHeroeBonus,
         onResign: notifier.resign,
         onColorSelected: (color) => notifier.selectColor(color, widget.side),
       ),

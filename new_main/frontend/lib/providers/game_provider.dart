@@ -331,6 +331,8 @@ class GameNotifier extends Notifier<GameBoardState> {
 
   void endTurnSetup() => _socket.emit('end_turn_setup', {'gameId': _gameId});
   void passTurnPlaying() => _socket.emit('pass_turn_playing', {'gameId': _gameId});
+  /// Voluntarily decline the Heroe bonus move — ends the turn without pass penalty.
+  void endHeroeBonus() => _socket.emit('end_heroe_bonus', {'gameId': _gameId});
   void randomizeSetup(String side) => _socket.emit('randomize_setup', {'gameId': _gameId, 'side': side});
   void resign() => _socket.emit('resign', {'gameId': _gameId});
   void selectColor(String color, String side) => _socket.emit('color_selected', {'gameId': _gameId, 'color': color, 'side': side});
