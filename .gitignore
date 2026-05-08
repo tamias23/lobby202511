@@ -6,6 +6,7 @@ games/data/rust
 rust/mcts_old/
 parquet/
 results/
+mario_evolution/
 err.txt
 out.txt
 output.txt
