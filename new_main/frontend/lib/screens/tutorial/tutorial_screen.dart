@@ -15,12 +15,13 @@ import '../../models/models.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../game/painters/board_svg.dart';
 import '../game/painters/piece_svg.dart';
+import '../game/painters/piece_icon_painter.dart';
 import '../../widgets/lobby_back_button.dart';
 
 // ── Section list ───────────────────────────────────────────────────────────────
 
 const _sections = [
-  'intro', 'setup_phase', 'board', 'turn',
+  'intro', 'pieces', 'setup_phase', 'board', 'turn',
   'goddess', 'heroe', 'mage', 'siren', 'ghoul', 'witch', 'soldier', 'minotaur',
 ];
 
@@ -49,6 +50,16 @@ final _sectionPieces = <String, List<_P>>{
   'intro': _p([
     ['white_goddess_0', 'goddess', 'oH1'],
     ['black_goddess_0', 'goddess', 'bF1'],
+  ]),
+  'pieces': _p([
+    ['white_goddess_0', 'goddess', 'oH1'],
+    ['white_heroe_0',   'heroe',   'oF1'],
+    ['white_mage_0',    'mage',    'gH1'],
+    ['white_siren_0',   'siren',   'gE2'],
+    ['white_ghoul_0',   'ghoul',   'bF1'],
+    ['white_witch_0',   'witch',   'bH2'],
+    ['white_soldier_0', 'soldier', 'yJ1'],
+    ['white_minotaur_0','minotaur','yI1'],
   ]),
   // setup_phase shows a valid position fetched from the backend at runtime
   'setup_phase': [],
@@ -185,7 +196,7 @@ List<String> _splitBlocks(String html) {
       if (tagMatch == null) { i++; continue; }
       final tagName = tagMatch.group(1)!.toLowerCase();
 
-      if (tagName == 'div' || tagName == 'ol' || tagName == 'ul') {
+      if (tagName == 'div' || tagName == 'ol' || tagName == 'ul' || tagName == 'table') {
         // Find matching closing tag (handles nesting for div)
         final (content, end) = _extractTag(html, i, tagName);
         blocks.add(content);
@@ -303,6 +314,12 @@ Widget? _renderBlock(String block, {TextDirection dir = TextDirection.ltr}) {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
     );
   }
+
+  // table (Piece comparison table)
+  if (block.startsWith('<table')) {
+    return _buildPieceTable(block, dir: dir);
+  }
+
   // <ol> numbered list
   if (block.startsWith('<ol')) {
     final items = _extractListItems(block);
@@ -345,7 +362,92 @@ Widget? _renderBlock(String block, {TextDirection dir = TextDirection.ltr}) {
       }).toList(),
     );
   }
+
   return null;
+}
+
+Widget _buildPieceTable(String html, {TextDirection dir = TextDirection.ltr}) {
+  // Simple regex-based table parser
+  final rowRe = RegExp(r'<tr>(.*?)</tr>', dotAll: true);
+  final cellRe = RegExp(r'<(?:td|th)[^>]*>(.*?)</(?:td|th)>', dotAll: true);
+  
+  final rows = rowRe.allMatches(html);
+  final tableRows = <TableRow>[];
+
+  for (final rm in rows) {
+    final cellsHtml = rm.group(1)!;
+    final cells = cellRe.allMatches(cellsHtml);
+    final rowWidgets = <Widget>[];
+
+    final isHeader = rm.group(0)!.contains('<th');
+
+    for (final cm in cells) {
+      final inner = cm.group(1)!.trim();
+      
+      rowWidgets.add(Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        child: _renderCellContent(inner, isHeader, dir: dir),
+      ));
+    }
+    
+    if (rowWidgets.isNotEmpty) {
+      tableRows.add(TableRow(
+        decoration: isHeader ? BoxDecoration(
+          border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 1.5))
+        ) : null,
+        children: rowWidgets,
+      ));
+    }
+  }
+
+  return Container(
+    margin: const EdgeInsets.only(bottom: 16),
+    decoration: BoxDecoration(
+      color: Colors.white.withValues(alpha: 0.02),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+    ),
+    child: Table(
+      columnWidths: const {
+        0: IntrinsicColumnWidth(), // Icon + Name
+        1: IntrinsicColumnWidth(), // Type
+        2: FlexColumnWidth(2),     // Movement
+        3: FlexColumnWidth(3),     // Ability
+      },
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      children: tableRows,
+    ),
+  );
+}
+
+Widget _renderCellContent(String html, bool isHeader, {TextDirection dir = TextDirection.ltr}) {
+  if (isHeader) {
+    return Text(html.toUpperCase(), style: GoogleFonts.outfit(
+      fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white54, letterSpacing: 1.0));
+  }
+
+  // Check for <piece-icon type="...">
+  final iconMatch = RegExp(r'<piece-icon\s+type="([^"]+)"\s*>\s*</piece-icon>').firstMatch(html);
+  if (iconMatch != null) {
+    final type = iconMatch.group(1)!;
+    final text = html.replaceFirst(iconMatch.group(0)!, '').trim();
+    
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 36, height: 36,
+          child: CustomPaint(painter: PieceIconPainter(type: type, side: 'white')),
+        ),
+        if (text.isNotEmpty) ...[
+          const SizedBox(width: 12),
+          Expanded(child: _buildRichText(_parseInline(text), dir: dir)),
+        ]
+      ],
+    );
+  }
+
+  return _buildRichText(_parseInline(html), dir: dir);
 }
 
 /// Extract <li> items from an ol/ul block, preserving their inner HTML.
