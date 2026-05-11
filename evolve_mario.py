@@ -10,14 +10,14 @@ import glob
 from pathlib import Path
 
 # Configuration
-POPULATION_SIZE = 100
+POPULATION_SIZE = 200
 NUM_PARAMS = 64
-GENERATIONS = 50
+GENERATIONS = 200
 ROUNDS_PER_GEN = 7
 PARALLEL_MATCHES = 10
 MUTATION_RATE = 0.1
 MUTATION_STRENGTH = 0.2
-ELITISM_COUNT = 15
+ELITISM_COUNT = 30
 
 RUST_BIN = Path("rust/target/release/rust")
 BOARDS_DIR = Path("games/data")
