@@ -36,6 +36,13 @@ final _router = GoRouter(
       pageBuilder: (context, state) => const NoTransitionPage(child: RegisterScreen()),
     ),
     GoRoute(
+      path: '/join/:requestId',
+      pageBuilder: (context, state) {
+        final requestId = state.pathParameters['requestId']!;
+        return NoTransitionPage(child: LobbyScreen(autoJoinRequestId: requestId));
+      },
+    ),
+    GoRoute(
       path: '/games/:hash',
       pageBuilder: (context, state) {
         final hash = state.pathParameters['hash']!;

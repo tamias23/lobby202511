@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -52,7 +53,8 @@ const _timeControls = [
 // ── Lobby screen ─────────────────────────────────────────────────────────────
 
 class LobbyScreen extends ConsumerStatefulWidget {
-  const LobbyScreen({super.key});
+  final String? autoJoinRequestId;
+  const LobbyScreen({super.key, this.autoJoinRequestId});
   @override
   ConsumerState<LobbyScreen> createState() => _LobbyScreenState();
 }
@@ -66,6 +68,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   int  _botMin    = 15;
   int  _botInc    = 10;
   bool _showChat  = false;
+  bool _autoJoinAttempted = false;
   double _chatWidth = 320;
 
   final _socket = SocketService.instance;
@@ -203,6 +206,27 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
     // Eagerly initialize chat provider so it catches lobby_state events
     // even before the user toggles the chat panel open.
     ref.watch(chatProvider);
+
+    if (widget.autoJoinRequestId != null && !_autoJoinAttempted && ref.watch(authProvider) is AsyncData) {
+      _autoJoinAttempted = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        void doJoin() {
+          ref.read(lobbyProvider.notifier).acceptGameRequestById(
+            widget.autoJoinRequestId!,
+            userId: auth?.id,
+            username: auth?.username,
+            role: auth?.role ?? 'guest',
+          );
+        }
+
+        if (_socket.isConnected) {
+          doJoin();
+        } else {
+          _socket.once('connect', (_) => doJoin());
+        }
+      });
+    }
+
     final w     = MediaQuery.of(context).size.width;
     final wide  = w > 900;
 
@@ -771,6 +795,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
       children: lobby.gameRequests.map((req) {
         final isMine = req.requestId == lobby.myRequestId;
         return _RequestCard(
+          requestId: req.requestId,
           username: _formatUsername(req.username, req.role),
           tc: _formatTC(req.timeControl),
           timeAgo: _formatTimeAgo(req.createdAt),
@@ -1322,6 +1347,7 @@ class _ListPanel extends StatelessWidget {
 // ── Game request card ─────────────────────────────────────────────────────────
 
 class _RequestCard extends ConsumerStatefulWidget {
+  final String  requestId;
   final String  username;
   final String  tc;
   final String  timeAgo;
@@ -1330,7 +1356,7 @@ class _RequestCard extends ConsumerStatefulWidget {
   final VoidCallback? onAccept;
 
   const _RequestCard({
-    required this.username, required this.tc, required this.timeAgo,
+    required this.requestId, required this.username, required this.tc, required this.timeAgo,
     required this.isMine, this.onAccept, this.acceptLabel = 'Accept',
   });
   @override
@@ -1374,14 +1400,46 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
                 ],
               )),
               if (widget.isMine)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(ref.tr('ui.your_request'),
-                    style: TextStyle(color: const Color(0xFFF59E0B), fontSize: 11, fontWeight: FontWeight.w600)),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(ref.tr('ui.your_request'),
+                        style: const TextStyle(color: Color(0xFFF59E0B), fontSize: 11, fontWeight: FontWeight.w600)),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () {
+                        final scheme = Uri.base.scheme;
+                        final baseUrl = (scheme == 'http' || scheme == 'https') 
+                            ? Uri.base.origin 
+                            : 'https://dedalthegame.com';
+                        Clipboard.setData(ClipboardData(text: '$baseUrl/#/join/${widget.requestId}'));
+                        ref.read(lobbyProvider.notifier).showNotif('Link copied to clipboard!', 'success');
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.link, size: 12, color: Colors.white),
+                            const SizedBox(width: 4),
+                            Text('Copy link', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 )
               else if (widget.onAccept != null)
                 _MiniGradBtn(label: widget.acceptLabel == 'Accept' ? ref.tr('ui.accept') : widget.acceptLabel, onTap: widget.onAccept!),

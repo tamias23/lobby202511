@@ -52,7 +52,7 @@ class LobbyState {
     List<TournamentSummary>? openTournaments,
     List<TournamentSummary>? activeTournaments,
     bool? tournamentsEnabled,
-    String? myRequestId,
+    Object? myRequestId = _sentinel,
     Object? notification = _sentinel,
     String? notifType,
   }) {
@@ -64,7 +64,7 @@ class LobbyState {
       openTournaments: openTournaments ?? this.openTournaments,
       activeTournaments: activeTournaments ?? this.activeTournaments,
       tournamentsEnabled: tournamentsEnabled ?? this.tournamentsEnabled,
-      myRequestId: myRequestId ?? this.myRequestId,
+      myRequestId: myRequestId == _sentinel ? this.myRequestId : myRequestId as String?,
       notification: notification == _sentinel ? this.notification : notification as String?,
       notifType: notifType ?? this.notifType,
     );
@@ -278,6 +278,19 @@ class LobbyNotifier extends Notifier<LobbyState> {
     }
     _socket.emit('accept_game_request', {
       'requestId': req.requestId,
+      'userId': userId,
+      'username': username,
+      'role': role,
+    });
+  }
+
+  void acceptGameRequestById(String requestId, {String? userId, String? username, String role = 'guest'}) {
+    if (requestId == state.myRequestId) {
+      showNotif("That's your own request!", 'error');
+      return;
+    }
+    _socket.emit('accept_game_request', {
+      'requestId': requestId,
       'userId': userId,
       'username': username,
       'role': role,
