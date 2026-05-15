@@ -167,10 +167,10 @@ def load_data(data_dir):
             
     return dataset
 
-def train(epochs=10, batch_size=64):
+def train(epochs=10, batch_size=64, hidden_channels=256, num_layers=8):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"--- Training Device: {device.type.upper()} ({torch.cuda.get_device_name(0) if device.type == 'cuda' else 'CPU'}) ---")
-    model = MCTS_GAT(in_channels=12, hidden_channels=256, num_layers=8).to(device)
+    model = MCTS_GAT(in_channels=12, hidden_channels=hidden_channels, num_layers=num_layers).to(device)
     
     checkpoint_path = "./rust/model_weights.pth"
     if os.path.exists(checkpoint_path):
@@ -287,5 +287,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=64)
+    parser.add_argument("--hidden-channels", type=int, default=256)
+    parser.add_argument("--num-layers", type=int, default=8)
     args = parser.parse_args()
-    train(epochs=args.epochs, batch_size=args.batch_size)
+    train(epochs=args.epochs, batch_size=args.batch_size, hidden_channels=args.hidden_channels, num_layers=args.num_layers)
