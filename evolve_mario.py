@@ -10,14 +10,28 @@ import glob
 from pathlib import Path
 
 # Configuration
-POPULATION_SIZE = 200
-NUM_PARAMS = 64
-GENERATIONS = 200
-ROUNDS_PER_GEN = 7
+POPULATION_SIZE = 100
+NUM_PARAMS = 33
+GENERATIONS = 500
+ROUNDS_PER_GEN = 9
 PARALLEL_MATCHES = 10
-MUTATION_RATE = 0.1
-MUTATION_STRENGTH = 0.2
-ELITISM_COUNT = 30
+MUTATION_RATE = 0.12
+MUTATION_STRENGTH = 0.25
+ELITISM_COUNT = 15
+
+# Klaus weights (known-good baseline for sparring — never mutated)
+# Layout: [0..3] color, [4..11] capture, [12..19] siren, [20..21] generic, [22] dist, [23] safety
+KLAUS_WEIGHTS = [
+    2.0, 3.0, 5.0, 4.0,   # color features
+    8.0, -2.0, 7.0, -1.0, # mage/heroe captures
+    6.0, -1.0, 4.0, -1.0, # witch/siren captures
+    5.0, 3.0, 4.0, 3.0,   # siren vs mage/heroe
+    3.0, 2.0, 2.0, 1.0,   # siren vs witch/siren
+    3.0, -3.0,             # generic capture
+    4.0, 3.0,              # distance, safety
+    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,  # spare [24..32]
+]
+NUM_SPARRING_PARTNERS = 5  # Fixed Klaus agents added to each generation's pool
 
 RUST_BIN = Path("rust/target/release/rust")
 BOARDS_DIR = Path("games/data")
@@ -28,16 +42,33 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 class MarioIndividual:
     def __init__(self, weights=None):
         if weights is None:
-            self.weights = [random.uniform(-1, 1) for _ in range(NUM_PARAMS)]
+            # Initialise with small positive values biased toward captures
+            self.weights = [random.gauss(0, 0.5) for _ in range(NUM_PARAMS)]
+            # Bias capture weights positive to start from a sensible place
+            for i in [4, 6, 8, 10, 20]:  # capture weights
+                self.weights[i] = abs(self.weights[i]) + 1.0
         else:
-            self.weights = weights
+            self.weights = list(weights)
         self.score = 0
         self.games_played = 0
+        self.agent_type = 'better_mario'
         self.id = "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=8))
+        self.is_sparring = False  # sparring agents don't breed
 
     def to_csv_row(self):
         w_str = ",".join(map(str, self.weights))
         return [f"mario_{self.id}", "better_mario", w_str, "", ""]
+
+
+class KlausSparringAgent:
+    """Fixed Klaus agent used as a sparring partner. Never mutated or saved."""
+    def __init__(self, idx):
+        self.weights = list(KLAUS_WEIGHTS)
+        self.score = 0
+        self.games_played = 0
+        self.agent_type = 'imprudent_klaus'
+        self.id = f"sparring_klaus_{idx}"
+        self.is_sparring = True
 
 def save_population(population, filename):
     with open(filename, "w", newline="") as f:
@@ -50,13 +81,17 @@ async def run_match(sem, p1, p2, board):
     async with sem:
         # Randomize sides
         white, black = (p1, p2) if random.random() > 0.5 else (p2, p1)
-        
+
+        # Both may be mario OR one may be a Klaus sparring agent
+        white_type = white.agent_type if hasattr(white, 'agent_type') else 'better_mario'
+        black_type = black.agent_type if hasattr(black, 'agent_type') else 'better_mario'
+
         cmd = [
             str(RUST_BIN), str(board),
             "--batch", "1",
             "--max-turns", "200",
-            "--white", "better_mario",
-            "--black", "better_mario",
+            "--white", white_type,
+            "--black", black_type,
             "--greedy-weights-white", ",".join(map(str, white.weights)),
             "--greedy-weights-black", ",".join(map(str, black.weights)),
         ]
@@ -78,22 +113,26 @@ async def run_match(sem, p1, p2, board):
         return winner, p1, p2
 
 async def evaluate_population(population, boards):
+    # Reset mario scores (sparring agents reset each gen too for fairness)
     for ind in population:
         ind.score = 0
-    
+
+    # Add Klaus sparring partners — they participate in pairing but don't breed
+    sparring = [KlausSparringAgent(i) for i in range(NUM_SPARRING_PARTNERS)]
+    full_pool = population + sparring
+
     sem = asyncio.Semaphore(PARALLEL_MATCHES)
-    
+
     for r in range(ROUNDS_PER_GEN):
         print(f"  Round {r+1}/{ROUNDS_PER_GEN}...")
-        pairings = list(population)
+        pairings = list(full_pool)
         random.shuffle(pairings)
-        
+
         tasks = []
-        for i in range(0, len(pairings), 2):
-            if i + 1 < len(pairings):
-                board = random.choice(boards)
-                tasks.append(run_match(sem, pairings[i], pairings[i+1], board))
-        
+        for i in range(0, len(pairings) - 1, 2):
+            board = random.choice(boards)
+            tasks.append(run_match(sem, pairings[i], pairings[i+1], board))
+
         results = await asyncio.gather(*tasks)
         for winner, p1, p2 in results:
             if winner:
@@ -103,31 +142,38 @@ async def evaluate_population(population, boards):
                 p2.score += 1
 
 def evolve(population):
-    # Sort by score descending
-    population.sort(key=lambda x: x.score, reverse=True)
-    
+    # Only breed from non-sparring mario agents
+    mario_pop = [x for x in population if not x.is_sparring]
+    mario_pop.sort(key=lambda x: x.score, reverse=True)
+
     new_population = []
-    # Elitism
-    for i in range(ELITISM_COUNT):
-        new_population.append(MarioIndividual(population[i].weights))
-    
-    # Fill rest with crossover and mutation
+    # Elitism: carry top mario agents forward
+    for i in range(min(ELITISM_COUNT, len(mario_pop))):
+        elite = MarioIndividual(mario_pop[i].weights)
+        elite.id = mario_pop[i].id  # keep id for tracking
+        new_population.append(elite)
+
+    # Tournament selection pool: top 20% of mario agents
+    pool_size = max(4, len(mario_pop) // 5)
+    gene_pool = mario_pop[:pool_size]
+
+    # Fill rest with crossover + mutation
     while len(new_population) < POPULATION_SIZE:
-        parent1 = random.choice(population[:10])
-        parent2 = random.choice(population[:10])
-        
+        parent1 = random.choice(gene_pool)
+        parent2 = random.choice(gene_pool)
+
         # Uniform crossover
-        child_weights = []
-        for w1, w2 in zip(parent1.weights, parent2.weights):
-            child_weights.append(w1 if random.random() > 0.5 else w2)
-            
-        # Mutation
+        child_weights = [
+            w1 if random.random() > 0.5 else w2
+            for w1, w2 in zip(parent1.weights, parent2.weights)
+        ]
+        # Gaussian mutation
         for i in range(NUM_PARAMS):
             if random.random() < MUTATION_RATE:
                 child_weights[i] += random.gauss(0, MUTATION_STRENGTH)
-        
+
         new_population.append(MarioIndividual(child_weights))
-        
+
     return new_population
 
 async def main():

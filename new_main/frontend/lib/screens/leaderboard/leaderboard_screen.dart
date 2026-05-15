@@ -138,104 +138,97 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
         cat: ((_data![cat]?['players']) as List? ?? [])
     };
 
-    return Column(
-      children: [
-        // ── Sticky column headers ────────────────────────────────────────────
-        Scrollbar(
-          controller: _horizScroll,
-          thumbVisibility: true,
-          child: SingleChildScrollView(
-            controller: _horizScroll,
-            scrollDirection: Axis.horizontal,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Row(
-                children: categories.map((cat) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: _colPad / 2),
-                    child: _CategoryHeader(label: labels[cat] ?? cat, width: _colTotal),
-                  );
-                }).toList(),
-              ),
-            ),
-          ),
-        ),
-
-        // ── Column sub-headers (Rank / Player / Rating) ──────────────────────
-        SingleChildScrollView(
+    return Scrollbar(
+        controller: _horizScroll,
+        thumbVisibility: true,
+        child: SingleChildScrollView(
           controller: _horizScroll,
           scrollDirection: Axis.horizontal,
-          physics: const NeverScrollableScrollPhysics(),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-            child: Row(
-              children: categories.map((_) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: _colPad / 2),
-                  child: SizedBox(
-                    width: _colTotal,
-                    child: Row(
-                      children: [
-                        SizedBox(width: _colRank,
-                            child: _subHdr('#', TextAlign.center)),
-                        SizedBox(width: _colUsername,
-                            child: _subHdr('Player', TextAlign.left)),
-                        SizedBox(width: _colRating,
-                            child: _subHdr('Rating', TextAlign.center)),
-                      ],
+          child: SizedBox(
+            // Total width of all category columns + outer padding
+            width: categories.length * (_colTotal + _colPad) + 32,
+            child: Column(
+              children: [
+                // ── Category headers ──────────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: Row(
+                    children: categories.map((cat) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: _colPad / 2),
+                        child: _CategoryHeader(label: labels[cat] ?? cat, width: _colTotal),
+                      );
+                    }).toList(),
+                  ),
+                ),
+
+                // ── Column sub-headers (Rank / Player / Rating) ──────────────
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                  child: Row(
+                    children: categories.map((_) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: _colPad / 2),
+                        child: SizedBox(
+                          width: _colTotal,
+                          child: Row(
+                            children: [
+                              SizedBox(width: _colRank,
+                                  child: _subHdr('#', TextAlign.center)),
+                              SizedBox(width: _colUsername,
+                                  child: _subHdr('Player', TextAlign.left)),
+                              SizedBox(width: _colRating,
+                                  child: _subHdr('Rating', TextAlign.center)),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+
+                const SizedBox(height: 4),
+                Divider(height: 1, color: Colors.white.withValues(alpha: 0.08)),
+
+                // ── Scrollable body (vertical scroll only) ───────────────────
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: categories.map((cat) {
+                          final players = allPlayers[cat]!;
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: _colPad / 2),
+                            child: SizedBox(
+                              width: _colTotal,
+                              child: Column(
+                                children: List.generate(50, (i) {
+                                  if (i < players.length) {
+                                    final p = players[i];
+                                    return _PlayerRow(
+                                      rank: i + 1,
+                                      username: p['username']?.toString() ?? '?',
+                                      rating: (p['rating'] as num?)?.toInt() ?? 0,
+                                      isBot: p['is_bot'] == true,
+                                    );
+                                  } else {
+                                    return _EmptyRow(rank: i + 1);
+                                  }
+                                }),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
                     ),
                   ),
-                );
-              }).toList(),
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 4),
-        Divider(height: 1, color: Colors.white.withValues(alpha: 0.08)),
-
-        // ── Scrollable body (vertical only, horizontal locked to header) ─────
-        Expanded(
-          child: SingleChildScrollView(
-            // vertical scroll
-            child: SingleChildScrollView(
-              controller: _horizScroll,
-              scrollDirection: Axis.horizontal,
-              physics: const NeverScrollableScrollPhysics(),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: categories.map((cat) {
-                    final players = allPlayers[cat]!;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: _colPad / 2),
-                      child: SizedBox(
-                        width: _colTotal,
-                        child: Column(
-                          children: List.generate(50, (i) {
-                            if (i < players.length) {
-                              final p = players[i];
-                              return _PlayerRow(
-                                rank: i + 1,
-                                username: p['username']?.toString() ?? '?',
-                                rating: (p['rating'] as num?)?.toInt() ?? 0,
-                                isBot: p['is_bot'] == true,
-                              );
-                            } else {
-                              return _EmptyRow(rank: i + 1);
-                            }
-                          }),
-                        ),
-                      ),
-                    );
-                  }).toList(),
                 ),
-              ),
+              ],
             ),
           ),
         ),
-      ],
     );
   }
 

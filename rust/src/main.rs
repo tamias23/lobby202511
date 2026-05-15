@@ -111,7 +111,7 @@ fn make_agent(name: &str, weights_str: Option<&String>, mcts_budget: u64, mcts_d
         }
         "better_mario" => {
             let num = agents::better_mario::NUM_PARAMS;
-            let mut weights = [0.0; 64];
+            let mut weights = [0.0_f64; 33];
             if let Some(w_str) = weights_str {
                 let parsed: Vec<f64> = w_str.split(',').filter_map(|s| s.parse().ok()).collect();
                 for (i, val) in parsed.into_iter().enumerate().take(num) {
