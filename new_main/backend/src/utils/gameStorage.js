@@ -218,6 +218,7 @@ const saveMatchResult = async (
                 tournament_round_info: tournamentRoundInfo,
                 time_control_minutes: timeControl?.minutes || null,
                 time_control_increment: timeControl?.increment || null,
+                completed_at: Date.now(),
             });
             logger.info('Storage', `Match ${gameId} stored (winner=${winner}).`);
         } else {
