@@ -114,27 +114,32 @@ class MCTS_GAT(nn.Module):
         probs = self.policy_head(h, legal_moves, batch)
         return value, probs
 
-def load_data(data_dir):
-    files = glob.glob(os.path.join(data_dir, "*.json"))
-    dataset = []
-    
-    for file in files:
-        with open(file, 'r') as f:
-            content = json.load(f)
+from torch.utils.data import IterableDataset
+import random
+
+class MCTSStreamingDataset(IterableDataset):
+    def __init__(self, data_dir, shuffle=True):
+        super().__init__()
+        self.files = glob.glob(os.path.join(data_dir, "*.json"))
+        self.shuffle = shuffle
+
+    def process_file(self, file):
+        try:
+            with open(file, 'r') as f:
+                content = json.load(f)
+        except Exception:
+            return []
             
-        # Support both single turn (dict) and multi-turn (list of dicts)
         items = content if isinstance(content, list) else [content]
-        
+        parsed_items = []
         for item in items:
             x = torch.tensor(item['x'], dtype=torch.float32).view(-1, 12)
             
-            # Handle empty edge_index properly
             if len(item["edge_index"]) == 0:
                 edge_index = torch.zeros((2, 0), dtype=torch.long)
             else:
                 edge_index = torch.tensor(item['edge_index'], dtype=torch.long).view(2, -1)
             
-            # Handle empty legal_moves properly
             if len(item["legal_moves"]) == 0:
                 legal_moves = torch.zeros((2, 0), dtype=torch.long)
             else:
@@ -143,9 +148,6 @@ def load_data(data_dir):
             move_keys = item['move_keys']
             pi_dict = item['pi']
             
-            # Create target distribution ONLY for graph-based moves (piece_id:target)
-            # This ensures len(pi_target) matches legal_moves.size(1) in the batch.
-            # We skip "COLOR:X" and "PASS" moves for the Policy Head for now.
             valid_pi = []
             for i, key in enumerate(move_keys):
                 if ":" in key and not key.startswith("COLOR:"):
@@ -153,19 +155,35 @@ def load_data(data_dir):
             
             pi_target = torch.tensor(valid_pi, dtype=torch.float32)
                 
-            # For simplicity we normalize pi_target if it doesn't sum to 1
             if pi_target.sum() > 0:
                 pi_target = pi_target / pi_target.sum()
                 
-            # z_target: game outcome (+1, -1, or 0)
             z_val = item.get('z', 0.0)
             z_target = torch.tensor([z_val], dtype=torch.float32)
             
             pyg_data = MCTSData(x=x, edge_index=edge_index, legal_moves=legal_moves, 
                             pi_target=pi_target, z_target=z_target)
-            dataset.append(pyg_data)
+            parsed_items.append(pyg_data)
+        return parsed_items
+
+    def __iter__(self):
+        worker_info = torch.utils.data.get_worker_info()
+        
+        # Partition files across workers if num_workers > 0
+        if worker_info is None:
+            files = self.files.copy()
+        else:
+            files = self.files[worker_info.id::worker_info.num_workers]
             
-    return dataset
+        if self.shuffle:
+            random.shuffle(files)
+            
+        for file in files:
+            parsed_items = self.process_file(file)
+            if self.shuffle:
+                random.shuffle(parsed_items)
+            for data in parsed_items:
+                yield data
 
 def train(epochs=10, batch_size=64, hidden_channels=256, num_layers=8):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -191,15 +209,16 @@ def train(epochs=10, batch_size=64, hidden_channels=256, num_layers=8):
         print(f"Data directory {data_dir} does not exist. Run MCTS agents first!")
         return
 
-    print(f"Loading data from {data_dir}...")
-    dataset = load_data(data_dir)
-    if len(dataset) == 0:
+    print(f"Loading data from {data_dir} using streaming iterator...")
+    dataset = MCTSStreamingDataset(data_dir, shuffle=True)
+    if len(dataset.files) == 0:
         print(f"No training data found in {data_dir}. Run MCTS against itself to generate self-play data.")
         return
         
-    print(f"Loaded {len(dataset)} states. Starting training for {epochs} epochs (batch size: {batch_size})...")
+    print(f"Found {len(dataset.files)} files. Starting streaming training for {epochs} epochs (batch size: {batch_size})...")
     
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    # DataLoader handles IterableDataset perfectly; we do not pass shuffle=True
+    loader = DataLoader(dataset, batch_size=batch_size)
     
     model.train()
     
@@ -207,6 +226,7 @@ def train(epochs=10, batch_size=64, hidden_channels=256, num_layers=8):
         total_loss = 0
         total_value_loss = 0
         total_policy_loss = 0
+        num_samples = 0
         
         # Use tqdm for the batch progress bar
         pbar = tqdm(loader, desc=f"Epoch {epoch+1}/{epochs}", unit="batch")
@@ -233,12 +253,17 @@ def train(epochs=10, batch_size=64, hidden_channels=256, num_layers=8):
             total_loss += loss.item() * num_graphs
             total_value_loss += v_loss.item() * num_graphs
             total_policy_loss += p_loss.item() * num_graphs
+            num_samples += num_graphs
             
             # Update progress bar with current average loss
             pbar.set_postfix({"loss": f"{loss.item():.4f}"})
             
-        print(f"Epoch {epoch+1}/{epochs} | Loss: {total_loss/len(dataset):.4f} "
-              f"(V: {total_value_loss/len(dataset):.4f}, P: {total_policy_loss/len(dataset):.4f})")
+        avg_loss = total_loss / max(1, num_samples)
+        avg_v_loss = total_value_loss / max(1, num_samples)
+        avg_p_loss = total_policy_loss / max(1, num_samples)
+            
+        print(f"Epoch {epoch+1}/{epochs} | Loss: {avg_loss:.4f} "
+              f"(V: {avg_v_loss:.4f}, P: {avg_p_loss:.4f})")
     
     # Save PyTorch weights for incremental training
     torch.save(model.state_dict(), checkpoint_path)
@@ -247,7 +272,8 @@ def train(epochs=10, batch_size=64, hidden_channels=256, num_layers=8):
     # Export to ONNX
     print("Exporting model to ONNX...")
     model.eval()
-    dummy_data = dataset[0].to('cpu')
+    # Get one dummy sample from the dataset for ONNX export
+    dummy_data = next(iter(dataset)).to('cpu')
     model = model.to('cpu')
     
     onnx_path = "./rust/model.onnx"

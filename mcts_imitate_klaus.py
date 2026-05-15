@@ -83,8 +83,8 @@ parser.add_argument(
 parser.add_argument(
     "--games_per_train",
     type=int,
-    default=100,
-    help="Number of klaus-vs-klaus games to generate before each training step (default: 100)",
+    default=10000,
+    help="Number of klaus-vs-klaus games to generate before each training step (default: 10000)",
 )
 parser.add_argument(
     "--max_concurrency",
@@ -137,7 +137,7 @@ parser.add_argument(
 parser.add_argument(
     "--max_data_files",
     type=int,
-    default=2000,
+    default=15000,
     help="Maximum JSON data files in the replay buffer. Older files are deleted (default: 2000)",
 )
 parser.add_argument(
@@ -158,13 +158,13 @@ parser.add_argument(
 parser.add_argument(
     "--eval_every",
     type=int,
-    default=0,
+    default=5,
     help="Evaluate MCTS vs Klaus every N training cycles (0 = disabled)",
 )
 parser.add_argument(
     "--eval_games",
     type=int,
-    default=20,
+    default=100,
     help="Number of games per evaluation run (default: 20)",
 )
 parser.add_argument(
