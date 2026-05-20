@@ -6,6 +6,7 @@ use crate::engine::{
 use crate::models::{Side, PieceType};
 use rand::seq::IteratorRandom;
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 /// 33-parameter layout (matches ImprudentKlaus for cross-compatibility):
 ///   [0]  color: moveable pieces count
@@ -33,7 +34,7 @@ use std::collections::HashMap;
 ///   [22] move: distance to enemy goddess (normalised)
 ///   [23] move: goddess self-safety delta (normalised)
 ///   [24..32] spare
-pub const NUM_PARAMS: usize = 33;
+pub const NUM_PARAMS: usize = 253;
 
 /// Piece material values for alpha-beta evaluation
 fn piece_value(pt: &PieceType) -> f64 {
@@ -51,10 +52,13 @@ fn piece_value(pt: &PieceType) -> f64 {
 
 pub struct BetterMarioAgent {
     pub weights: [f64; NUM_PARAMS],
+    pub mcts_color_budget_ms: u64,
 }
 
 impl BetterMarioAgent {
-    pub fn new(weights: [f64; NUM_PARAMS]) -> Self { Self { weights } }
+    pub fn new(weights: [f64; NUM_PARAMS], mcts_color_budget_ms: u64) -> Self {
+        Self { weights, mcts_color_budget_ms }
+    }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 
@@ -187,6 +191,85 @@ impl BetterMarioAgent {
         })
     }
 
+    fn my_goddess_pos(&self, state: &GameState) -> Option<String> {
+        let me = state.turn;
+        state.board.pieces.values().find(|p|
+            p.side == me && p.piece_type == PieceType::Goddess
+            && p.position != "returned" && p.position != "graveyard"
+        ).map(|p| p.position.clone())
+    }
+
+    fn get_center_poly_id(&self, state: &GameState) -> String {
+        let mut sum_x = 0.0;
+        let mut sum_y = 0.0;
+        let count = state.board.polygons.len() as f64;
+        if count == 0.0 { return String::new(); }
+        for p in state.board.polygons.values() {
+            sum_x += p.center[0];
+            sum_y += p.center[1];
+        }
+        let avg_x = sum_x / count;
+        let avg_y = sum_y / count;
+
+        let mut best_id = String::new();
+        let mut min_d = f64::INFINITY;
+        for (id, p) in &state.board.polygons {
+            let dx = p.center[0] - avg_x;
+            let dy = p.center[1] - avg_y;
+            let d = dx*dx + dy*dy;
+            if d < min_d {
+                min_d = d;
+                best_id = id.clone();
+            }
+        }
+        best_id
+    }
+
+    fn get_witch_blast_zones(&self, state: &GameState, pos: &str) -> f64 {
+        let enemy = if state.turn == Side::White { Side::Black } else { Side::White };
+        state.get_slide_neighbors(pos).iter()
+            .filter(|n| state.occupancy.get(*n).map(|oid| state.board.pieces[oid].side == enemy).unwrap_or(false))
+            .count() as f64
+    }
+
+    fn is_targeting_goddess(&self, state: &GameState, attacker: &crate::models::Piece, my_goddess_pos: &str) -> bool {
+        if state.is_siren_pinned(&attacker.position, attacker.side) { return false; }
+        match attacker.piece_type {
+            PieceType::Siren | PieceType::Witch => false,
+            PieceType::Soldier | PieceType::Minotaur | PieceType::Ghoul =>
+                state.get_slide_neighbors(&attacker.position).contains(&my_goddess_pos.to_string()),
+            PieceType::Goddess =>
+                get_polys_within_distance_jump(&state.board, &attacker.position, 2).contains(&my_goddess_pos.to_string()),
+            PieceType::Heroe =>
+                get_polys_within_distance_jump(&state.board, &attacker.position, 3).contains(&my_goddess_pos.to_string()),
+            PieceType::Mage => {
+                let sc = state.board.polygons.get(&attacker.position).map(|x| x.color.clone()).unwrap_or_default();
+                let tc = state.board.polygons.get(my_goddess_pos).map(|x| x.color.clone()).unwrap_or_default();
+                tc != sc && get_polys_within_distance_jump(&state.board, &attacker.position, 3).contains(&my_goddess_pos.to_string())
+            }
+        }
+    }
+
+    fn forward(&self, inputs: &[f64; 40]) -> f64 {
+        let mut hidden = [0.0_f64; 6];
+        // Layer 1
+        for j in 0..6 {
+            let mut sum = 0.0;
+            for i in 0..40 {
+                sum += self.weights[i * 6 + j] * inputs[i];
+            }
+            sum += self.weights[240 + j];
+            hidden[j] = sum.tanh();
+        }
+        // Layer 2
+        let mut output = 0.0;
+        for j in 0..6 {
+            output += self.weights[246 + j] * hidden[j];
+        }
+        output += self.weights[252];
+        output
+    }
+
     // ── Move/color scoring ──────────────────────────────────────────────────
 
     fn score_color(&self, state: &GameState, color: &str) -> f64 {
@@ -215,30 +298,46 @@ impl BetterMarioAgent {
                 }
             }
         }
-        self.weights[0]*moveable + self.weights[1]*non_ending
-            + self.weights[2]*capturable + self.weights[3]*cap_non_ending
+
+        let mut inputs = [0.0_f64; 40];
+        inputs[0] = moveable;
+        inputs[1] = non_ending;
+        inputs[2] = capturable;
+        inputs[3] = cap_non_ending;
+
+        // Mage Chromatic gate control weight[26]
+        let unseen_colors = 4 - state.colors_ever_chosen.len();
+        if unseen_colors > 0 && !state.colors_ever_chosen.contains(&color.to_lowercase()) {
+            let our_reserve = state.board.pieces.values().filter(|p| p.side == state.turn && p.position == "returned").count() as f64;
+            let enemy_reserve = state.board.pieces.values().filter(|p| p.side == enemy && p.position == "returned").count() as f64;
+            inputs[26] = our_reserve - enemy_reserve;
+        }
+
+        self.forward(&inputs)
     }
 
     fn score_move(&self, state: &GameState, piece_id: &str, target: &str) -> f64 {
         let piece = &state.board.pieces[piece_id];
         let pt = &piece.piece_type;
         let my_side = piece.side;
+        let enemy = if my_side == Side::White { Side::Black } else { Side::White };
         let chosen = Self::chosen_color(state);
         let tc = state.board.polygons.get(target).map(|p| p.color.to_lowercase()).unwrap_or_default();
         let ends = Self::would_end_turn(state, piece_id, target);
         let captures = Self::simulate_captures(state, piece_id, target);
-        let mut score = 0.0_f64;
+
+        let mut inputs = [0.0_f64; 40];
 
         for cap in &captures {
             match cap {
-                PieceType::Mage  => { score += self.weights[4]; if ends { score += self.weights[5]; } }
-                PieceType::Heroe => { score += self.weights[6]; if ends { score += self.weights[7]; } }
-                PieceType::Witch => { score += self.weights[8]; if ends { score += self.weights[9]; } }
-                PieceType::Siren => { score += self.weights[10]; if ends { score += self.weights[11]; } }
+                PieceType::Mage  => { inputs[4] += 1.0; if ends { inputs[5] += 1.0; } }
+                PieceType::Heroe => { inputs[6] += 1.0; if ends { inputs[7] += 1.0; } }
+                PieceType::Witch => { inputs[8] += 1.0; if ends { inputs[9] += 1.0; } }
+                PieceType::Siren => { inputs[10] += 1.0; if ends { inputs[11] += 1.0; } }
                 _ => {}
             }
-            score += self.weights[20];
-            if ends { score += self.weights[21]; }
+            inputs[20] += 1.0;
+            if ends { inputs[21] += 1.0; }
         }
 
         if *pt == PieceType::Siren {
@@ -246,33 +345,27 @@ impl BetterMarioAgent {
             let on_non_chosen = tc != chosen;
             for i in &imm {
                 match i {
-                    PieceType::Mage  => { score += self.weights[12]; if on_non_chosen { score += self.weights[13]; } }
-                    PieceType::Heroe => { score += self.weights[14]; if on_non_chosen { score += self.weights[15]; } }
-                    PieceType::Witch => { score += self.weights[16]; if on_non_chosen { score += self.weights[17]; } }
-                    PieceType::Siren => { score += self.weights[18]; if on_non_chosen { score += self.weights[19]; } }
+                    PieceType::Mage  => { inputs[12] += 1.0; if on_non_chosen { inputs[13] += 1.0; } }
+                    PieceType::Heroe => { inputs[14] += 1.0; if on_non_chosen { inputs[15] += 1.0; } }
+                    PieceType::Witch => { inputs[16] += 1.0; if on_non_chosen { inputs[17] += 1.0; } }
+                    PieceType::Siren => { inputs[18] += 1.0; if on_non_chosen { inputs[19] += 1.0; } }
+                    PieceType::Goddess => { inputs[24] += 1.0; if on_non_chosen { inputs[25] += 1.0; } }
                     _ => {}
                 }
             }
         }
 
-        // Penalise deploying Mage adjacent to enemy
-        if piece.position == "returned" && *pt == PieceType::Mage {
-            let enemy = if my_side == Side::White { Side::Black } else { Side::White };
-            if state.get_slide_neighbors(target).iter().any(|n|
-                state.occupancy.get(n).map(|oid| state.board.pieces[oid].side == enemy).unwrap_or(false)
-            ) { score -= 1000.0; }
-        }
-
         // Distance to enemy goddess
+        let max_d = Self::max_board_dist(state);
+        let enemy_g_pos = Self::enemy_goddess_pos(state);
         if *pt != PieceType::Goddess {
-            if let Some(ref gpos) = Self::enemy_goddess_pos(state) {
+            if let Some(ref gpos) = enemy_g_pos {
                 let pp = &piece.position;
                 if pp != "returned" && pp != "graveyard" {
                     let d_before = Self::poly_dist(state, pp, gpos);
                     let d_after  = Self::poly_dist(state, target, gpos);
-                    let max_d = Self::max_board_dist(state);
                     let norm = if max_d > 0.0 { ((d_before - d_after) / max_d).clamp(-1.0, 1.0) } else { 0.0 };
-                    score += self.weights[22] * norm;
+                    inputs[22] = norm;
                 }
             }
         }
@@ -281,13 +374,131 @@ impl BetterMarioAgent {
         if *pt == PieceType::Goddess && piece.position != "returned" && piece.position != "graveyard" {
             let cur  = Self::goddess_safety(state, &piece.position);
             let next = Self::goddess_safety(state, target);
-            let max_d = Self::max_board_dist(state);
             let delta = if max_d > 0.0 { ((next - cur) / max_d).clamp(-1.0, 1.0) } else { 0.0 };
-            score += self.weights[23] * delta;
+            inputs[23] = delta;
         }
 
-        score
+        // Goddess Shield Proximity (Minotaur/Soldier near friendly Goddess) [27]
+        if *pt == PieceType::Minotaur || *pt == PieceType::Soldier {
+            if let Some(my_g_pos) = self.my_goddess_pos(state) {
+                let pp = &piece.position;
+                if pp != "returned" && pp != "graveyard" {
+                    let d_before = Self::poly_dist(state, pp, &my_g_pos);
+                    let d_after  = Self::poly_dist(state, target, &my_g_pos);
+                    let delta = if max_d > 0.0 { ((d_before - d_after) / max_d).clamp(-1.0, 1.0) } else { 0.0 };
+                    inputs[27] = delta;
+                }
+            }
+        }
+
+        // High-Value Recapture Danger [28]
+        if *pt == PieceType::Mage || *pt == PieceType::Heroe || *pt == PieceType::Witch {
+            if Self::goddess_threatened(state, target) {
+                inputs[28] = piece_value(pt);
+            }
+        }
+
+        // Sequence-Lock Chaining Reward [29]
+        if (*pt == PieceType::Soldier || *pt == PieceType::Minotaur) && !ends {
+            if tc == chosen {
+                inputs[29] = 1.0;
+            }
+        }
+
+        // Simulate state changes for advanced state heuristics
+        let mut sim = state.clone();
+        let was_returned = sim.board.pieces[piece_id].position == "returned";
+        let captured = apply_move(&mut sim, piece_id, target);
+        apply_move_turnover(&mut sim, piece_id, target, false, captured.is_empty(), was_returned);
+
+        // Goddess Escape Mobilities [30]
+        if let Some(my_g_pos) = self.my_goddess_pos(&sim) {
+            let escape_routes = get_polys_within_distance_jump(&sim.board, &my_g_pos, 2)
+                .iter()
+                .filter(|poly| !sim.occupancy.contains_key(*poly) && !Self::goddess_threatened(&sim, poly))
+                .count() as f64;
+            inputs[30] = escape_routes;
+        }
+
+        // Goddess Threat Count [31]
+        if let Some(my_g_pos) = self.my_goddess_pos(&sim) {
+            let incoming_threats = sim.board.pieces.values()
+                .filter(|p| p.side == enemy && p.position != "returned" && p.position != "graveyard" && self.is_targeting_goddess(&sim, p, &my_g_pos))
+                .count() as f64;
+            inputs[31] = incoming_threats;
+        }
+
+        // Army Count Differential [32]
+        let our_count = sim.board.pieces.values().filter(|p| p.side == my_side && p.position != "graveyard").count() as f64;
+        let enemy_count = sim.board.pieces.values().filter(|p| p.side == enemy && p.position != "graveyard").count() as f64;
+        inputs[32] = our_count - enemy_count;
+
+        // Army Value Differential [33]
+        let our_val: f64 = sim.board.pieces.values().filter(|p| p.side == my_side && p.position != "graveyard").map(|p| piece_value(&p.piece_type)).sum();
+        let enemy_val: f64 = sim.board.pieces.values().filter(|p| p.side == enemy && p.position != "graveyard").map(|p| piece_value(&p.piece_type)).sum();
+        inputs[33] = our_val - enemy_val;
+
+        // Reserve Stash Differential [34]
+        let our_stash = sim.board.pieces.values().filter(|p| p.side == my_side && p.position == "returned").count() as f64;
+        let enemy_stash = sim.board.pieces.values().filter(|p| p.side == enemy && p.position == "returned").count() as f64;
+        inputs[34] = our_stash - enemy_stash;
+
+        // Mage Beachhead Advancement [35]
+        if *pt == PieceType::Mage {
+            if let Some(ref egpos) = enemy_g_pos {
+                let pp = &piece.position;
+                if pp != "returned" && pp != "graveyard" {
+                    let d_before = Self::poly_dist(state, pp, egpos);
+                    let d_after  = Self::poly_dist(state, target, egpos);
+                    inputs[35] = (d_before - d_after) / max_d;
+                }
+            }
+        }
+
+        // Siren Defensive Wall [36]
+        if *pt == PieceType::Siren {
+            let friendly_neighbors = state.get_slide_neighbors(target).iter()
+                .filter(|n| state.occupancy.get(*n).map(|oid| state.board.pieces[oid].side == my_side).unwrap_or(false))
+                .count() as f64;
+            inputs[36] = friendly_neighbors;
+        }
+
+        // Witch Chromatic Reach [37]
+        if *pt == PieceType::Witch {
+            inputs[37] = self.get_witch_blast_zones(state, target);
+        }
+
+        // Center Board Control [38]
+        let center_poly = self.get_center_poly_id(state);
+        if !center_poly.is_empty() {
+            let pp = &piece.position;
+            if pp != "returned" && pp != "graveyard" {
+                let d_before = Self::poly_dist(state, pp, &center_poly);
+                let d_after  = Self::poly_dist(state, target, &center_poly);
+                inputs[38] = (d_before - d_after) / max_d;
+            }
+        }
+
+        // Heroe Double-Leap Opportunity [39]
+        if *pt == PieceType::Heroe {
+            let capture_moves_on_non_chosen = get_legal_moves(state, piece_id).iter()
+                .filter(|t| state.occupancy.contains_key(*t) && !Self::would_end_turn(state, piece_id, t))
+                .count() as f64;
+            inputs[39] = capture_moves_on_non_chosen;
+        }
+
+        let mut out_score = self.forward(&inputs);
+
+        // Penalise deploying Mage adjacent to enemy
+        if piece.position == "returned" && *pt == PieceType::Mage {
+            if state.get_slide_neighbors(target).iter().any(|n|
+                state.occupancy.get(n).map(|oid| state.board.pieces[oid].side == enemy).unwrap_or(false)
+            ) { out_score -= 1000.0; }
+        }
+
+        out_score
     }
+
 
     // ── Static evaluation for alpha-beta ────────────────────────────────────
 
@@ -335,7 +546,7 @@ impl BetterMarioAgent {
         beta: f64,
     ) -> f64 {
         if state.phase == GamePhase::GameOver {
-            return self.evaluate(state);
+            return -9_999_999.0;
         }
         let eligible = state.get_eligible_piece_ids();
         let mut all_moves: HashMap<String, Vec<String>> = HashMap::new();
@@ -343,7 +554,7 @@ impl BetterMarioAgent {
             let mv = get_legal_moves(state, pid);
             if !mv.is_empty() { all_moves.insert(pid.clone(), mv); }
         }
-        if all_moves.is_empty() { return self.evaluate(state); }
+        if all_moves.is_empty() { return 0.0; }
         let ordered = Self::ordered_moves(state, &all_moves);
         let mut best = f64::NEG_INFINITY;
         // Only search top N moves at this depth
@@ -353,7 +564,8 @@ impl BetterMarioAgent {
             let captured = apply_move(&mut sim, pid, target);
             if captured.contains(&PieceType::Goddess) { return 9_999_999.0; }
             apply_move_turnover(&mut sim, pid, target, false, captured.is_empty(), was_returned);
-            let val = self.evaluate(&sim);
+            
+            let val = self.score_move(state, pid, target);
             if val > best { best = val; }
             if val > alpha { alpha = val; }
             if alpha >= beta { break; }
@@ -378,12 +590,14 @@ impl BetterMarioAgent {
             }
             apply_move_turnover(&mut sim, pid, target, false, captured.is_empty(), was_returned);
 
+            let move_score = self.score_move(state, pid, target);
+
             let val = if sim.turn == state.turn {
-                // Still our turn (chain): evaluate directly
-                self.evaluate(&sim)
+                // Still our turn (chain): evaluate recursively/greedily
+                move_score + self.alpha_beta_1ply(&sim, f64::NEG_INFINITY, f64::INFINITY)
             } else {
                 // Opponent's turn: 1-ply opponent search (negamax)
-                -self.alpha_beta_1ply(&sim, f64::NEG_INFINITY, f64::INFINITY)
+                move_score - self.alpha_beta_1ply(&sim, f64::NEG_INFINITY, f64::INFINITY)
             };
 
             if val > best_val {
@@ -430,6 +644,47 @@ impl BetterMarioAgent {
         }
         candidate
     }
+    fn color_leads_to_win(&self, state: &GameState, color: &str) -> bool {
+        let budget = Duration::from_millis(self.mcts_color_budget_ms);
+        let start = Instant::now();
+        let perspective = state.turn;
+
+        while start.elapsed() < budget {
+            let mut sim = state.clone();
+            sim.color_chosen.insert(perspective, color.to_lowercase());
+            sim.is_new_turn = false;
+
+            let mut steps = 0;
+            while sim.turn == perspective && sim.phase == GamePhase::Playing && steps < 50 {
+                steps += 1;
+                let eligible = sim.get_eligible_piece_ids();
+                let mut all_moves: HashMap<String, Vec<String>> = HashMap::new();
+                for p_id in &eligible {
+                    let moves = get_legal_moves(&sim, p_id);
+                    if !moves.is_empty() {
+                        all_moves.insert(p_id.clone(), moves);
+                    }
+                }
+
+                if all_moves.is_empty() {
+                    break;
+                }
+
+                let mut rng = rand::rng();
+                let p_id = all_moves.keys().choose(&mut rng).unwrap().clone();
+                let target = all_moves[&p_id].iter().choose(&mut rng).unwrap().clone();
+
+                let was_returned = sim.board.pieces[&p_id].position == "returned";
+                let captured = apply_move(&mut sim, &p_id, &target);
+                let goddess_captured = captured.contains(&PieceType::Goddess);
+                if goddess_captured {
+                    return true;
+                }
+                apply_move_turnover(&mut sim, &p_id, &target, false, captured.is_empty(), was_returned);
+            }
+        }
+        false
+    }
 }
 
 impl Agent for BetterMarioAgent {
@@ -437,6 +692,13 @@ impl Agent for BetterMarioAgent {
 
     fn choose_color<'a>(&self, state: &GameState, valid_colors: &'a [String]) -> &'a String {
         if valid_colors.len() == 1 { return &valid_colors[0]; }
+        
+        for color in valid_colors {
+            if self.color_leads_to_win(state, color) {
+                return color;
+            }
+        }
+
         let mut best_idx = 0;
         let mut best_score = f64::NEG_INFINITY;
         for (i, color) in valid_colors.iter().enumerate() {

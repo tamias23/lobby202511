@@ -10,14 +10,14 @@ import glob
 from pathlib import Path
 
 # Configuration
-POPULATION_SIZE = 100
-NUM_PARAMS = 33
+POPULATION_SIZE = 150
+NUM_PARAMS = 253
 GENERATIONS = 500
 ROUNDS_PER_GEN = 9
-PARALLEL_MATCHES = 10
-MUTATION_RATE = 0.12
-MUTATION_STRENGTH = 0.25
-ELITISM_COUNT = 15
+PARALLEL_MATCHES = 12
+MUTATION_RATE = 0.04
+MUTATION_STRENGTH = 0.10
+ELITISM_COUNT = 10
 
 # Klaus weights (known-good baseline for sparring — never mutated)
 # Layout: [0..3] color, [4..11] capture, [12..19] siren, [20..21] generic, [22] dist, [23] safety
@@ -60,14 +60,40 @@ class MarioIndividual:
         return [f"mario_{self.id}", "better_mario", w_str, "", ""]
 
 
+def load_klaus_sparring_agents():
+    klaus_paths = {
+        "kl_yER": "results/20260413/klaus/yERAHzNr01.json",
+        "kl_ZCp": "results/20260413/klaus/ZCpsrCpS01.json",
+        "kl_KMd": "results/20260413/klaus/kKMdyCCkL87.json",
+        "kl_cFR": "results/20260413/klaus/kcFRQvOoy79.json",
+        "kl_Tfs": "results/20260413/klaus/TfslkGSQ01.json",
+        "kl_zss": "results/20260413/klaus/zssRPrhS97.json",
+        "kl_LaK": "results/20260413/klaus/LaKhJOEO99.json",
+    }
+    agents = []
+    for name, path_str in klaus_paths.items():
+        json_path = Path(path_str)
+        if json_path.exists():
+            try:
+                with open(json_path, "r") as jf:
+                    data = json.load(jf)
+                    weights = data["weights"]
+                    agents.append((name, weights))
+            except Exception as e:
+                print(f"Error loading weights for {name} from {json_path}: {e}")
+        else:
+            print(f"Warning: JSON path {json_path} for {name} does not exist.")
+    return agents
+
+
 class KlausSparringAgent:
     """Fixed Klaus agent used as a sparring partner. Never mutated or saved."""
-    def __init__(self, idx):
-        self.weights = list(KLAUS_WEIGHTS)
+    def __init__(self, name, weights):
+        self.weights = list(weights)
         self.score = 0
         self.games_played = 0
         self.agent_type = 'imprudent_klaus'
-        self.id = f"sparring_klaus_{idx}"
+        self.id = f"sparring_{name}"
         self.is_sparring = True
 
 def save_population(population, filename):
@@ -112,13 +138,14 @@ async def run_match(sem, p1, p2, board):
         
         return winner, p1, p2
 
-async def evaluate_population(population, boards):
-    # Reset mario scores (sparring agents reset each gen too for fairness)
+async def evaluate_population(population, boards, klaus_data):
+    # Reset all scores and games played
     for ind in population:
         ind.score = 0
+        ind.games_played = 0
 
-    # Add Klaus sparring partners — they participate in pairing but don't breed
-    sparring = [KlausSparringAgent(i) for i in range(NUM_SPARRING_PARTNERS)]
+    # Add Klaus sparring partners loaded from agents_mixed_7.txt
+    sparring = [KlausSparringAgent(name, weights) for name, weights in klaus_data]
     full_pool = population + sparring
 
     sem = asyncio.Semaphore(PARALLEL_MATCHES)
@@ -153,20 +180,17 @@ def evolve(population):
         elite.id = mario_pop[i].id  # keep id for tracking
         new_population.append(elite)
 
-    # Tournament selection pool: top 20% of mario agents
-    pool_size = max(4, len(mario_pop) // 5)
-    gene_pool = mario_pop[:pool_size]
+    # Harmonic rank-based selection probabilities: Rank 1 gets highest weight, Rank 2 gets half, etc.
+    ranks = list(range(1, len(mario_pop) + 1))
+    selection_weights = [1.0 / r for r in ranks]
 
-    # Fill rest with crossover + mutation
+    # Fill rest with harmonic cloning + Gaussian mutation (no crossover to preserve NN hidden layout)
     while len(new_population) < POPULATION_SIZE:
-        parent1 = random.choice(gene_pool)
-        parent2 = random.choice(gene_pool)
-
-        # Uniform crossover
-        child_weights = [
-            w1 if random.random() > 0.5 else w2
-            for w1, w2 in zip(parent1.weights, parent2.weights)
-        ]
+        parent = random.choices(mario_pop, weights=selection_weights, k=1)[0]
+        
+        # Clone parent's weights
+        child_weights = list(parent.weights)
+        
         # Gaussian mutation
         for i in range(NUM_PARAMS):
             if random.random() < MUTATION_RATE:
@@ -175,6 +199,7 @@ def evolve(population):
         new_population.append(MarioIndividual(child_weights))
 
     return new_population
+
 
 async def main():
     if not RUST_BIN.exists():
@@ -185,6 +210,13 @@ async def main():
     if not boards:
         print("Error: No boards found in games/data/")
         return
+
+    print("Loading 7 target Klaus sparring agents from agents_mixed_7.txt...")
+    klaus_data = load_klaus_sparring_agents()
+    if not klaus_data:
+        print("Error: Could not load target Klaus agents from agents_mixed_7.txt.")
+        return
+    print(f"  Loaded {len(klaus_data)} Klaus sparring partners.")
 
     print("Checking for existing agents in mario_evolution/...")
     existing_files = glob.glob(str(OUTPUT_DIR / "*.json"))
@@ -221,7 +253,7 @@ async def main():
         start_time = time.time()
         print(f"\n--- Generation {gen}/{GENERATIONS} ---")
         
-        await evaluate_population(population, boards)
+        await evaluate_population(population, boards, klaus_data)
         
         population.sort(key=lambda x: x.score, reverse=True)
         
