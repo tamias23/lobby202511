@@ -53,12 +53,43 @@ fn piece_value(pt: &PieceType) -> f64 {
 pub struct BetterMarioAgent {
     pub weights: [f64; NUM_PARAMS],
     pub mcts_color_budget_ms: u64,
+    pub branching_factor: usize,
+    jump_cache_2: std::sync::Mutex<HashMap<String, std::collections::HashSet<String>>>,
+    jump_cache_3: std::sync::Mutex<HashMap<String, std::collections::HashSet<String>>>,
 }
 
 impl BetterMarioAgent {
-    pub fn new(weights: [f64; NUM_PARAMS], mcts_color_budget_ms: u64) -> Self {
-        Self { weights, mcts_color_budget_ms }
+    pub fn new(weights: [f64; NUM_PARAMS], mcts_color_budget_ms: u64, branching_factor: usize) -> Self {
+        Self {
+            weights,
+            mcts_color_budget_ms,
+            branching_factor,
+            jump_cache_2: std::sync::Mutex::new(HashMap::new()),
+            jump_cache_3: std::sync::Mutex::new(HashMap::new()),
+        }
     }
+
+    fn get_jump_2(&self, board: &crate::models::BoardMap, pos: &str) -> std::collections::HashSet<String> {
+        let mut cache = self.jump_cache_2.lock().unwrap();
+        if let Some(res) = cache.get(pos) {
+            return res.clone();
+        }
+        let res = get_polys_within_distance_jump(board, pos, 2);
+        cache.insert(pos.to_string(), res.clone());
+        res
+    }
+
+    fn get_jump_3(&self, board: &crate::models::BoardMap, pos: &str) -> std::collections::HashSet<String> {
+        let mut cache = self.jump_cache_3.lock().unwrap();
+        if let Some(res) = cache.get(pos) {
+            return res.clone();
+        }
+        let res = get_polys_within_distance_jump(board, pos, 3);
+        cache.insert(pos.to_string(), res.clone());
+        res
+    }
+
+
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 
@@ -239,13 +270,13 @@ impl BetterMarioAgent {
             PieceType::Soldier | PieceType::Minotaur | PieceType::Ghoul =>
                 state.get_slide_neighbors(&attacker.position).contains(&my_goddess_pos.to_string()),
             PieceType::Goddess =>
-                get_polys_within_distance_jump(&state.board, &attacker.position, 2).contains(&my_goddess_pos.to_string()),
+                self.get_jump_2(&state.board, &attacker.position).contains(&my_goddess_pos.to_string()),
             PieceType::Heroe =>
-                get_polys_within_distance_jump(&state.board, &attacker.position, 3).contains(&my_goddess_pos.to_string()),
+                self.get_jump_3(&state.board, &attacker.position).contains(&my_goddess_pos.to_string()),
             PieceType::Mage => {
                 let sc = state.board.polygons.get(&attacker.position).map(|x| x.color.clone()).unwrap_or_default();
                 let tc = state.board.polygons.get(my_goddess_pos).map(|x| x.color.clone()).unwrap_or_default();
-                tc != sc && get_polys_within_distance_jump(&state.board, &attacker.position, 3).contains(&my_goddess_pos.to_string())
+                tc != sc && self.get_jump_3(&state.board, &attacker.position).contains(&my_goddess_pos.to_string())
             }
         }
     }
@@ -558,7 +589,7 @@ impl BetterMarioAgent {
         let ordered = Self::ordered_moves(state, &all_moves);
         let mut best = f64::NEG_INFINITY;
         // Only search top N moves at this depth
-        for (pid, target, _) in ordered.iter().take(20) {
+        for (pid, target, _) in ordered.iter().take(self.branching_factor) {
             let mut sim = state.clone();
             let was_returned = sim.board.pieces[pid].position == "returned";
             let captured = apply_move(&mut sim, pid, target);

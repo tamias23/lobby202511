@@ -18,7 +18,7 @@ fn parse_flag_str<'a>(args: &'a [String], flag: &str, default: &'a str) -> &'a s
         .unwrap_or(default)
 }
 
-fn make_agent(name: &str, weights_str: Option<&String>, mcts_budget: u64, mcts_data_dir: String, model_path: Option<String>, mcts_record: bool, verbosity: u8, num_threads: usize, diego_mcts_budget: u64) -> Arc<dyn agents::Agent> {
+fn make_agent(name: &str, weights_str: Option<&String>, mcts_budget: u64, mcts_data_dir: String, model_path: Option<String>, mcts_record: bool, verbosity: u8, num_threads: usize, diego_mcts_budget: u64, mario_branching: usize) -> Arc<dyn agents::Agent> {
     match name {
         "random" => Arc::new(agents::random::RandomAgent),
         #[cfg(feature = "onnx")]
@@ -118,7 +118,7 @@ fn make_agent(name: &str, weights_str: Option<&String>, mcts_budget: u64, mcts_d
                     weights[i] = val;
                 }
             }
-            Arc::new(agents::better_mario::BetterMarioAgent::new(weights, diego_mcts_budget))
+            Arc::new(agents::better_mario::BetterMarioAgent::new(weights, diego_mcts_budget, mario_branching))
         }
         other => {
             eprintln!("Unknown agent '{}'. Available: random, greedy_bob, greedy_jack, quick_diego, imprudent_klaus, better_mario, mcts", other);
@@ -237,6 +237,8 @@ async fn main() {
     // MCTS agents are unaffected: they still use mcts_data_dir via their own flag.
     let diego_data_dir = diego_imitate_dir.unwrap_or_default();
 
+    let mario_branching = parse_flag_value(&args, "--mario-branching", 20) as usize;
+
     let white_diego_dir = if white_agent_name == "quick_diego" || white_agent_name == "imprudent_klaus" { diego_data_dir.clone() } else { mcts_data_dir.clone() };
     let white_diego_record = if white_agent_name == "quick_diego" || white_agent_name == "imprudent_klaus" { diego_record } else { mcts_record };
     let white_agent = make_agent(
@@ -245,6 +247,7 @@ async fn main() {
         white_model_path,
         white_diego_record,
         verbosity, mcts_threads_white, diego_mcts_budget,
+        mario_branching,
     );
     let black_diego_dir = if black_agent_name == "quick_diego" || black_agent_name == "imprudent_klaus" { diego_data_dir.clone() } else { mcts_data_dir.clone() };
     let black_diego_record = if black_agent_name == "quick_diego" || black_agent_name == "imprudent_klaus" { diego_record } else { mcts_record };
@@ -254,6 +257,7 @@ async fn main() {
         black_model_path,
         black_diego_record,
         verbosity, mcts_threads_black, diego_mcts_budget,
+        mario_branching,
     );
 
     if let Some(batch_pos) = args.iter().position(|a| a == "--batch") {

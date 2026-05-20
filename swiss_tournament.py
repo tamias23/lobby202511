@@ -205,11 +205,14 @@ async def run_match(sem, agent1, agent2, board_path, temp_dir):
         has_mcts = False
         has_diego = False
         diego_budget = 100
+        has_better_mario = False
         for side, agent in [("white", white), ("black", black)]:
             if agent.type == "greedy_bob":
                 cmd.extend([f"--greedy-weights-{side}", weights_to_str(agent.data)])
             elif agent.type in ("quick_diego", "imprudent_klaus", "better_mario"):
                 has_diego = True
+                if agent.type == "better_mario":
+                    has_better_mario = True
                 cmd.extend([f"--greedy-weights-{side}", weights_to_str(agent.data)])
                 diego_budget = agent.diego_mcts_budget
             elif agent.type == "greedy_jack":
@@ -227,6 +230,10 @@ async def run_match(sem, agent1, agent2, board_path, temp_dir):
         # QuickDiego MCTS color look-ahead budget
         if has_diego:
             cmd.extend(["--diego-mcts-budget", str(diego_budget)])
+
+        # BetterMario branching factor
+        if has_better_mario:
+            cmd.extend(["--mario-branching", "20"])
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,

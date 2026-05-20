@@ -10,14 +10,14 @@ import glob
 from pathlib import Path
 
 # Configuration
-POPULATION_SIZE = 150
+POPULATION_SIZE = 100
 NUM_PARAMS = 253
 GENERATIONS = 500
 ROUNDS_PER_GEN = 9
 PARALLEL_MATCHES = 12
 MUTATION_RATE = 0.04
 MUTATION_STRENGTH = 0.10
-ELITISM_COUNT = 10
+ELITISM_COUNT = 7
 
 # Klaus weights (known-good baseline for sparring — never mutated)
 # Layout: [0..3] color, [4..11] capture, [12..19] siren, [20..21] generic, [22] dist, [23] safety
@@ -116,6 +116,8 @@ async def run_match(sem, p1, p2, board):
             str(RUST_BIN), str(board),
             "--batch", "1",
             "--max-turns", "200",
+            "--diego-mcts-budget", "100",
+            "--mario-branching", "6",
             "--white", white_type,
             "--black", black_type,
             "--greedy-weights-white", ",".join(map(str, white.weights)),
