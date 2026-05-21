@@ -83,12 +83,26 @@ class _GameHistoryScreenState extends State<GameHistoryScreen> {
         ? (jsonDecode(rawMoves) as List? ?? [])
         : (rawMoves as List? ?? []);
 
+    final myColor = g['my_color'] as String?;
+    final opponent = g['opponent'] as String? ?? '?';
+    final whiteName = myColor == 'white' ? 'Me' : opponent;
+    final blackName = myColor == 'black' ? 'Me' : opponent;
+
     context.push('/analysis', extra: {
-      'board_id':   g['board_id'],
-      'moves':      moves,
-      'white_name': g['my_color'] == 'white' ? 'Me' : g['opponent'],
-      'black_name': g['my_color'] == 'black' ? 'Me' : g['opponent'],
-      'game_id':    g['game_id'],
+      'board_id':    g['board_id'],
+      'moves':       moves,
+      'white_name':  whiteName,
+      'black_name':  blackName,
+      'whiteName':   whiteName,
+      'blackName':   blackName,
+      'game_id':     g['game_id'],
+      'winner':      g['winner'],
+      'minutes':     g['minutes'],
+      'increment':   g['increment'],
+      'timeControl': {
+        'minutes':   g['minutes'] ?? 10,
+        'increment': g['increment'] ?? 0,
+      },
     });
   }
 

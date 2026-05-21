@@ -696,13 +696,22 @@ class _GameCard extends StatelessWidget {
                         (game['my_color'] == 'black' ? username : opponent);
                     Navigator.of(context).push(MaterialPageRoute(
                       builder: (_) => AnalysisScreen(initialRecord: {
-                        'board_id':   game['board_id'],
-                        'moves':      game['moves'] is String
+                        'board_id':    game['board_id'],
+                        'moves':       game['moves'] is String
                             ? (jsonDecode(game['moves'] as String) as List? ?? [])
                             : (game['moves'] as List? ?? []),
-                        'white_name': whiteName,
-                        'black_name': blackName,
-                        'game_id':    game['game_id'],
+                        'white_name':  whiteName,
+                        'black_name':  blackName,
+                        'whiteName':   whiteName,
+                        'blackName':   blackName,
+                        'game_id':     game['game_id'],
+                        'winner':      game['winner'],
+                        'minutes':     game['minutes'],
+                        'increment':   game['increment'],
+                        'timeControl': {
+                          'minutes':   game['minutes'] ?? 10,
+                          'increment': game['increment'] ?? 0,
+                        },
                       }),
                     ));
                   },

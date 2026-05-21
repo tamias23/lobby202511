@@ -118,7 +118,8 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
     // in dart2js and hard 'as' casts would throw at runtime.
     final raw = widget.initialRecord;
     if (raw != null) {
-      _record = _normalise(raw);
+      final normalised = _normalise(raw);
+      _record = _normalizeGameRecord(normalised);
       final boardId = _record!['board_id'] as String?;
       debugPrint('[Analysis] initState: board_id=$boardId, moves=${(_record!['moves'] as List?)?.length} moves');
       if (boardId != null && boardId.isNotEmpty) {
@@ -288,7 +289,7 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
         }
         final allGames = decoded
             .whereType<Map<String,dynamic>>()
-            .map(_normalizeTournamentGame)
+            .map(_normalizeGameRecord)
             .toList();
         if (allGames.isEmpty) {
           _showError('No games found in this file.');
@@ -326,8 +327,8 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
     if (raw['time_control'] is Map) return raw['time_control'] as Map<String,dynamic>;
 
     // 2. Individual fields from DB export (tournament games)
-    final minutes   = raw['time_control_minutes']   ?? raw['timeControlMinutes'];
-    final increment = raw['time_control_increment']  ?? raw['timeControlIncrement'];
+    final minutes   = raw['time_control_minutes']   ?? raw['timeControlMinutes'] ?? raw['minutes'];
+    final increment = raw['time_control_increment']  ?? raw['timeControlIncrement'] ?? raw['increment'];
     if (minutes != null) {
       return {'minutes': minutes, 'increment': increment ?? 0};
     }
@@ -335,8 +336,8 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
     return null;
   }
 
-  /// Normalize tournament-export field names to the analysis-compatible format.
-  Map<String,dynamic> _normalizeTournamentGame(Map<String,dynamic> raw) {
+  /// Normalize game record field names to the analysis-compatible format.
+  Map<String,dynamic> _normalizeGameRecord(Map<String,dynamic> raw) {
     // Parse moves from JSON string if needed
     dynamic moves = raw['moves'];
     if (moves is String) {
@@ -360,7 +361,7 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
 
   void _loadRecord(Map<String,dynamic> data) {
     setState(() {
-      _record  = data;
+      _record  = _normalizeGameRecord(data);
       _stepIdx = 0;
       _pieces  = [];
       _currentTurn  = 'white';
