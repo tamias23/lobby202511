@@ -231,6 +231,8 @@ pub struct MoveRequest {
     pub locked_sequence_piece: Option<String>,
     #[napi(js_name = "heroeTakeCounter")]
     pub heroe_take_counter: u32,
+    #[napi(js_name = "visitedPolygons")]
+    pub visited_polygons: Option<Vec<String>>,
 }
 
 #[napi(object)]
@@ -310,6 +312,11 @@ pub fn get_legal_moves_napi(req: MoveRequest) -> napi::Result<MoveResponse> {
     for c in &req.colors_ever_chosen {
         state.colors_ever_chosen.insert(c.to_lowercase());
     }
+    if let Some(visited) = &req.visited_polygons {
+        for v in visited {
+            state.visited_polygons.insert(v.clone());
+        }
+    }
 
     let mut targets = Vec::new();
     
@@ -375,6 +382,8 @@ pub struct ApplyMoveRequest {
     pub locked_sequence_piece: Option<String>,
     #[napi(js_name = "heroeTakeCounter")]
     pub heroe_take_counter: u32,
+    #[napi(js_name = "visitedPolygons")]
+    pub visited_polygons: Option<Vec<String>>,
 }
 
 #[napi(object)]
@@ -402,6 +411,8 @@ pub struct SelectColorRequest {
     pub locked_sequence_piece: Option<String>,
     #[napi(js_name = "heroeTakeCounter")]
     pub heroe_take_counter: u32,
+    #[napi(js_name = "visitedPolygons")]
+    pub visited_polygons: Option<Vec<String>>,
 }
 
 #[napi(object)]
@@ -430,6 +441,8 @@ pub struct ApplyMoveResponse {
     pub heroe_take_counter: u32,
     pub winner: Option<String>,
     pub reason: Option<String>,
+    #[napi(js_name = "visitedPolygons")]
+    pub visited_polygons: Vec<String>,
 }
 
 #[napi(object)]
@@ -456,6 +469,8 @@ pub struct EndTurnSetupRequest {
     pub locked_sequence_piece: Option<String>,
     #[napi(js_name = "heroeTakeCounter")]
     pub heroe_take_counter: u32,
+    #[napi(js_name = "visitedPolygons")]
+    pub visited_polygons: Option<Vec<String>>,
 }
 
 #[napi]
@@ -507,6 +522,11 @@ pub fn end_turn_setup_napi(req: EndTurnSetupRequest) -> napi::Result<ApplyMoveRe
     }
     for c in &req.colors_ever_chosen {
         state.colors_ever_chosen.insert(c.to_lowercase());
+    }
+    if let Some(visited) = &req.visited_polygons {
+        for v in visited {
+            state.visited_polygons.insert(v.clone());
+        }
     }
 
     // Correct turn-switching for end_turn_setup:
@@ -591,6 +611,7 @@ pub fn end_turn_setup_napi(req: EndTurnSetupRequest) -> napi::Result<ApplyMoveRe
         heroe_take_counter: state.heroe_take_counter,
         winner: state.winner.map(|s| format!("{:?}", s).to_lowercase()),
         reason: state.reason.clone(),
+        visited_polygons: state.visited_polygons.iter().cloned().collect(),
     })
 }
 
@@ -643,6 +664,11 @@ pub fn apply_move_napi(req: ApplyMoveRequest) -> napi::Result<ApplyMoveResponse>
     state.heroe_take_counter = req.heroe_take_counter;
     for c in &req.colors_ever_chosen {
         state.colors_ever_chosen.insert(c.to_lowercase());
+    }
+    if let Some(visited) = &req.visited_polygons {
+        for v in visited {
+            state.visited_polygons.insert(v.clone());
+        }
     }
 
     // Authoritative Legality Check
@@ -698,6 +724,7 @@ pub fn apply_move_napi(req: ApplyMoveRequest) -> napi::Result<ApplyMoveResponse>
         heroe_take_counter: state.heroe_take_counter,
         winner: state.winner.map(|s| format!("{:?}", s).to_lowercase()),
         reason: state.reason.clone(),
+        visited_polygons: state.visited_polygons.iter().cloned().collect(),
     })
 }
 
@@ -751,6 +778,11 @@ pub fn pass_turn_playing_napi(req: ApplyMoveRequest) -> napi::Result<ApplyMoveRe
     for c in &req.colors_ever_chosen {
         state.colors_ever_chosen.insert(c.to_lowercase());
     }
+    if let Some(visited) = &req.visited_polygons {
+        for v in visited {
+            state.visited_polygons.insert(v.clone());
+        }
+    }
 
     pass_turn(&mut state);
 
@@ -782,6 +814,7 @@ pub fn pass_turn_playing_napi(req: ApplyMoveRequest) -> napi::Result<ApplyMoveRe
         heroe_take_counter: state.heroe_take_counter,
         winner: state.winner.map(|s| format!("{:?}", s).to_lowercase()),
         reason: state.reason.clone(),
+        visited_polygons: state.visited_polygons.iter().cloned().collect(),
     })
 }
 
@@ -833,6 +866,11 @@ pub fn end_heroe_bonus_napi(req: ApplyMoveRequest) -> napi::Result<ApplyMoveResp
     for c in &req.colors_ever_chosen {
         state.colors_ever_chosen.insert(c.to_lowercase());
     }
+    if let Some(visited) = &req.visited_polygons {
+        for v in visited {
+            state.visited_polygons.insert(v.clone());
+        }
+    }
 
     // Guard: only valid during an active Héros bonus window.
     if state.heroe_take_counter == 0 {
@@ -871,6 +909,7 @@ pub fn end_heroe_bonus_napi(req: ApplyMoveRequest) -> napi::Result<ApplyMoveResp
         heroe_take_counter: state.heroe_take_counter,
         winner: state.winner.map(|s| format!("{:?}", s).to_lowercase()),
         reason: state.reason.clone(),
+        visited_polygons: state.visited_polygons.iter().cloned().collect(),
     })
 }
 
@@ -916,6 +955,11 @@ pub fn select_color_napi(req: SelectColorRequest) -> napi::Result<ApplyMoveRespo
     for c in &req.colors_ever_chosen {
         state.colors_ever_chosen.insert(c.to_lowercase());
     }
+    if let Some(visited) = &req.visited_polygons {
+        for v in visited {
+            state.visited_polygons.insert(v.clone());
+        }
+    }
 
     state.set_color_chosen(state.turn, &req.color.to_lowercase());
 
@@ -947,6 +991,7 @@ pub fn select_color_napi(req: SelectColorRequest) -> napi::Result<ApplyMoveRespo
         heroe_take_counter: state.heroe_take_counter,
         winner: state.winner.map(|s| format!("{:?}", s).to_lowercase()),
         reason: state.reason.clone(),
+        visited_polygons: state.visited_polygons.iter().cloned().collect(),
     })
 }
 

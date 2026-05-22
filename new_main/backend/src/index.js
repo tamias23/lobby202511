@@ -543,6 +543,7 @@ async function triggerBotMoveIfNeeded(gameId) {
                 movesThisTurn: freshGame.movesThisTurn || 0,
                 lockedSequencePiece: freshGame.lockedSequencePiece || undefined,
                 heroeTakeCounter: freshGame.heroeTakeCounter || 0,
+                visitedPolygons: freshGame.visitedPolygons || [],
             });
             freshGame.pieces = JSON.parse(response.piecesJson);
             freshGame.turn = response.turn;
@@ -556,6 +557,7 @@ async function triggerBotMoveIfNeeded(gameId) {
             freshGame.movesThisTurn = response.movesThisTurn;
             freshGame.lockedSequencePiece = response.lockedSequencePiece;
             freshGame.heroeTakeCounter = response.heroeTakeCounter;
+            freshGame.visitedPolygons = response.visitedPolygons;
             io.to(gameId).emit('game_update', {
                 pieces: freshGame.pieces, turn: freshGame.turn,
                 colorChosen: freshGame.colorChosen, colorsEverChosen: freshGame.colorsEverChosen,
@@ -565,7 +567,8 @@ async function triggerBotMoveIfNeeded(gameId) {
                 lockedSequencePiece: freshGame.lockedSequencePiece || null,
                 heroeTakeCounter: freshGame.heroeTakeCounter,
                 clocks: freshGame.clocks, lastTurnTimestamp: freshGame.lastTurnTimestamp,
-                        moves: freshGame.moves || [],
+                moves: freshGame.moves || [],
+                visitedPolygons: freshGame.visitedPolygons || [],
             });
             // Bot may need to make more moves in same turn
             syncGameUpdated(gameId, freshGame);
@@ -589,6 +592,7 @@ async function triggerBotMoveIfNeeded(gameId) {
                 movesThisTurn: freshGame.movesThisTurn || 0,
                 lockedSequencePiece: freshGame.lockedSequencePiece || undefined,
                 heroeTakeCounter: freshGame.heroeTakeCounter || 0,
+                visitedPolygons: freshGame.visitedPolygons || [],
             });
             freshGame.pieces = JSON.parse(response.piecesJson);
             freshGame.colorChosen = response.colorChosen;
@@ -603,6 +607,7 @@ async function triggerBotMoveIfNeeded(gameId) {
             freshGame.movesThisTurn = response.movesThisTurn;
             freshGame.lockedSequencePiece = response.lockedSequencePiece;
             freshGame.heroeTakeCounter = response.heroeTakeCounter;
+            freshGame.visitedPolygons = response.visitedPolygons;
             const _now2 = Date.now();
             freshGame.moves.push({ turn_number: freshGame.turnCounter, active_side: oldTurn, phase: 'playing', chosen_color: freshGame.colorChosen?.[oldTurn] || '', piece_id: botMove.piece, target_id: botMove.target, timestamp_ms: _now2, elapsed_ms: _now2 - (freshGame.moves.at(-1)?.timestamp_ms ?? freshGame.gameStartTimestamp ?? _now2) });
 
@@ -615,7 +620,8 @@ async function triggerBotMoveIfNeeded(gameId) {
                 lockedSequencePiece: freshGame.lockedSequencePiece || null,
                 heroeTakeCounter: freshGame.heroeTakeCounter,
                 clocks: freshGame.clocks, lastTurnTimestamp: freshGame.lastTurnTimestamp,
-                        moves: freshGame.moves || [],
+                moves: freshGame.moves || [],
+                visitedPolygons: freshGame.visitedPolygons || [],
                 lastMove: { pieceId: botMove.piece, targetPoly: botMove.target, captured: response.captured },
             });
 
@@ -654,12 +660,14 @@ async function triggerBotMoveIfNeeded(gameId) {
                 movesThisTurn: freshGame.movesThisTurn || 0,
                 lockedSequencePiece: freshGame.lockedSequencePiece || undefined,
                 heroeTakeCounter: freshGame.heroeTakeCounter || 0,
-                pieceId: '', targetPoly: ''
+                pieceId: '', targetPoly: '',
+                visitedPolygons: freshGame.visitedPolygons || [],
             });
             updateClocks(freshGame, true);
             freshGame.turn = response.turn;
             freshGame.phase = response.phase;
             freshGame.setupStep = response.setupStep;
+            freshGame.visitedPolygons = response.visitedPolygons;
             freshGame.turnCounter = response.turnCounter;
             freshGame.isNewTurn = response.isNewTurn;
             freshGame.movesThisTurn = response.movesThisTurn;
@@ -677,7 +685,8 @@ async function triggerBotMoveIfNeeded(gameId) {
                 lockedSequencePiece: freshGame.lockedSequencePiece || null,
                 heroeTakeCounter: freshGame.heroeTakeCounter,
                 clocks: freshGame.clocks, lastTurnTimestamp: freshGame.lastTurnTimestamp,
-                        moves: freshGame.moves || [],
+                moves: freshGame.moves || [],
+                visitedPolygons: freshGame.visitedPolygons || [],
             });
             // Bot ended turn by passing — trigger next bot move if applicable
             syncGameUpdated(gameId, freshGame);
@@ -2005,6 +2014,7 @@ async function createGame(whitePlayer, blackPlayer, timeControl, boardId, tourna
         lastTurnTimestamp: Date.now(),
         passCount: { white: 0, black: 0 },
         moves: [],
+        visitedPolygons: [],
         gameStartTimestamp: Date.now(),
         // track which socket IDs are the players
         whiteSocketId: whitePlayer.socketId,
@@ -2859,7 +2869,8 @@ io.on('connection', (socket) => {
                 isNewTurn: game.isNewTurn !== undefined ? game.isNewTurn : true,
                 movesThisTurn: game.movesThisTurn || 0,
                 lockedSequencePiece: game.lockedSequencePiece || undefined,
-                heroeTakeCounter: game.heroeTakeCounter || 0
+                heroeTakeCounter: game.heroeTakeCounter || 0,
+                visitedPolygons: game.visitedPolygons || [],
             });
 
             // Update lobby state from authoritative return values
@@ -2875,6 +2886,7 @@ io.on('connection', (socket) => {
             game.movesThisTurn = response.movesThisTurn;
             game.lockedSequencePiece = response.lockedSequencePiece;
             game.heroeTakeCounter = response.heroeTakeCounter;
+            game.visitedPolygons = response.visitedPolygons;
 
             io.to(gameId).emit('game_update', {
                 pieces: game.pieces,
@@ -2892,7 +2904,7 @@ io.on('connection', (socket) => {
                 clocks: game.clocks,
                 lastTurnTimestamp: game.lastTurnTimestamp,
                 moves: game.moves || [],
-                moves: game.moves || [],
+                visitedPolygons: game.visitedPolygons || [],
             });
             logger.debug('Move', `Color '${color}' set for ${game.turn} by ${side} in ${gameId}. isNewTurn=${game.isNewTurn}`);
             syncGameUpdated(gameId, game);
@@ -3060,7 +3072,8 @@ io.on('connection', (socket) => {
                     lockedSequencePiece: game.lockedSequencePiece || undefined,
                     heroeTakeCounter: game.heroeTakeCounter || 0,
                     pieceId: "", // Dummy for request compatibility
-                    targetPoly: "" // Dummy for request compatibility
+                    targetPoly: "", // Dummy for request compatibility
+                    visitedPolygons: game.visitedPolygons || [],
                 });
                 
                 updateClocks(game, true);
@@ -3081,6 +3094,7 @@ io.on('connection', (socket) => {
                 game.colorChosen = response.colorChosen;
                 game.colorsEverChosen = response.colorsEverChosen;
                 game.mageUnlocked = response.mageUnlocked;
+                game.visitedPolygons = response.visitedPolygons;
 
                 if (game.passCount[passingSide] >= 3) {
                     game.phase = 'GameOver';
@@ -3113,7 +3127,8 @@ io.on('connection', (socket) => {
                     clocks: game.clocks,
                     lastTurnTimestamp: game.lastTurnTimestamp,
                     moves: game.moves || [],
-                    passCount: game.passCount
+                    passCount: game.passCount,
+                    visitedPolygons: game.visitedPolygons || [],
                 });
                 logger.debug('Move', `Turn passed in ${gameId}: now ${game.turn}'s turn (${passingSide} passCount: ${game.passCount[passingSide]})`);
                 syncGameUpdated(gameId, game);
@@ -3149,7 +3164,8 @@ io.on('connection', (socket) => {
                 lockedSequencePiece: game.lockedSequencePiece || undefined,
                 heroeTakeCounter:    game.heroeTakeCounter || 0,
                 pieceId:    '',
-                targetPoly: ''
+                targetPoly: '',
+                visitedPolygons: game.visitedPolygons || [],
             });
 
             updateClocks(game, true);
@@ -3166,6 +3182,7 @@ io.on('connection', (socket) => {
             game.colorChosen         = response.colorChosen;
             game.colorsEverChosen    = response.colorsEverChosen;
             game.mageUnlocked        = response.mageUnlocked;
+            game.visitedPolygons     = response.visitedPolygons;
 
             io.to(gameId).emit('game_update', {
                 pieces:              game.pieces,
@@ -3183,7 +3200,8 @@ io.on('connection', (socket) => {
                 clocks:              game.clocks,
                 lastTurnTimestamp:   game.lastTurnTimestamp,
                 moves:               game.moves || [],
-                passCount:           game.passCount
+                passCount:           game.passCount,
+                visitedPolygons:     game.visitedPolygons || [],
             });
             logger.debug('Move', `end_heroe_bonus in ${gameId}: turn → ${game.turn}`);
             syncGameUpdated(gameId, game);
@@ -3237,7 +3255,8 @@ io.on('connection', (socket) => {
                 isNewTurn: game.isNewTurn !== undefined ? game.isNewTurn : true,
                 movesThisTurn: game.movesThisTurn || 0,
                 lockedSequencePiece: game.lockedSequencePiece || undefined,
-                heroeTakeCounter: game.heroeTakeCounter || 0
+                heroeTakeCounter: game.heroeTakeCounter || 0,
+                visitedPolygons: game.visitedPolygons || [],
             });
             game.colorChosen = response.colorChosen;
             game.colorsEverChosen = response.colorsEverChosen;
@@ -3376,7 +3395,8 @@ io.on('connection', (socket) => {
                     isNewTurn: game.isNewTurn !== undefined ? game.isNewTurn : true,
                     movesThisTurn: game.movesThisTurn || 0,
                     lockedSequencePiece: game.lockedSequencePiece || undefined,
-                    heroeTakeCounter: game.heroeTakeCounter || 0
+                    heroeTakeCounter: game.heroeTakeCounter || 0,
+                    visitedPolygons: game.visitedPolygons || [],
                 });
 
                 const oldTurn = game.turn;
@@ -3387,6 +3407,7 @@ io.on('connection', (socket) => {
                 game.mageUnlocked = response.mageUnlocked;
                 game.phase = response.phase;
                 game.setupStep = response.setupStep;
+                game.visitedPolygons = response.visitedPolygons;
                 if (oldTurn !== response.turn) {
                     updateClocks(game, true);
                     // Turn changed = real move made, reset the mover's pass count
@@ -3422,7 +3443,8 @@ io.on('connection', (socket) => {
                     lastTurnTimestamp: game.lastTurnTimestamp,
                     moves: game.moves || [],
                     lastMove: { pieceId, targetPoly, captured: response.captured },
-                    passCount: game.passCount
+                    passCount: game.passCount,
+                    visitedPolygons: game.visitedPolygons || [],
                 });
 
                 if (response.phase === 'GameOver') {

@@ -59,6 +59,7 @@ export interface MoveRequest {
   movesThisTurn: number
   lockedSequencePiece?: string
   heroeTakeCounter: number
+  visitedPolygons?: Array<string>
 }
 export interface MoveResponse {
   targets: Array<string>
@@ -91,6 +92,7 @@ export interface ApplyMoveRequest {
   movesThisTurn: number
   lockedSequencePiece?: string
   heroeTakeCounter: number
+  visitedPolygons?: Array<string>
 }
 export interface SelectColorRequest {
   boardJson: string
@@ -106,6 +108,7 @@ export interface SelectColorRequest {
   movesThisTurn: number
   lockedSequencePiece?: string
   heroeTakeCounter: number
+  visitedPolygons?: Array<string>
 }
 export interface ApplyMoveResponse {
   piecesJson: string
@@ -123,6 +126,7 @@ export interface ApplyMoveResponse {
   heroeTakeCounter: number
   winner?: string
   reason?: string
+  visitedPolygons: Array<string>
 }
 export interface EndTurnSetupRequest {
   boardJson: string
@@ -137,6 +141,7 @@ export interface EndTurnSetupRequest {
   movesThisTurn: number
   lockedSequencePiece?: string
   heroeTakeCounter: number
+  visitedPolygons?: Array<string>
 }
 export declare function endTurnSetupNapi(req: EndTurnSetupRequest): ApplyMoveResponse
 export declare function applyMoveNapi(req: ApplyMoveRequest): ApplyMoveResponse

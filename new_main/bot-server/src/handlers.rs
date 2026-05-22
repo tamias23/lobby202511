@@ -145,6 +145,23 @@ pub async fn list_models() -> Json<ModelsResponse> {
         }
     }
 
+    // Scan better_mario/*.json
+    let bm_dir = format!("{}/better_mario", models_dir);
+    if let Ok(entries) = std::fs::read_dir(&bm_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("json") {
+                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                    models.push(ModelInfo {
+                        agent_type: "better_mario".to_string(),
+                        model_name: stem.to_string(),
+                        display_name: format!("BetterMario ({})", stem),
+                    });
+                }
+            }
+        }
+    }
+
     tracing::info!("[BotServer] /models: returning {} models", models.len());
     Json(ModelsResponse { models })
 }
@@ -451,7 +468,32 @@ fn build_agent(req: &MoveRequest) -> Result<std::sync::Arc<dyn rust::agents::Age
             Ok(std::sync::Arc::new(agents::imprudent_klaus::ImprudentKlausAgent::new(weights, mcts_budget)))
         }
 
-        other => Err(format!("Unknown agent_type '{}'. Supported: greedy_jack, quick_diego, imprudent_klaus, mcts", other)),
+        "better_mario" => {
+            let model_name = req.model_name.as_deref().unwrap_or("default");
+            let path = format!("{}/better_mario/{}.json", models_dir, model_name);
+
+            let mut weights = [0.0_f64; agents::better_mario::NUM_PARAMS];
+            if std::path::Path::new(&path).exists() {
+                let content = std::fs::read_to_string(&path)
+                    .map_err(|e| format!("Failed to read better_mario model '{}': {}", path, e))?;
+                let json: serde_json::Value = serde_json::from_str(&content)
+                    .map_err(|e| format!("Failed to parse model JSON: {}", e))?;
+                let arr = json["weights"].as_array()
+                    .ok_or("No 'weights' key in model JSON")?;
+                let parsed: Vec<f64> = arr.iter().filter_map(|v| v.as_f64()).collect();
+                for (i, val) in parsed.into_iter().enumerate().take(agents::better_mario::NUM_PARAMS) {
+                    weights[i] = val;
+                }
+            } else {
+                tracing::warn!("BetterMario model not found at '{}', using default weights", path);
+            }
+
+            let mcts_budget = req.mcts_budget_ms.unwrap_or(100);
+            let mario_branching = 20; // Default branching factor
+            Ok(std::sync::Arc::new(agents::better_mario::BetterMarioAgent::new(weights, mcts_budget, mario_branching)))
+        }
+
+        other => Err(format!("Unknown agent_type '{}'. Supported: greedy_jack, quick_diego, imprudent_klaus, better_mario, mcts", other)),
     }
 }
 
