@@ -20,7 +20,9 @@ whois.txt
 rust/nets/
 # Careful: ignores all text files. Use !filename.txt to keep specific ones.
 *.txt
-
+*.json
+*.pdf
+*.svg
 # --- Dependencies and Build Artifacts ---
 **/node_modules/
 **/target/
