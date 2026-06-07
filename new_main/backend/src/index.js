@@ -820,6 +820,7 @@ initDb()
             game.phase = 'GameOver'; // prevent further bot moves or clock ticks
             releaseBotIfNeeded(game);
             lobby.activeGames.delete(gameHash);
+            valkeySync.syncGameDeleted(gameHash);
             broadcastLobbyUpdate(io);
         };
 
